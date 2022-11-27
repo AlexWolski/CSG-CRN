@@ -1,3 +1,8 @@
+# Dataset folder
+[Dd]ata/*
+![Dd]ata/README.md
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
