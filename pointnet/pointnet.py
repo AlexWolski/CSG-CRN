@@ -85,9 +85,8 @@ class STNkd(nn.Module):
         return x
 
 class PointNetfeat(nn.Module):
-    def __init__(self, global_feat = True, feature_transform = False):
+    def __init__(self, global_feat = True, input_transform = False, feature_transform = False):
         super(PointNetfeat, self).__init__()
-        self.stn = STN4d()
         self.conv1 = torch.nn.Conv1d(4, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
@@ -95,16 +94,26 @@ class PointNetfeat(nn.Module):
         self.bn2 = nn.BatchNorm1d(128)
         self.bn3 = nn.BatchNorm1d(1024)
         self.global_feat = global_feat
+        self.input_transform = input_transform
         self.feature_transform = feature_transform
+
+        if self.input_transform:
+            self.stn = STN4d()
+
         if self.feature_transform:
             self.fstn = STNkd(k=64)
 
     def forward(self, x):
         n_pts = x.size()[2]
-        trans = self.stn(x)
-        x = x.transpose(2, 1)
-        x = torch.bmm(x, trans)
-        x = x.transpose(2, 1)
+
+        if self.input_transform:
+            trans_input = self.stn(x)
+            x = x.transpose(2, 1)
+            x = torch.bmm(x, trans_input)
+            x = x.transpose(2, 1)
+        else:
+            trans_input = None
+
         x = F.relu(self.bn1(self.conv1(x)))
 
         if self.feature_transform:
@@ -120,17 +129,19 @@ class PointNetfeat(nn.Module):
         x = self.bn3(self.conv3(x))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
+
         if self.global_feat:
-            return x, trans, trans_feat
+            return x, trans_input, trans_feat
         else:
             x = x.view(-1, 1024, 1).repeat(1, 1, n_pts)
-            return torch.cat([x, pointfeat], 1), trans, trans_feat
+            return torch.cat([x, pointfeat], 1), trans_input, trans_feat
 
 class PointNetCls(nn.Module):
-    def __init__(self, k=2, feature_transform=False):
+    def __init__(self, k=2, input_transform=False, feature_transform=False):
         super(PointNetCls, self).__init__()
+        self.input_transform = input_transform
         self.feature_transform = feature_transform
-        self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
+        self.feat = PointNetfeat(global_feat=True, input_transform=input_transform, feature_transform=feature_transform)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k)
@@ -148,11 +159,12 @@ class PointNetCls(nn.Module):
 
 
 class PointNetDenseCls(nn.Module):
-    def __init__(self, k = 2, feature_transform=False):
+    def __init__(self, k = 2, input_transform=False, feature_transform=False):
         super(PointNetDenseCls, self).__init__()
         self.k = k
+        self.input_transform = input_transform
         self.feature_transform=feature_transform
-        self.feat = PointNetfeat(global_feat=False, feature_transform=feature_transform)
+        self.feat = PointNetfeat(global_feat=False, input_transform=input_transform, feature_transform=feature_transform)
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
