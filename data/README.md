@@ -41,4 +41,9 @@ numpy.save('chair_sample.npy', combined)
 
 ### Process the ShapeNet Dataset
 To processes the ShapeNet dataset from scratch, you can use the **[prepare_shapenet_dataset.py](https://github.com/marian42/shapegan/blob/master/prepare_shapenet_dataset.py)** utility from the **[ShapeGAN](https://github.com/marian42/shapegan)** GitHub project.<br>
-Alternatively, the authors provide a **[preprocessed dataset](https://ls7-data.cs.tu-dortmund.de/shape_net/ShapeNet_SDF.tar.gz)** with SDF samples for the airplane, chair, and sofa categories of the ShapeNet dataset.
+<br>
+Alternatively, you can download a preprocessed dataset. The ShapeGAN authors provide the **[ShapeNet SDF Dataset](https://ls7-data.cs.tu-dortmund.de/shape_net/ShapeNet_SDF.tar.gz)** (71GB) with SDF samples for the airplane, chair, and sofa categories of the ShapeNet dataset.<br>
+Download links for the uniform samples of each shape class are available here:
+* [Airplanes](https://huggingface.co/datasets/AlexWolski/ShapeNet-SDF-Uniform/resolve/main/airplanes.zip) (8.4GB)
+* [Chairs](https://huggingface.co/datasets/AlexWolski/ShapeNet-SDF-Uniform/resolve/main/chairs.zip) (16.3GB)
+* [Sofas](https://huggingface.co/datasets/AlexWolski/ShapeNet-SDF-Uniform/resolve/main/sofas.zip) (7.7GB)
