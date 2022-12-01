@@ -2,6 +2,10 @@
 [Dd]ata/*
 ![Dd]ata/README.md
 
+# Generated outputs folder
+[Oo]utput/*
+![Oo]utput/README.md
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
