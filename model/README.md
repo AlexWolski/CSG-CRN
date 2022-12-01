@@ -1,4 +1,4 @@
-# PointNet
+# PointNet Encoder
 
 ### Original Implementation
 **[[Paper]](https://arxiv.org/abs/1612.00593)**<br>
@@ -11,7 +11,6 @@
 **[[GitHub Project]](https://github.com/fxia22/pointnet.pytorch)**<br>
 **Contributors**: Fei Xia, delldu, Gaurav Pathak, Jingpeng Wu, Rana Hanocka, and Elliott Zheng
 
----
 
 ### Modifications
 * Added a dimension to input points for SDF values
