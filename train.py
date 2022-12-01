@@ -42,4 +42,4 @@ if __name__ == '__main__':
 	save_list(os.path.join(output_path, 'train.txt'), surface_points_train)
 	save_list(os.path.join(output_path, 'test.txt'), surface_points_test)
 
-	train_dataset = PointDataset(surface_points_dir, surface_points_train)
+	train_dataset = PointDataset(surface_points_dir, surface_points_train, args.num_points)
