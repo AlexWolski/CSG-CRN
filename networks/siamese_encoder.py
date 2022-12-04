@@ -19,6 +19,10 @@ class SiameseEncoder(nn.Module):
 		self.fc2 = nn.Linear(1024, 512)
 		self.fc3 = nn.Linear(512, 512)
 		self.fc4 = nn.Linear(512, 256)
+		self.bn1 = nn.BatchNorm1d(1024)
+		self.bn2 = nn.BatchNorm1d(512)
+		self.bn3 = nn.BatchNorm1d(512)
+		self.bn4 = nn.BatchNorm1d(256)
 		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 
 
@@ -29,10 +33,10 @@ class SiameseEncoder(nn.Module):
 
 		combined_features = torch.cat([target_features, initial_recon_features], dim=1)
 
-		X = self.nonLinear(self.fc1(combined_features))
-		X = self.nonLinear(self.fc2(X))
-		X = self.nonLinear(self.fc3(X))
-		final_features = self.nonLinear(self.fc4(X))
+		X = self.bn1(self.nonLinear(self.fc1(combined_features)))
+		X = self.bn2(self.nonLinear(self.fc2(X)))
+		X = self.bn3(self.nonLinear(self.fc3(X)))
+		final_features = self.bn4(self.nonLinear(self.fc4(X)))
 
 		return final_features
 
