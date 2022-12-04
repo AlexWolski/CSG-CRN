@@ -183,7 +183,7 @@ class PrimitiveRegressor(nn.Module):
 
 # Test network
 if __name__ == '__main__':
-	inputs = torch.autograd.Variable(torch.rand(1024, 256))
+	inputs = torch.autograd.Variable(torch.rand(32, 256))
 
 	network = ShapeRegressor(3)
 	outputs = network(inputs)
