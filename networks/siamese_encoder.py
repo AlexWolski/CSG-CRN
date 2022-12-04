@@ -32,9 +32,9 @@ class SiameseEncoder(nn.Module):
 		X = self.bn1(self.relu(self.fc1(combined_features)))
 		X = self.bn2(self.relu(self.fc2(X)))
 		X = self.bn3(self.relu(self.fc3(X)))
-		final_features = self.bn4(self.relu(self.fc4(X)))
+		contrastive_features = self.bn4(self.relu(self.fc4(X)))
 
-		return final_features
+		return contrastive_features
 
 
 # Test network
