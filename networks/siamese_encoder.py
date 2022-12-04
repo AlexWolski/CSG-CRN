@@ -2,10 +2,6 @@ import torch
 import torch.nn as nn
 
 
-# Tune Leaky ReLU slope for predicting negative values
-LEAKY_RELU_NEGATIVE_SLOPE = 0.2
-
-
 # Encode two inputs with a weight-sharing siamese encoder and learn combined feature vector
 class SiameseEncoder(nn.Module):
 	def __init__(self, encoder, encoder_feature_size):
@@ -23,7 +19,7 @@ class SiameseEncoder(nn.Module):
 		self.bn2 = nn.BatchNorm1d(512)
 		self.bn3 = nn.BatchNorm1d(512)
 		self.bn4 = nn.BatchNorm1d(256)
-		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self.relu = nn.ReLU()
 
 
 	def forward(self, target_input, initial_recon_input):
@@ -33,10 +29,10 @@ class SiameseEncoder(nn.Module):
 
 		combined_features = torch.cat([target_features, initial_recon_features], dim=1)
 
-		X = self.bn1(self.nonLinear(self.fc1(combined_features)))
-		X = self.bn2(self.nonLinear(self.fc2(X)))
-		X = self.bn3(self.nonLinear(self.fc3(X)))
-		final_features = self.bn4(self.nonLinear(self.fc4(X)))
+		X = self.bn1(self.relu(self.fc1(combined_features)))
+		X = self.bn2(self.relu(self.fc2(X)))
+		X = self.bn3(self.relu(self.fc3(X)))
+		final_features = self.bn4(self.relu(self.fc4(X)))
 
 		return final_features
 
