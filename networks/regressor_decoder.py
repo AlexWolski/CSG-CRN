@@ -16,11 +16,11 @@ class ShapeRegressor(nn.Module):
 
 		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, num_primitives)
-		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = nn.Softmax(dim=0)
 
 	def forward(self, X):
-		X = self.nonLinear(self.fc1(X))
+		X = self.LeReLU(self.fc1(X))
 		shape = self.activation(self.fc2(X))
 
 		return shape
@@ -34,11 +34,11 @@ class OperationRegressor(nn.Module):
 
 		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, num_operations)
-		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = nn.Softmax(dim=0)
 
 	def forward(self, X):
-		X = self.nonLinear(self.fc1(X))
+		X = self.LeReLU(self.fc1(X))
 		operation = self.activation(self.fc2(X))
 
 		return operation
@@ -52,11 +52,11 @@ class TranslationRegressor(nn.Module):
 
 		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
-		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.tanh
 
 	def forward(self, X):
-		X = self.nonLinear(self.fc1(X))
+		X = self.LeReLU(self.fc1(X))
 		translation = self.activation(self.fc2(X))
 
 		# Restrict predicted coordinates to fit the output unit cube
@@ -71,10 +71,10 @@ class RotationRegressor(nn.Module):
 		super(RotationRegressor, self).__init__()
 		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 4)
-		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 
 	def forward(self, X):
-		X = self.nonLinear(self.fc1(X))
+		X = self.LeReLU(self.fc1(X))
 		quaternion = self.fc2(X)
 
 		# Normalize quaternion
@@ -93,11 +93,11 @@ class ScaleRegressor(nn.Module):
 
 		self.fc1 = self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
-		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 
 	def forward(self, X):
-		X = self.nonLinear(self.fc1(X))
+		X = self.LeReLU(self.fc1(X))
 		scale = self.activation(self.fc2(X))
 
 		# Restrict the predicted scale to expected range
@@ -114,12 +114,12 @@ class BlendingRegressor(nn.Module):
 		self.max_blending = max_blending
 
 		self.fc1 = self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
-		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
+		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 	
 	def forward(self, X):
-		X = self.nonLinear(self.fc1(X))
+		X = self.LeReLU(self.fc1(X))
 		blending = self.activation(self.fc2(X))
 
 		# Restrict the blending factor to expected range
@@ -136,12 +136,12 @@ class RoundnessRegressor(nn.Module):
 		self.max_roundness = max_roundness
 
 		self.fc1 = self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
-		self.nonLinear = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
+		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 	
 	def forward(self, X):
-		X = self.nonLinear(self.fc1(X))
+		X = self.LeReLU(self.fc1(X))
 		roundness = self.activation(self.fc2(X))
 
 		# Restrict the roundness factor to expected range
