@@ -1,12 +1,12 @@
 import torch
 
 
-# Converts a tensor of Nx4 quaternion tensors to Nx3x3 rotation matrices
-# where N is the number of quaternions
+# Converts a Bx4 quaternion tensor to a Bx3x3 rotation matrix tensor
+# Where B is the number of quaternions
 def quats_to_rot_matrices(quaternions):
-	# Allocate space for N rotation matrices
-	N = quaternions.size(dim=0)
-	matrices = quaternions.new_zeros((N, 3, 3))
+	# Allocate space for B rotation matrices
+	B = quaternions.size(dim=0)
+	matrices = quaternions.new_zeros((B, 3, 3))
 
 	# Quaternion stored as [w, x, y, z]
 	w = quaternions[:, 0]
@@ -28,7 +28,7 @@ def quats_to_rot_matrices(quaternions):
 	# List of all quaternion indices
 	# Technique borrowed from Superquadric Parsing Project
 	# https://github.com/paschalidoud/superquadric_parsing/blob/master/learnable_primitives/primitives.py#L207-L218
-	idxs = torch.arange(N).to(quaternions.device)
+	idxs = torch.arange(B).to(quaternions.device)
 
 	# Construct rotation matrices
 	matrices[idxs, 0, 0] = 1 - yy2 - zz2
@@ -46,21 +46,34 @@ def quats_to_rot_matrices(quaternions):
 	return matrices
 
 
+# Transforms a BxNx3 point cloud tensor to a given space
+# Where B is the number of point clouds and N is the number of points in each cloud
+# Target space is defined by a Bx3 translation tensor and a Bx4 quaternion tensor 
+def transform_point_clouds(point_clouds, translations, quaternions):
+	B = point_clouds.size(dim=0)
+
+	# Translate points
+	transformed_points = point_clouds - translations.unsqueeze(1)
+
+	# Rotate points
+	rot_matrices = quats_to_rot_matrices(quaternions)
+	rot_matrices = rot_matrices.unsqueeze(1)
+	transformed_points = transformed_points.unsqueeze(-1)
+	transformed_points = rot_matrices.matmul(transformed_points).squeeze(-1)
+
+	return transformed_points
+
+
 if __name__ == "__main__":
 	batch_size = 2
-	num_points = 1024
+	num_points = 2
 
 	points = torch.randn([batch_size, num_points, 3])
-	rotation = torch.randn([batch_size, 4])
 	translation = torch.randn([batch_size, 3])
+	rotation = torch.randn([batch_size, 4])
 	scale = torch.randn([batch_size, 3])
 
 	rotation = torch.nn.functional.normalize(rotation, p=2, dim=-1)
 
-	rot_max = quats_to_rot_matrices(rotation)
-
-	print('Quaternions:')
-	print(rotation, '\n')
-
-	print('Rotation Matrices:')
-	print(rot_max)
+	print('Transformed Points:')
+	print(transform_point_clouds(points, translation, rotation))
