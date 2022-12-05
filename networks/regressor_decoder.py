@@ -17,7 +17,7 @@ class ShapeRegressor(nn.Module):
 		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, num_primitives)
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
-		self.activation = nn.Softmax(dim=0)
+		self.activation = nn.Softmax(dim=-1)
 
 	def forward(self, X):
 		X = self.LeReLU(self.fc1(X))
@@ -35,7 +35,7 @@ class OperationRegressor(nn.Module):
 		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, num_operations)
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
-		self.activation = nn.Softmax(dim=0)
+		self.activation = nn.Softmax(dim=-1)
 
 	def forward(self, X):
 		X = self.LeReLU(self.fc1(X))
@@ -65,7 +65,7 @@ class TranslationRegressor(nn.Module):
 		return translation
 
 
-# Predict Quaternion rotation
+# Predict quaternion rotation
 class RotationRegressor(nn.Module):
 	def __init__(self):
 		super(RotationRegressor, self).__init__()
@@ -78,7 +78,7 @@ class RotationRegressor(nn.Module):
 		quaternion = self.fc2(X)
 
 		# Normalize quaternion
-		magnitude = torch.norm(quaternion, 2, keepdim=True)
+		magnitude = torch.norm(quaternion, p=2, keepdim=True, dim=-1)
 		quaternion /= magnitude
 
 		return quaternion
@@ -183,35 +183,44 @@ class PrimitiveRegressor(nn.Module):
 
 # Test network
 if __name__ == '__main__':
-	inputs = torch.autograd.Variable(torch.rand(32, 256))
+	batch_size = 2
+	feature_size = 256
+	inputs = torch.autograd.Variable(torch.rand(batch_size, feature_size))
 
 	network = ShapeRegressor(3)
 	outputs = network(inputs)
-	print('Shape Output Size:', outputs.size())
+	print('Shape Output:')
+	print(outputs, '\n')
 	
 	network = OperationRegressor(2)
 	outputs = network(inputs)
-	print('Boolean Regressor Output Size:', outputs.size())
+	print('Boolean Regressor Output:')
+	print(outputs, '\n')
 	
 	network = TranslationRegressor(0.6)
 	outputs = network(inputs)
-	print('Translation Output Size:', outputs.size())
+	print('Translation Output:')
+	print(outputs, '\n')
 	
 	network = RotationRegressor()
 	outputs = network(inputs)
-	print('Rotation Output Size:', outputs.size())
+	print('Rotation Output:')
+	print(outputs, '\n')
 
 	network = ScaleRegressor(0.005, 0.5)
 	outputs = network(inputs)
-	print('Scale Output Size:', outputs.size())
+	print('Scale Output:')
+	print(outputs, '\n')
 
 	network = BlendingRegressor(0, 1)
 	outputs = network(inputs)
-	print('Blending Output Size:', outputs.size())
+	print('Blending Output:')
+	print(outputs, '\n')
 
 	network = RoundnessRegressor(0, 0.5)
 	outputs = network(inputs)
-	print('Roundness Output Size:', outputs.size())
+	print('Roundness Output:')
+	print(outputs, '\n')
 
 	network = PrimitiveRegressor(3, 2)
 	outputs = network(inputs)
