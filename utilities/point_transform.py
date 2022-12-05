@@ -25,23 +25,18 @@ def quats_to_rot_matrices(quaternions):
 	yy2 = 2*y*y
 	zz2 = 2*z*z
 
-	# List of all quaternion indices
-	# Technique borrowed from Superquadric Parsing Project
-	# https://github.com/paschalidoud/superquadric_parsing/blob/master/learnable_primitives/primitives.py#L207-L218
-	idxs = torch.arange(B).to(quaternions.device)
-
 	# Construct rotation matrices
-	matrices[idxs, 0, 0] = 1 - yy2 - zz2
-	matrices[idxs, 0, 1] = xy2 - wz2
-	matrices[idxs, 0, 2] = xz2 + wy2
+	matrices[:, 0, 0] = 1 - yy2 - zz2
+	matrices[:, 0, 1] = xy2 - wz2
+	matrices[:, 0, 2] = xz2 + wy2
 
-	matrices[idxs, 1, 0] = xy2 + wz2
-	matrices[idxs, 1, 1] = 1 - xx2 - zz2
-	matrices[idxs, 1, 2] = yz2 - wx2
+	matrices[:, 1, 0] = xy2 + wz2
+	matrices[:, 1, 1] = 1 - xx2 - zz2
+	matrices[:, 1, 2] = yz2 - wx2
 
-	matrices[idxs, 2, 0] = xz2 - wy2
-	matrices[idxs, 2, 1] = yz2 + wx2
-	matrices[idxs, 2, 2] = 1 - xx2 - yy2
+	matrices[:, 2, 0] = xz2 - wy2
+	matrices[:, 2, 1] = yz2 + wx2
+	matrices[:, 2, 2] = 1 - xx2 - yy2
 
 	return matrices
 
