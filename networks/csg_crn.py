@@ -5,9 +5,9 @@ import siamese_encoder
 import regressor_decoder
 
 
-class CsgCrn(nn.Module):
+class CSG_CRN(nn.Module):
 	def __init__(self, num_primitives, num_operations):
-		super(CsgCrn, self).__init__()
+		super(CSG_CRN, self).__init__()
 		self.num_primitives = num_primitives
 		self.num_operations = num_operations
 
@@ -34,6 +34,6 @@ if __name__ == '__main__':
 	target_points = torch.autograd.Variable(torch.rand(32, 4, 1024))
 	initial_points = torch.autograd.Variable(torch.rand(32, 4, 1024))
 
-	CsgCrn = CsgCrn(3, 2)
-	outputs = CsgCrn(target_points, initial_points)
+	csg_crn = CSG_CRN(3, 2)
+	outputs = csg_crn(target_points, initial_points)
 	print('Network Output Size:', len(outputs))
