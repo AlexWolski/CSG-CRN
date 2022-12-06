@@ -65,8 +65,8 @@ if __name__ == "__main__":
 	num_points = 2
 
 	points = torch.rand([batch_size, num_points, 3])
-	translations = torch.randn([batch_size, 3])
-	rotations = torch.randn([batch_size, 4])
+	translations = torch.rand([batch_size, 3])
+	rotations = torch.rand([batch_size, 4])
 
 	rotations = torch.nn.functional.normalize(rotations, p=2, dim=-1)
 
