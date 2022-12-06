@@ -5,6 +5,9 @@ import sdf_primitives
 MAX_SDF_VALUE = 1
 
 
+# Smooth minimum and maximum borrowed from iquilezles.org
+# https://iquilezles.org/articles/smin/
+
 
 def smooth_min(a, b, blending):
 	blending = torch.full(a.size(), blending)
@@ -15,12 +18,23 @@ def smooth_min(a, b, blending):
 	return torch.min(a, b) - smooth_factor
 
 
+def smooth_max(a, b, blending):
+	blending = torch.full(a.size(), blending)
+	absolute_diff = (a-b).abs()
+	h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
+	smooth_factor = h * h * blending * 0.25
+
+	return torch.max(a, b) + smooth_factor
+
+
+# Union of two SDFs
 def add_sdf(distances, new_distances, blending):
 	return smooth_min(distances, new_distances, blending)
 
 
+# Intersection of one SDF and the conjugate of the other
 def subtract_sdf(distances, new_distances, blending):
-	return torch.max(distances, -new_distances)
+	return smooth_max(distances, -new_distances, blending)
 
 
 class CSGModel():
