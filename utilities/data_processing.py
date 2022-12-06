@@ -23,11 +23,12 @@ def create_out_dir(args):
 def get_data_files(data_dir):
 	# Recursively find all npy files in parent directory
 	file_paths = glob.glob(os.path.join(data_dir, '**', '*.npy'), recursive=True)
+	filenames = [os.path.basename(file_path) for file_path in file_paths]
 
-	if len(file_paths) == 0:
+	if len(filenames) == 0:
 		raise Exception('No .npy data files found in directory "%s"' % data_dir)
-	
-	return file_paths
+
+	return filenames
 
 
 # Write each item of a list to a new line in a file
@@ -38,22 +39,19 @@ def save_list(file_path, list):
 
 
 # Find and save all near-surface point samples
-def uniform_to_surface_data(uniform_files, sample_dist, output_path):
-	filenames = []
-
+def uniform_to_surface_data(data_dir, uniform_files, output_path, sample_dist):
 	surface_points_dir = os.path.join(output_path, 'near_surface_samples')
 	os.mkdir(surface_points_dir)
 
 	for uniform_file in uniform_files:
 		# Select points for which the distance to the surface is within the threshold
-		uniform_points = np.load(uniform_file)
+		uniform_path = os.path.join(data_dir, uniform_file)
+		uniform_points = np.load(uniform_path)
 		surface_points_rows = np.where(abs(uniform_points[:,3]) <= sample_dist)
 		surface_points = uniform_points[surface_points_rows]
 
 		# Save selected near-surface points
-		filename = os.path.basename(uniform_file)
-		filenames.append(filename)
-		surface_points_path = os.path.join(surface_points_dir, filename)
-		np.save(surface_points_path, surface_points)
+		surface_path = os.path.join(surface_points_dir, uniform_file)
+		np.save(surface_path, surface_points)
 
-	return (surface_points_dir, filenames)
+	return surface_points_dir
