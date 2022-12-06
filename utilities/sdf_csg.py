@@ -54,33 +54,34 @@ class CSGModel():
 		self.csg_commands = []
 
 
-	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending):
+	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending, roundness):
 		self.csg_commands.append({
 			'shape weights': shape_weights,
 			'operation weights': operation_weights,
 			'transforms': (translations, rotations, scales),
-			'blending': blending
+			'blending': blending,
+			'roundness': roundness
 		})
 
 
 	# Compute blended SDF for all primitive types given primitive weights and a transform
 	# We blend the weighted primitives instead of 
-	def sample_sdf(query_points, shape_weights, transforms):
+	def sample_sdf(query_points, command):
 		distances = 0
 
 		# Compute weighted averge distance
-		for shape in range(shape_weights.size(dim=-1)):
-			distances += shape_weights[:,shape] * CSGModel.sdf_functions[shape](query_points, *transforms)
+		for shape in range(command['shape weights'].size(dim=-1)):
+			distances += command['shape weights'][:,shape] * CSGModel.sdf_functions[shape](query_points, *command['transforms'], command['roundness'])
 
 		return distances
 
 
-	def apply_operation(distances, new_distances, operation_weights, blending):
+	def apply_operation(distances, new_distances, command):
 		final_distance = 0
 
 		# Compute weighted averge result
-		for operation in range(operation_weights.size(dim=-1)):
-			final_distance += operation_weights[:,operation] * CSGModel.operation_functions[operation](distances, new_distances, blending)
+		for operation in range(command['operation weights'].size(dim=-1)):
+			final_distance += command['operation weights'][:,operation] * CSGModel.operation_functions[operation](distances, new_distances, command['blending'])
 
 		return final_distance
 
@@ -91,10 +92,8 @@ class CSGModel():
 
 		# Compute combined SDF
 		for command in self.csg_commands:
-			new_distances = CSGModel.sample_sdf(query_points, command['shape weights'], command['transforms'])
-			print('new D ', new_distances)
-			distances = CSGModel.apply_operation(distances, new_distances, command['operation weights'], command['blending'])
-			print('op D ', distances)
+			new_distances = CSGModel.sample_sdf(query_points, command)
+			distances = CSGModel.apply_operation(distances, new_distances, command)
 
 		return distances
 
@@ -112,6 +111,7 @@ if __name__ == "__main__":
 	shape_weights1 = torch.tensor([1,0,0], dtype=float).repeat(batch_size,1)
 	operation_weights1 = torch.tensor([1,0], dtype=float).repeat(batch_size,1)
 	blending1 = torch.tensor([0.001], dtype=float).repeat(batch_size,1)
+	roundness1 = torch.tensor([0], dtype=float).repeat(batch_size,1)
 
 	translations2 = torch.tensor([0.3,0,0], dtype=float).repeat(batch_size,1)
 	rotations2 = torch.tensor([1,0,0,0], dtype=float).repeat(batch_size,1)
@@ -119,10 +119,11 @@ if __name__ == "__main__":
 	shape_weights2 = torch.tensor([0,1,0], dtype=float).repeat(batch_size,1)
 	operation_weights2 = torch.tensor([0,1], dtype=float).repeat(batch_size,1)
 	blending2 = torch.tensor([0.001], dtype=float).repeat(batch_size,1)
+	roundness2 = torch.tensor([0], dtype=float).repeat(batch_size,1)
 
 	myModel = CSGModel(batch_size, num_points)
-	myModel.add_command(shape_weights1, operation_weights1, translations1, rotations1, scales1, blending1)
-	myModel.add_command(shape_weights2, operation_weights2, translations2, rotations2, scales2, blending2)
+	myModel.add_command(shape_weights1, operation_weights1, translations1, rotations1, scales1, blending1, roundness1)
+	myModel.add_command(shape_weights2, operation_weights2, translations2, rotations2, scales2, blending2, roundness2)
 	distances = myModel.sample_csg(points)
 
 	print('Weighted SDF Samples:')

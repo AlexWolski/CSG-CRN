@@ -130,10 +130,8 @@ class BlendingRegressor(nn.Module):
 
 # Predict amount to round shape into sphere
 class RoundnessRegressor(nn.Module):
-	def __init__(self, min_roundness, max_roundness):
+	def __init__(self):
 		super(RoundnessRegressor, self).__init__()
-		self.min_roundness = min_roundness
-		self.max_roundness = max_roundness
 
 		self.fc1 = self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
@@ -144,9 +142,6 @@ class RoundnessRegressor(nn.Module):
 		X = self.LeReLU(self.fc1(X))
 		roundness = self.activation(self.fc2(X))
 
-		# Restrict the roundness factor to expected range
-		roundness = (roundness * (self.max_roundness - self.min_roundness)) + self.min_roundness
-
 		return roundness
 
 
@@ -156,8 +151,7 @@ class PrimitiveRegressor(nn.Module):
 		num_primitives, num_operations,
 		translation_scale=0.6,
 		min_scale=0.005, max_scale=0.5,
-		min_blending=0.001, max_blending=1,
-		min_roundness=0, max_roundness=0.5):
+		min_blending=0.001, max_blending=1):
 
 		super(PrimitiveRegressor, self).__init__()
 
@@ -167,7 +161,7 @@ class PrimitiveRegressor(nn.Module):
 		self.rotation = RotationRegressor()
 		self.scale = ScaleRegressor(min_scale, max_scale)
 		self.blending = BlendingRegressor(min_blending, max_blending)
-		#self.roundness = RoundnessRegressor(min_roundness, max_roundness)
+		self.roundness = RoundnessRegressor()
 	
 	def forward(self, X):
 		return(
@@ -177,7 +171,7 @@ class PrimitiveRegressor(nn.Module):
 			self.rotation.forward(X),
 			self.scale.forward(X),
 			self.blending.forward(X),
-			#self.roundness.forward(X),
+			self.roundness.forward(X),
 		)
 
 
@@ -217,7 +211,7 @@ if __name__ == '__main__':
 	print('Blending Output:')
 	print(outputs, '\n')
 
-	network = RoundnessRegressor(0, 0.5)
+	network = RoundnessRegressor()
 	outputs = network(inputs)
 	print('Roundness Output:')
 	print(outputs, '\n')

@@ -6,7 +6,7 @@ from point_transform import transform_point_clouds
 # https://iquilezles.org/articles/distfunctions/
 
 
-def sdf_ellipsoid(query_points, translations, rotations, dimensions):
+def sdf_ellipsoid(query_points, translations, rotations, dimensions, _):
 	# Transform query points to primitive space
 	transformed_query_points = transform_point_clouds(query_points, translations, rotations)
 
@@ -19,12 +19,17 @@ def sdf_ellipsoid(query_points, translations, rotations, dimensions):
 	return distances
 
 
-def sdf_cuboid(query_points, translations, rotations, dimensions):
+def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
 	# Transform query points to primitive space
 	transformed_query_points = transform_point_clouds(query_points, translations, rotations)
 
+	# Compute roundness value
+	(min_dims, _) = torch.min(dimensions, dim=-1, keepdim=True)
+	adjusted_roundness = roundness * min_dims
+	adjusted_dimensions = dimensions - adjusted_roundness
+
 	# Reflect query point in all quadrants and translate relative to the box surface
-	transformed_query_points = transformed_query_points.abs() - dimensions
+	transformed_query_points = transformed_query_points.abs() - adjusted_dimensions
 
 	# Compute positive distances from outside the box
 	pos_distance = transformed_query_points.max(torch.zeros_like(transformed_query_points)).norm(dim=-1)
@@ -35,10 +40,10 @@ def sdf_cuboid(query_points, translations, rotations, dimensions):
 	qz = transformed_query_points[..., 2]
 	neg_distance = qy.max(qz).max(qx).min(torch.zeros_like(qx))
 
-	return pos_distance + neg_distance
+	return pos_distance + neg_distance - adjusted_roundness
 
 
-def sdf_cylinder(query_points, translations, rotations, dimensions):
+def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
 	# Transform query points to primitive space
 	transformed_query_points = transform_point_clouds(query_points, translations, rotations)
 
@@ -47,14 +52,18 @@ def sdf_cylinder(query_points, translations, rotations, dimensions):
 	sxy = dimensions[..., :2]
 	sz = dimensions[..., 2]
 
+	# Compute roundness value
+	adjusted_roundness = roundness * sz
+	adjusted_height = sz - adjusted_roundness
+
 	# Scale circle to approximate distance to ellipse
 	k0 = (qxy / sxy).norm(dim=-1)
 	# Divide by gradient to minimize distortion
 	k1 = (qxy / (sxy*sxy)).norm(dim=-1)
-	ellipse_distance = k0 * (k0 - torch.ones_like(k0)) / k1
+	ellipse_distance = k0 * (k0 - torch.ones_like(k0)) / k1 + adjusted_roundness
 
 	# Compute distance to ends of cylinder
-	cap_distance = qz.abs() - sz
+	cap_distance = qz.abs() - adjusted_height
 
 	distance = torch.stack((ellipse_distance, cap_distance), dim=-1)
 	dx = distance[..., 0]
@@ -63,7 +72,7 @@ def sdf_cylinder(query_points, translations, rotations, dimensions):
 	pos_distance = torch.max(distance, torch.zeros_like(distance)).norm(dim=-1)
 	neg_distance = torch.min(torch.max(dx, dy), torch.zeros_like(dx))
 
-	return pos_distance + neg_distance
+	return pos_distance + neg_distance - adjusted_roundness
 
 
 # Test SDFs
@@ -75,15 +84,16 @@ if __name__ == "__main__":
 	translations = torch.tensor([0,0.2,0], dtype=float).repeat(batch_size,1)
 	rotations = torch.tensor([0.924,0,0,0.383], dtype=float).repeat(batch_size,1)
 	scales = torch.tensor([0.2,0.5,0.7], dtype=float).repeat(batch_size,1)
+	roundness = torch.tensor([1], dtype=float).repeat(batch_size,1)
 
 	distances = sdf_ellipsoid(points, translations, rotations, scales)
 	print('Sphere SDF Samples:')
 	print(distances, '\n')
 
-	distances = sdf_cuboid(points, translations, rotations, scales)
+	distances = sdf_cuboid(points, translations, rotations, scales, roundness)
 	print('Cuboid SDF Samples:')
 	print(distances, '\n')
 
-	distances = sdf_cylinder(points, translations, rotations, scales)
+	distances = sdf_cylinder(points, translations, rotations, scales, roundness)
 	print('Cylinder SDF Samples:')
 	print(distances)
