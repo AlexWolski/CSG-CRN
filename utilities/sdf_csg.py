@@ -10,7 +10,6 @@ MAX_SDF_VALUE = 1
 
 
 def smooth_min(a, b, blending):
-	blending = torch.full(a.size(), blending)
 	absolute_diff = (a-b).abs()
 	h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
 	smooth_factor = h * h * blending * 0.25
@@ -19,7 +18,6 @@ def smooth_min(a, b, blending):
 
 
 def smooth_max(a, b, blending):
-	blending = torch.full(a.size(), blending)
 	absolute_diff = (a-b).abs()
 	h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
 	smooth_factor = h * h * blending * 0.25
@@ -71,8 +69,8 @@ class CSGModel():
 		distances = 0
 
 		# Compute weighted averge distance
-		for shape in range(len(shape_weights)):
-			distances += shape_weights[shape] * CSGModel.sdf_functions[shape](query_points, *transforms)
+		for shape in range(shape_weights.size(dim=-1)):
+			distances += shape_weights[:,shape] * CSGModel.sdf_functions[shape](query_points, *transforms)
 
 		return distances
 
@@ -81,8 +79,8 @@ class CSGModel():
 		final_distance = 0
 
 		# Compute weighted averge result
-		for operation in range(len(operation_weights)):
-			final_distance += operation_weights[operation] * CSGModel.operation_functions[operation](distances, new_distances, blending)
+		for operation in range(operation_weights.size(dim=-1)):
+			final_distance += operation_weights[:,operation] * CSGModel.operation_functions[operation](distances, new_distances, blending)
 
 		return final_distance
 
@@ -94,7 +92,9 @@ class CSGModel():
 		# Compute combined SDF
 		for command in self.csg_commands:
 			new_distances = CSGModel.sample_sdf(query_points, command['shape weights'], command['transforms'])
+			print('new D ', new_distances)
 			distances = CSGModel.apply_operation(distances, new_distances, command['operation weights'], command['blending'])
+			print('op D ', distances)
 
 		return distances
 
@@ -106,19 +106,19 @@ if __name__ == "__main__":
 
 	points = torch.rand([batch_size, num_points, 3])
 
-	translations1 = torch.tensor([0,0,0], dtype=float).unsqueeze(0)
-	rotations1 = torch.tensor([1,0,0,0], dtype=float).unsqueeze(0)
-	scales1 = torch.tensor([0.6,0.6,0.6], dtype=float).unsqueeze(0)
-	shape_weights1 = [1,0,0]
-	operation_weights1 = [1,0]
-	blending1 = 0.001
+	translations1 = torch.tensor([0,0,0], dtype=float).repeat(batch_size,1)
+	rotations1 = torch.tensor([1,0,0,0], dtype=float).repeat(batch_size,1)
+	scales1 = torch.tensor([0.6,0.6,0.6], dtype=float).repeat(batch_size,1)
+	shape_weights1 = torch.tensor([1,0,0], dtype=float).repeat(batch_size,1)
+	operation_weights1 = torch.tensor([1,0], dtype=float).repeat(batch_size,1)
+	blending1 = torch.tensor([0.001], dtype=float).repeat(batch_size,1)
 
-	translations2 = torch.tensor([0.3,0,0], dtype=float).unsqueeze(0)
-	rotations2 = torch.tensor([1,0,0,0], dtype=float).unsqueeze(0)
-	scales2 = torch.tensor([0.3,0.3,0.3], dtype=float).unsqueeze(0)
-	shape_weights2 = [0,1,0]
-	operation_weights2 = [0,1]
-	blending2 = 0.001
+	translations2 = torch.tensor([0.3,0,0], dtype=float).repeat(batch_size,1)
+	rotations2 = torch.tensor([1,0,0,0], dtype=float).repeat(batch_size,1)
+	scales2 = torch.tensor([0.3,0.3,0.3], dtype=float).repeat(batch_size,1)
+	shape_weights2 = torch.tensor([0,1,0], dtype=float).repeat(batch_size,1)
+	operation_weights2 = torch.tensor([0,1], dtype=float).repeat(batch_size,1)
+	blending2 = torch.tensor([0.001], dtype=float).repeat(batch_size,1)
 
 	myModel = CSGModel(batch_size, num_points)
 	myModel.add_command(shape_weights1, operation_weights1, translations1, rotations1, scales1, blending1)

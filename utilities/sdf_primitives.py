@@ -72,9 +72,9 @@ if __name__ == "__main__":
 	num_points = 2
 
 	points = torch.rand([batch_size, num_points, 3])
-	translations = torch.tensor([0,0.2,0], dtype=float).unsqueeze(0)
-	rotations = torch.tensor([0.924,0,0,0.383], dtype=float).unsqueeze(0)
-	scales = torch.tensor([0.2,0.5,0.7], dtype=float).unsqueeze(0)
+	translations = torch.tensor([0,0.2,0], dtype=float).repeat(batch_size,1)
+	rotations = torch.tensor([0.924,0,0,0.383], dtype=float).repeat(batch_size,1)
+	scales = torch.tensor([0.2,0.5,0.7], dtype=float).repeat(batch_size,1)
 
 	distances = sdf_ellipsoid(points, translations, rotations, scales)
 	print('Sphere SDF Samples:')
