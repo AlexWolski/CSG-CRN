@@ -5,11 +5,21 @@ import sdf_primitives
 MAX_SDF_VALUE = 1
 
 
-def add_sdf(distances, new_distances):
-	return torch.min(distances, new_distances)
+
+def smooth_min(a, b, blending):
+	blending = torch.full(a.size(), blending)
+	absolute_diff = (a-b).abs()
+	h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
+	smooth_factor = h * h * blending * 0.25
+
+	return torch.min(a, b) - smooth_factor
 
 
-def subtract_sdf(distances, new_distances):
+def add_sdf(distances, new_distances, blending):
+	return smooth_min(distances, new_distances, blending)
+
+
+def subtract_sdf(distances, new_distances, blending):
 	return torch.max(distances, -new_distances)
 
 
@@ -25,15 +35,14 @@ class CSGModel():
 		subtract_sdf
 	]
 
-	def __init__(self, batch_size):
-
-		# Primitives are added and sampled in batches
+	def __init__(self, batch_size, num_points):
 		self.batch_size = batch_size
+		self.num_points = num_points
 		# List of all primitives and operations to build CSG model
 		self.csg_commands = []
 
 
-	def add_sdf(self, shape_weights, operation_weights, translations, rotations, scales, blending):
+	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending):
 		self.csg_commands.append({
 			'shape weights': shape_weights,
 			'operation weights': operation_weights,
@@ -59,14 +68,14 @@ class CSGModel():
 
 		# Compute weighted averge result
 		for operation in range(len(operation_weights)):
-			final_distance += operation_weights[operation] * CSGModel.operation_functions[operation](distances, new_distances)
+			final_distance += operation_weights[operation] * CSGModel.operation_functions[operation](distances, new_distances, blending)
 
 		return final_distance
 
 
 	def sample_csg(self, query_points):
 		# Set initial SDF to a set maximum value instead of float('inf')
-		distances = torch.full((self.batch_size, 1), MAX_SDF_VALUE)
+		distances = torch.full((self.batch_size, self.num_points), MAX_SDF_VALUE)
 
 		# Compute combined SDF
 		for command in self.csg_commands:
@@ -85,21 +94,21 @@ if __name__ == "__main__":
 
 	translations1 = torch.tensor([0,0,0], dtype=float).unsqueeze(0)
 	rotations1 = torch.tensor([1,0,0,0], dtype=float).unsqueeze(0)
-	scales1 = torch.tensor([0.8,0.8,0.8], dtype=float).unsqueeze(0)
+	scales1 = torch.tensor([0.6,0.6,0.6], dtype=float).unsqueeze(0)
 	shape_weights1 = [1,0,0]
 	operation_weights1 = [1,0]
-	blending1 = 0
+	blending1 = 0.001
 
-	translations2 = torch.tensor([0.8,0,0], dtype=float).unsqueeze(0)
+	translations2 = torch.tensor([0.3,0,0], dtype=float).unsqueeze(0)
 	rotations2 = torch.tensor([1,0,0,0], dtype=float).unsqueeze(0)
 	scales2 = torch.tensor([0.3,0.3,0.3], dtype=float).unsqueeze(0)
 	shape_weights2 = [0,1,0]
 	operation_weights2 = [0,1]
-	blending2 = 0
+	blending2 = 0.001
 
-	myModel = CSGModel(batch_size)
-	myModel.add_sdf(shape_weights1, operation_weights1, translations1, rotations1, scales1, blending1)
-	myModel.add_sdf(shape_weights2, operation_weights2, translations2, rotations2, scales2, blending2)
+	myModel = CSGModel(batch_size, num_points)
+	myModel.add_command(shape_weights1, operation_weights1, translations1, rotations1, scales1, blending1)
+	myModel.add_command(shape_weights2, operation_weights2, translations2, rotations2, scales2, blending2)
 	distances = myModel.sample_csg(points)
 
 	print('Weighted SDF Samples:')

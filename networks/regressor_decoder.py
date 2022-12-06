@@ -156,7 +156,7 @@ class PrimitiveRegressor(nn.Module):
 		num_primitives, num_operations,
 		translation_scale=0.6,
 		min_scale=0.005, max_scale=0.5,
-		min_blending=0, max_blending=1,
+		min_blending=0.001, max_blending=1,
 		min_roundness=0, max_roundness=0.5):
 
 		super(PrimitiveRegressor, self).__init__()
