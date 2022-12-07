@@ -6,9 +6,10 @@ from utilities.point_transform import transform_point_clouds
 # https://iquilezles.org/articles/distfunctions/
 
 
-def sdf_ellipsoid(query_points, translations, rotations, dimensions, _):
+def sdf_ellipsoid(query_points, translations, rotations, dimensions, roundness=None):
 	# Transform query points to primitive space
 	transformed_query_points = transform_point_clouds(query_points, translations, rotations)
+	dimensions = dimensions.unsqueeze(1)
 
 	# Scale sphere to approximate ellipsoid
 	k0 = (transformed_query_points / dimensions).norm(dim=-1)
@@ -27,6 +28,7 @@ def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
 	(min_dims, _) = torch.min(dimensions, dim=-1, keepdim=True)
 	adjusted_roundness = roundness * min_dims
 	adjusted_dimensions = dimensions - adjusted_roundness
+	adjusted_dimensions = adjusted_dimensions.unsqueeze(1)
 
 	# Reflect query point in all quadrants and translate relative to the box surface
 	transformed_query_points = transformed_query_points.abs() - adjusted_dimensions
@@ -46,6 +48,7 @@ def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
 def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
 	# Transform query points to primitive space
 	transformed_query_points = transform_point_clouds(query_points, translations, rotations)
+	dimensions = dimensions.unsqueeze(1)
 
 	qxy = transformed_query_points[..., :2]
 	qz = transformed_query_points[..., 2]

@@ -70,7 +70,8 @@ class CSGModel():
 
 		# Compute weighted averge distance
 		for shape in range(command['shape weights'].size(dim=-1)):
-			distances += command['shape weights'][:,shape] * CSGModel.sdf_functions[shape](query_points, *command['transforms'], command['roundness'])
+			weight = command['shape weights'][:,shape].unsqueeze(-1)
+			distances += weight * CSGModel.sdf_functions[shape](query_points, *command['transforms'], command['roundness'])
 
 		return distances
 
@@ -80,7 +81,8 @@ class CSGModel():
 
 		# Compute weighted averge result
 		for operation in range(command['operation weights'].size(dim=-1)):
-			final_distance += command['operation weights'][:,operation] * CSGModel.operation_functions[operation](distances, new_distances, command['blending'])
+			weight = command['operation weights'][:,operation].unsqueeze(-1)
+			final_distance += weight * CSGModel.operation_functions[operation](distances, new_distances, command['blending'])
 
 		return final_distance
 
