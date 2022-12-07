@@ -28,19 +28,10 @@ class Loss(nn.Module):
 		refined_recon_loss = self.recon_loss_2(target_sdf, refined_sdf)
 		delta_loss = initial_recon_loss - refined_recon_loss
 
-		print(initial_recon_loss)
-		print(refined_recon_loss)
-
 		# Compute weighted regularizer losses
 		primitive_loss = self.primitive_weight * self.primitive_loss(refined_sdf)
 		shape_reg_loss = self.shape_weight * self.entropy_loss_1(shape_probs)
 		operation_reg_loss = self.operation_weight * self.entropy_loss_2(operation_probs)
-
-		print(delta_loss)
-		print(primitive_loss)
-		print(shape_reg_loss)
-		print(operation_reg_loss)
-		print('\n\n')
 
 		# Combine losses
 		total_loss = delta_loss + primitive_loss + shape_reg_loss + operation_reg_loss
