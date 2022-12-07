@@ -1,5 +1,5 @@
 import torch
-from point_transform import transform_point_clouds
+from utilities.point_transform import transform_point_clouds
 
 
 # Equations for all primitive SDFs are borrowed from iquilezles.org
@@ -76,7 +76,7 @@ def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
 
 
 # Test SDFs
-if __name__ == "__main__":
+def test():
 	batch_size = 2
 	num_points = 2
 

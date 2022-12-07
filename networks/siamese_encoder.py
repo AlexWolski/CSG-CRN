@@ -38,7 +38,7 @@ class SiameseEncoder(nn.Module):
 
 
 # Test network
-if __name__ == '__main__':
+def test():
 	import pointnet
 
 	# Input Dimension: BxFxP

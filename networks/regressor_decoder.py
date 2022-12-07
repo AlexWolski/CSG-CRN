@@ -176,7 +176,7 @@ class PrimitiveRegressor(nn.Module):
 
 
 # Test network
-if __name__ == '__main__':
+def test():
 	batch_size = 2
 	feature_size = 256
 	inputs = torch.autograd.Variable(torch.rand(batch_size, feature_size))

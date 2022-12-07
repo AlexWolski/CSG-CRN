@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-import pointnet
-import siamese_encoder
-import regressor_decoder
+from networks.pointnet import PointNetfeat
+from networks.siamese_encoder import SiameseEncoder
+from networks.regressor_decoder import PrimitiveRegressor
 
 
 class CSG_CRN(nn.Module):
@@ -11,9 +11,9 @@ class CSG_CRN(nn.Module):
 		self.num_primitives = num_primitives
 		self.num_operations = num_operations
 
-		self.point_encoder = pointnet.PointNetfeat(global_feat=True)
-		self.siamese_encoder = siamese_encoder.SiameseEncoder(self.point_encoder, 1024)
-		self.regressor_decoder = regressor_decoder.PrimitiveRegressor(num_primitives, num_operations)
+		self.point_encoder = PointNetfeat(global_feat=True)
+		self.siamese_encoder = SiameseEncoder(self.point_encoder, 1024)
+		self.regressor_decoder = PrimitiveRegressor(num_primitives, num_operations)
 
 
 	def forward(self, target_input, initial_recon_input):
@@ -24,7 +24,7 @@ class CSG_CRN(nn.Module):
 
 
 # Test network
-if __name__ == '__main__':
+def test():
 	import pointnet
 
 	# Input Dimension: BxFxP

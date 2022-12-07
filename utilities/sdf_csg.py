@@ -1,5 +1,5 @@
 import torch
-import sdf_primitives
+from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder
 
 
 MAX_SDF_VALUE = 1
@@ -37,9 +37,9 @@ def subtract_sdf(distances, new_distances, blending):
 
 class CSGModel():
 	sdf_functions = [
-		sdf_primitives.sdf_ellipsoid,
-		sdf_primitives.sdf_cuboid,
-		sdf_primitives.sdf_cylinder
+		sdf_ellipsoid,
+		sdf_cuboid,
+		sdf_cylinder
 	]
 
 	operation_functions = [
@@ -99,7 +99,7 @@ class CSGModel():
 
 
 # Test SDFs
-if __name__ == "__main__":
+def test():
 	batch_size = 2
 	num_points = 2
 

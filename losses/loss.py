@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-from entropy_loss import EntropyLoss
-from primitive_loss import PrimitiveLoss
-from reconstruction_loss import ReconstructionLoss
+from losses.entropy_loss import EntropyLoss
+from losses.primitive_loss import PrimitiveLoss
+from losses.reconstruction_loss import ReconstructionLoss
 
 
 class Loss(nn.Module):
@@ -40,7 +40,7 @@ class Loss(nn.Module):
 
 
 # Test loss
-if __name__ == "__main__":
+def test():
 	batch_size = 2
 	num_points = 2
 	clamp_dist = 0.1
