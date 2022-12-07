@@ -29,6 +29,7 @@ def options():
 	# Data settings
 	parser.add_argument('--data_dir', type=str, required=True, help='Dataset parent directory')
 	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
+	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
 	# Model settings
 	parser.add_argument('--clamp_dist', type=float, default=0.1, help='How close to the surface to sample')

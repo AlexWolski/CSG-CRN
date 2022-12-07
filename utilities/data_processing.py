@@ -14,7 +14,7 @@ def create_out_dir(args):
 
 	if not os.path.exists(output_path):
 		os.mkdir(output_path)
-	elif len(os.listdir(output_path)) != 0:
+	elif len(os.listdir(output_path)) != 0 and not args.overwrite:
 		raise Exception('The output folder "%s" is already populated' % output_path)
 
 	return output_path
@@ -42,7 +42,9 @@ def save_list(file_path, list):
 # Find and save all near-surface point samples
 def uniform_to_surface_data(data_dir, uniform_files, output_path, clamp_dist):
 	surface_points_dir = os.path.join(output_path, 'near_surface_samples')
-	os.mkdir(surface_points_dir)
+
+	if not os.path.exists(surface_points_dir):
+		os.mkdir(surface_points_dir)
 
 	for uniform_file in uniform_files:
 		# Select points for which the distance to the surface is within the threshold
