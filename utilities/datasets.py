@@ -1,14 +1,16 @@
 import os
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 
 
 class PointDataset(Dataset):
-	def __init__(self, uniform_dir, surface_dir, filenames, num_points):
+	def __init__(self, uniform_dir, surface_dir, filenames, num_points, device):
 		self.uniform_dir = uniform_dir
 		self.surface_dir = surface_dir
 		self.filenames = filenames
 		self.num_points = num_points
+		self.device = device
 
 	def __len__(self):
 		return len(self.filenames)
@@ -27,6 +29,10 @@ class PointDataset(Dataset):
 		# Randomly select needed number of surface points
 		replace = (surface_points.shape[0] < self.num_points)
 		select_rows = np.random.choice(surface_points.shape[0], self.num_points, replace=replace)
-		select_surface_points = surface_points[select_rows]
+		surface_points = surface_points[select_rows]
 
-		return (uniform_points, select_points)
+		# Convert numpy arrays to torch tensors
+		uniform_points = torch.from_numpy(uniform_points)
+		surface_points = torch.from_numpy(surface_points)
+
+		return (uniform_points, surface_points)
