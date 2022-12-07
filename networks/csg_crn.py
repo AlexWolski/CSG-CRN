@@ -17,6 +17,11 @@ class CSG_CRN(nn.Module):
 
 
 	def forward(self, target_input, initial_recon_input):
+		# Change input shape from BxNx4 to Bx4xN for PointNet encoder
+		# Where B = Batch Size and N = Number of Points
+		target_input = target_input.permute(0, 2, 1)
+		initial_recon_input = initial_recon_input.permute(0, 2, 1)
+
 		features = self.siamese_encoder(target_input, initial_recon_input)
 		outputs = self.regressor_decoder(features)
 
@@ -25,14 +30,12 @@ class CSG_CRN(nn.Module):
 
 # Test network
 def test():
-	import pointnet
-
 	# Input Dimension: BxFxP
 	# B = Batch Size
 	# F = Feature Size
 	# P = Point Size
-	target_points = torch.autograd.Variable(torch.rand(32, 4, 1024))
-	initial_points = torch.autograd.Variable(torch.rand(32, 4, 1024))
+	target_points = torch.rand(32, 1024, 4)
+	initial_points = torch.rand(32, 1024, 4)
 
 	csg_crn = CSG_CRN(3, 2)
 	outputs = csg_crn(target_points, initial_points)
