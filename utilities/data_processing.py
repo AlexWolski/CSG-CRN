@@ -8,7 +8,7 @@ def create_out_dir(args):
 	# Use parent directory name as dataset name
 	dataset_name = os.path.basename(os.path.normpath(args.data_dir))
 	# Create output folder name from settings
-	output_folder = dataset_name + '_' + str(args.clamp_dist) + 'dist_' + str(args.num_input_points) +\
+	output_folder = dataset_name + '_' + str(args.sample_dist) + 'dist_' + str(args.num_input_points) +\
 	'input_points_' + str(args.num_loss_points) + 'loss_points_' + str(args.num_prims) + 'prims'
 	output_path = os.path.join(args.output_dir, output_folder)
 
@@ -40,7 +40,7 @@ def save_list(file_path, list):
 
 
 # Find and save all near-surface point samples
-def uniform_to_surface_data(data_dir, uniform_files, output_path, clamp_dist):
+def uniform_to_surface_data(data_dir, uniform_files, output_path, sample_dist):
 	surface_points_dir = os.path.join(output_path, 'near_surface_samples')
 
 	if not os.path.exists(surface_points_dir):
@@ -50,7 +50,7 @@ def uniform_to_surface_data(data_dir, uniform_files, output_path, clamp_dist):
 		# Select points for which the distance to the surface is within the threshold
 		uniform_path = os.path.join(data_dir, uniform_file)
 		uniform_points = np.load(uniform_path)
-		surface_points_rows = np.where(abs(uniform_points[:,3]) <= clamp_dist)
+		surface_points_rows = np.where(abs(uniform_points[:,3]) <= sample_dist)
 		surface_points = uniform_points[surface_points_rows]
 
 		# Save selected near-surface points

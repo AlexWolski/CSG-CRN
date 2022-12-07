@@ -30,14 +30,15 @@ def options():
 	parser.add_argument('--data_dir', type=str, required=True, help='Dataset parent directory')
 	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
 	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
+	parser.add_argument('--no_preprocess', default=False, action='store_true', help='Disable near-surface sample preprocessing')
+	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample during preprocessing')
 
 	# Model settings
-	parser.add_argument('--no_preprocess', default=False, action='store_true', help='Disable near-surface sample preprocessing')
-	parser.add_argument('--clamp_dist', type=float, default=0.1, help='How close to the surface to sample')
 	parser.add_argument('--num_input_points', type=int, default=1024, help='Number of points in the input point clouds')
 	parser.add_argument('--num_loss_points', type=int, default=20000, help='Number of points to use in computing the loss')
 	parser.add_argument('--num_prims', type=int, default=10, help='Number of primitives to generate each iteration')
 	parser.add_argument('--num_iters', type=int, default=5, help='Number refinement iterations to train for')
+	parser.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
 	parser.add_argument('--batch_size', type=int, default=64, help='Mini-batch size')
 	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 
@@ -64,7 +65,7 @@ def get_device(device):
 
 
 # Prepare data files and load training dataset
-def load_train_set(data_dir, output_path, no_preprocess, clamp_dist, num_input_points, num_loss_points, data_split):
+def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_points, num_loss_points, data_split):
 	# Load sample files
 	filenames = get_data_files(data_dir)
 	print('Found %i data files' % len(filenames))
@@ -72,7 +73,7 @@ def load_train_set(data_dir, output_path, no_preprocess, clamp_dist, num_input_p
 	# Create near-surface sample files
 	if not no_preprocess:
 		print('Selecting near-surface points...')
-		data_dir = uniform_to_surface_data(data_dir, filenames, output_path, clamp_dist)
+		data_dir = uniform_to_surface_data(data_dir, filenames, output_path, sample_dist)
 
 	# Split dataset and save to file
 	train_files, test_files = torch.utils.data.random_split(filenames, data_split)
@@ -140,7 +141,7 @@ if __name__ == '__main__':
 
 	# Load training set
 	output_path = create_out_dir(args)
-	train_set = load_train_set(args.data_dir, output_path, args.no_preprocess, args.clamp_dist, args.num_input_points, args.num_loss_points, DATA_SPLIT)
+	train_set = load_train_set(args.data_dir, output_path, args.no_preprocess, args.sample_dist, args.num_input_points, args.num_loss_points, DATA_SPLIT)
 	train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
 
 	# Train model
