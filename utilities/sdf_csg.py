@@ -103,10 +103,12 @@ class CSGModel():
 
 # Test SDFs
 def test():
+	from torch.distributions.uniform import Uniform
+
 	batch_size = 2
 	num_points = 2
 
-	points = torch.rand([batch_size, num_points, 3])
+	points = Uniform(-0.5, 0.5).sample((batch_size, num_points, 3))
 
 	translations1 = torch.tensor([0,0,0], dtype=float).repeat(batch_size,1)
 	rotations1 = torch.tensor([1,0,0,0], dtype=float).repeat(batch_size,1)

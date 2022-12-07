@@ -80,10 +80,12 @@ def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
 
 # Test SDFs
 def test():
+	from torch.distributions.uniform import Uniform
+	
 	batch_size = 2
 	num_points = 2
-
-	points = torch.rand([batch_size, num_points, 3])
+	
+	points = Uniform(-0.5, 0.5).sample((batch_size, num_points, 3))
 	translations = torch.tensor([0,0.2,0], dtype=float).repeat(batch_size,1)
 	rotations = torch.tensor([0.924,0,0,0.383], dtype=float).repeat(batch_size,1)
 	scales = torch.tensor([0.2,0.5,0.7], dtype=float).repeat(batch_size,1)
