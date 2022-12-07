@@ -8,7 +8,8 @@ def create_out_dir(args):
 	# Use parent directory name as dataset name
 	dataset_name = os.path.basename(os.path.normpath(args.data_dir))
 	# Create output folder name from settings
-	output_folder = dataset_name + '_' + str(args.clamp_dist) + 'dist_' + str(args.num_points) + 'points_' + str(args.num_prims) + 'prims'
+	output_folder = dataset_name + '_' + str(args.clamp_dist) + 'dist_' + str(args.num_input_points) +\
+	'input_points_' + str(args.num_loss_points) + 'loss_points_' + str(args.num_prims) + 'prims'
 	output_path = os.path.join(args.output_dir, output_folder)
 
 	if not os.path.exists(output_path):
