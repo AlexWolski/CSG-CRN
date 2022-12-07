@@ -75,11 +75,10 @@ class RotationRegressor(nn.Module):
 
 	def forward(self, X):
 		X = self.LeReLU(self.fc1(X))
-		quaternion = self.fc2(X)
+		quaternion = self.LeReLU(self.fc2(X))
 
 		# Normalize quaternion
-		magnitude = torch.norm(quaternion, p=2, keepdim=True, dim=-1)
-		quaternion /= magnitude
+		quaternion = torch.nn.functional.normalize(quaternion, dim=-1)
 
 		return quaternion
 
