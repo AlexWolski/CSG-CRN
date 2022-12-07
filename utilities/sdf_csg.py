@@ -47,11 +47,10 @@ class CSGModel():
 		subtract_sdf
 	]
 
-	def __init__(self, batch_size, num_points):
-		self.batch_size = batch_size
-		self.num_points = num_points
+	def __init__(self, device):
 		# List of all primitives and operations to build CSG model
 		self.csg_commands = []
+		self.device = device
 
 
 	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending, roundness):
@@ -87,8 +86,10 @@ class CSGModel():
 
 
 	def sample_csg(self, query_points):
+		(batch_size, num_points, _) = query_points.size()
+
 		# Set initial SDF to a set maximum value instead of float('inf')
-		distances = torch.full((self.batch_size, self.num_points), MAX_SDF_VALUE)
+		distances = torch.full((batch_size, num_points), MAX_SDF_VALUE).to(self.device)
 
 		# Compute combined SDF
 		for command in self.csg_commands:
@@ -121,7 +122,7 @@ def test():
 	blending2 = torch.tensor([0.001], dtype=float).repeat(batch_size,1)
 	roundness2 = torch.tensor([0], dtype=float).repeat(batch_size,1)
 
-	myModel = CSGModel(batch_size, num_points)
+	myModel = CSGModel(torch.device('cpu'))
 	myModel.add_command(shape_weights1, operation_weights1, translations1, rotations1, scales1, blending1, roundness1)
 	myModel.add_command(shape_weights2, operation_weights2, translations2, rotations2, scales2, blending2, roundness2)
 	distances = myModel.sample_csg(points)
