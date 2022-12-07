@@ -91,8 +91,8 @@ class ScaleRegressor(nn.Module):
 		self.min_scale = min_scale
 		self.max_scale = max_scale
 
-		self.fc1 = self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
+		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
+		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 
@@ -113,8 +113,8 @@ class BlendingRegressor(nn.Module):
 		self.min_blending = min_blending
 		self.max_blending = max_blending
 
-		self.fc1 = self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
+		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
+		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 	
@@ -133,8 +133,8 @@ class RoundnessRegressor(nn.Module):
 	def __init__(self):
 		super(RoundnessRegressor, self).__init__()
 
-		self.fc1 = self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
+		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
+		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 	
