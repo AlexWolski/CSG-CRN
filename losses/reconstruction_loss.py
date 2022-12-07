@@ -26,7 +26,7 @@ class ReconstructionLoss(nn.Module):
 
 
 # Test loss
-if __name__ == "__main__":
+def test():
 	batch_size = 2
 	num_points = 2
 	clamp_dist = 0.1

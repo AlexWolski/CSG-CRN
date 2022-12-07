@@ -10,8 +10,8 @@ class EntropyLoss(nn.Module):
 	def __init__(self):
 		super(EntropyLoss, self).__init__()
 
-	def forward(self, distribution):
-		categorical_entropy = -distribution * torch.log(distribution)
+	def forward(self, prob_distribution):
+		categorical_entropy = -prob_distribution * torch.log(prob_distribution)
 		total_entropy = torch.sum(categorical_entropy, axis=-1, keepdims=True)
 
 		return total_entropy
