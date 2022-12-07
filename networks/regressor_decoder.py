@@ -53,14 +53,14 @@ class TranslationRegressor(nn.Module):
 		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
 		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
-		self.activation = torch.tanh
+		self.activation = nn.Tanh()
 
 	def forward(self, X):
 		X = self.LeReLU(self.fc1(X))
 		translation = self.activation(self.fc2(X))
 
 		# Restrict predicted coordinates to fit the output unit cube
-		translation *= self.translation_scale
+		translation = translation * self.translation_scale
 
 		return translation
 
