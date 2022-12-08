@@ -118,41 +118,49 @@ class CSGModel():
 		return (uniform_points, uniform_distances)
 
 
-	# Helper function that selects near surface points from a given SDF point cloud
-	def select_near_surface(self, points, distances, num_points, sample_dist):
-		# Select near-surface points
-		mask = (abs(distances) <= sample_dist)
-		indices = mask.nonzero()
-
-		# If there are too few near-surface points, mix in uniform points
-		if len(indices) < num_points:
-			num_uniform_indices = num_points - len(indices)
-			unifrom_indices = torch.randint(len(distances), (num_uniform_indices,)).unsqueeze(0)
-			unifrom_indices = torch.transpose(unifrom_indices, 0, 1).to(self.device)
-			indices = torch.cat((indices, unifrom_indices))
-
-		# Otherwise slice the needed number of points
-		else:
-			indices = indices[:num_points]
-
-		return (points[indices].squeeze(1), torch.transpose(distances[indices], 0, 1))
-
-
 	# Sample a given number of signed distances at near-surface points
 	def sample_csg_surface(self, batch_size, num_points, sample_dist):
 		# Get uniform points
 		num_uniform_points = num_points * SURFACE_SAMPLE_RATIO
 		(uniform_points, uniform_distances) = self.sample_csg_uniform(batch_size, num_uniform_points)
 
-		# Sample near-surface points
-		(surface_points, surface_distances) = self.select_near_surface(uniform_points[0], uniform_distances[0], num_points, sample_dist)
+		# Store all indices in flat tensor
+		all_indices = None
 
-		for batch in range(1, batch_size):
-			(surface_points_row, surface_distances_row) = self.select_near_surface(uniform_points[batch], uniform_distances[batch], num_points, sample_dist)
-			surface_points = torch.stack((surface_points, surface_points_row))
-			surface_distances = torch.cat((surface_distances, surface_distances_row))
+		for batch in range(batch_size):
+			# Select indices for near-surface points
+			mask = (abs(uniform_distances[batch]) <= sample_dist)
+			indices = mask.nonzero()
 
-		return (surface_points, surface_distances)
+			# If there are too few near-surface points, mix in uniform points
+			if len(indices) < num_points:
+				num_uniform_indices = num_points - len(indices)
+				unifrom_indices = torch.randint(num_uniform_points, (num_uniform_indices, 1)).to(self.device)
+				indices = torch.cat((indices, unifrom_indices))
+			# Otherwise slice the needed number of points
+			else:
+				indices = indices[:num_points]
+
+			# Adjust index positions based on batch
+			indices = torch.add(indices, batch * num_points)
+
+			# Add indices to total
+			if all_indices is None:
+				all_indices = indices
+			else:
+				all_indices = torch.cat((all_indices, indices))
+
+		# Flatten sample tensors
+		uniform_points = uniform_points.view(-1, 3)
+		uniform_distances = uniform_distances.view(-1, 1)
+		# Index flattened tensors
+		uniform_points = uniform_points[all_indices]
+		uniform_distances = uniform_distances[all_indices]
+		# Reshape
+		uniform_points = uniform_points.view(batch_size, num_points, 3)
+		uniform_distances = uniform_distances.view(batch_size, num_points, 1)
+
+		return (uniform_points, uniform_distances)
 
 
 # Test SDFs

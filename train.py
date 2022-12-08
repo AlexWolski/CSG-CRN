@@ -114,7 +114,7 @@ def train_one_epoch(model, loss, optimizer, train_loader, sample_dist, num_prims
 		for prim in range(num_prims):
 			# Randomly sample initial reconstruction surface to generate input
 			(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(batch_size, num_input_points, sample_dist)
-			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
+			initial_input_samples = torch.cat((initial_input_points, initial_input_distances), dim=-1)
 			# Predict next primitive
 			outputs = model(target_input_samples, initial_input_samples)
 			# Add primitive to CSG model
