@@ -8,7 +8,7 @@ MAX_BOUND = 0.5
 # Maximum SDF value is twice the radius
 MAX_SDF_VALUE = MAX_BOUND * 2
 # Estimated number of uniform points per surface points
-SURFACE_SAMPLE_RATIO = 100
+SURFACE_SAMPLE_RATIO = 10
 
 
 # Smooth minimum and maximum borrowed from iquilezles.org
