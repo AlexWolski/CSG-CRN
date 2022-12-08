@@ -160,7 +160,7 @@ class CSGModel():
 		uniform_points = uniform_points.view(batch_size, num_points, 3)
 		uniform_distances = uniform_distances.view(batch_size, num_points, 1)
 
-		return (uniform_points, uniform_distances)
+		return (uniform_points, uniform_distances.view(batch_size, num_points))
 
 
 # Test SDFs
