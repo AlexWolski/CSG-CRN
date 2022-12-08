@@ -107,8 +107,8 @@ def train_one_epoch(model, loss, optimizer, train_loader, sample_dist, num_prims
 		target_all_distances = target_all_distances.to(device)
 		target_input_samples = target_input_samples.to(device)
 
-		# Sample initial reconstruction at defined uniform points for loss function
-		initial_uniform_distances = csg_model.sample_csg(target_all_points)
+		# Sample initial reconstruction for loss function
+		initial_loss_distances = csg_model.sample_csg(target_all_points)
 
 		# Iteratively generate a set of primitives to build a CSG model
 		for prim in range(num_prims):
@@ -121,14 +121,14 @@ def train_one_epoch(model, loss, optimizer, train_loader, sample_dist, num_prims
 			csg_model.add_command(*outputs)
 
 		# Sample generated CSG model
-		refined_uniform_distances = csg_model.sample_csg(target_all_points)
+		refined_loss_distances = csg_model.sample_csg(target_all_points)
 
 		# Get primitive shape and boolean operation propability distributions
 		shapes_weights = torch.hstack([x['shape weights'] for x in csg_model.csg_commands])
 		operation_weights = torch.hstack([x['shape weights'] for x in csg_model.csg_commands])
 
 		# Compute loss
-		batch_loss = loss(target_all_distances, initial_uniform_distances, refined_uniform_distances, shapes_weights, operation_weights)
+		batch_loss = loss(target_all_distances, initial_loss_distances, refined_loss_distances, shapes_weights, operation_weights)
 		print('Loss:', batch_loss.item())
 
 		# Back propagate
