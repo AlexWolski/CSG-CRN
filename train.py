@@ -1,6 +1,9 @@
 import os
 import argparse
 import torch
+import signal
+import sys
+
 from torch.utils.data import DataLoader
 from torch.distributions.uniform import Uniform
 
@@ -130,7 +133,7 @@ def train_one_epoch(model, loss, optimizer, train_loader, sample_dist, num_prims
 		optimizer.step()
 
 
-if __name__ == '__main__':
+def main():
 	args = options()
 
 	# Set training device
@@ -148,3 +151,21 @@ if __name__ == '__main__':
 	torch.autograd.set_detect_anomaly(True)
 	optimizer = torch.optim.Adam(model.parameters())
 	train_one_epoch(model, loss, optimizer, train_loader, args.sample_dist, args.num_prims, device)
+
+
+if __name__ == '__main__':
+	# Catch CTRL+Z force shutdown
+	def exit_handler(signum, frame):
+		print('\nClearing GPU cache')
+		torch.cuda.empty_cache()
+		print('Enter CTRL+C multiple times to exit')
+		sys.exit()
+
+	signal.signal(signal.SIGTSTP, exit_handler)
+
+	# Catch CTRL+C force shutdown
+	try:
+		main()
+	except KeyboardInterrupt:
+		print('\nClearing GPU cache and quitting')
+		torch.cuda.empty_cache()
