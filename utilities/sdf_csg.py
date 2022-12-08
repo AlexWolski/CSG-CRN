@@ -112,14 +112,14 @@ class CSGModel():
 
 	# Sample a given number of signed distances at uniformly distributed points
 	def sample_csg_uniform(self, batch_size, num_points):
-		uniform_points = Uniform(-MAX_BOUND, MAX_BOUND).sample((batch_size, num_points, 3))
+		uniform_points = Uniform(-MAX_BOUND, MAX_BOUND).sample((batch_size, num_points, 3)).to(self.device)
 		uniform_distances = self.sample_csg(uniform_points)
 
 		return (uniform_points, uniform_distances)
 
 
 	# Helper function that selects near surface points from a given SDF point cloud
-	def select_near_surface(points, distances, num_points, sample_dist):
+	def select_near_surface(self, points, distances, num_points, sample_dist):
 		# Select near-surface points
 		mask = (abs(distances) <= sample_dist)
 		indices = mask.nonzero()
@@ -128,7 +128,7 @@ class CSGModel():
 		if len(indices) < num_points:
 			num_uniform_indices = num_points - len(indices)
 			unifrom_indices = torch.randint(len(distances), (num_uniform_indices,)).unsqueeze(0)
-			unifrom_indices = torch.transpose(unifrom_indices, 0, 1)
+			unifrom_indices = torch.transpose(unifrom_indices, 0, 1).to(self.device)
 			indices = torch.cat((indices, unifrom_indices))
 
 		# Otherwise slice the needed number of points
@@ -145,10 +145,10 @@ class CSGModel():
 		(uniform_points, uniform_distances) = self.sample_csg_uniform(batch_size, num_uniform_points)
 
 		# Sample near-surface points
-		(surface_points, surface_distances) = CSGModel.select_near_surface(uniform_points[0], uniform_distances[0], num_points, sample_dist)
+		(surface_points, surface_distances) = self.select_near_surface(uniform_points[0], uniform_distances[0], num_points, sample_dist)
 
 		for batch in range(1, batch_size):
-			(surface_points_row, surface_distances_row) = CSGModel.select_near_surface(uniform_points[batch], uniform_distances[batch], num_points, sample_dist)
+			(surface_points_row, surface_distances_row) = self.select_near_surface(uniform_points[batch], uniform_distances[batch], num_points, sample_dist)
 			surface_points = torch.stack((surface_points, surface_points_row))
 			surface_distances = torch.cat((surface_distances, surface_distances_row))
 
