@@ -36,7 +36,7 @@ class Loss(nn.Module):
 		# Combine losses
 		total_loss = delta_loss + primitive_loss + shape_reg_loss + operation_reg_loss
 
-		return torch.sum(total_loss)
+		return torch.mean(total_loss)
 
 
 # Test loss
