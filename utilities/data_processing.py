@@ -22,8 +22,8 @@ def create_out_dir(args):
 
 # Find all data files in a given directory
 def get_data_files(data_dir):
-	# Recursively find all npy files in parent directory
-	file_paths = glob.glob(os.path.join(data_dir, '**', '*.npy'), recursive=True)
+	# Find all npy files in parent directory
+	file_paths = glob.glob(os.path.join(data_dir, '*.npy'))
 	filenames = [os.path.basename(file_path) for file_path in file_paths]
 
 	if len(filenames) == 0:
