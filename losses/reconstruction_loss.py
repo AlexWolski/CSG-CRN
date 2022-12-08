@@ -19,7 +19,7 @@ class ReconstructionLoss(nn.Module):
 		predicted_sdf_clamped = torch.clamp(predicted_sdf, -self.clamp_dist, self.clamp_dist)
 
 		# Compute average L1 loss of SDF samples
-		recon_loss = self.l1_loss(target_sdf_clamped, predicted_sdf_clamped) / num_samples
+		recon_loss = self.l1_loss(target_sdf_clamped, predicted_sdf_clamped)
 		recon_loss = torch.mean(recon_loss, dim=-1, keepdim=True)
 
 		return recon_loss
@@ -31,8 +31,8 @@ def test():
 	num_points = 2
 	clamp_dist = 0.1
 
-	target_sdf = torch.rand([batch_size, num_points]) * clamp_dist
-	predicted_sdf = torch.rand([batch_size, num_points]) * clamp_dist
+	target_sdf = torch.rand([batch_size, num_points])
+	predicted_sdf = torch.rand([batch_size, num_points])
 
 	reconstruction_loss = ReconstructionLoss(clamp_dist)
 
