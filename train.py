@@ -86,24 +86,15 @@ def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss, optimizer, train_loader):
+def train_one_epoch(model, loss, optimizer, train_loader, sample_dist, num_prims, device):
 	model.train(True)
 
 	for (index, data) in enumerate(train_loader):
 		# Load data
-		(target_all_samples, target_select_samples) = data
+		(target_all_samples, target_input_samples) = data
 		target_all_points = target_all_samples[..., :3]
 		target_all_distances = target_all_samples[..., 3]
-
-		# Generate random samples for empty initial reconstruction input
-		(batch_size, num_select_points, _) = target_select_samples.size()
-		initial_samples = Uniform(-0.5, 0.5).sample((batch_size, num_select_points, 3))
-		ones = torch.ones(batch_size, num_select_points, 1)
-		initial_samples = torch.cat((initial_samples, ones), dim=-1)
-
-		# Set sample distances for empty initial reconstruction loss
-		(batch_size, num_all_points, _) = target_all_points.size()
-		initial_distances = torch.ones(batch_size, num_all_points)
+		(batch_size, num_input_points, _) = target_input_samples.size()
 
 		# Initialize SDF CSG model
 		csg_model = CSGModel(device)
@@ -111,20 +102,27 @@ def train_one_epoch(model, loss, optimizer, train_loader):
 		# Send all data to training device
 		target_all_points = target_all_points.to(device)
 		target_all_distances = target_all_distances.to(device)
-		target_select_samples = target_select_samples.to(device)
-		initial_samples = initial_samples.to(device)
-		initial_distances = initial_distances.to(device)
+		target_input_samples = target_input_samples.to(device)
 
-		# Predict next primitive
-		outputs = model(target_select_samples, initial_samples)
+		# Sample initial reconstruction at defined uniform points for loss function
+		initial_uniform_distances = csg_model.sample_csg(target_all_points)
 
-		# Sample predicted primitive
-		csg_model.add_command(*outputs)
-		refined_distances = csg_model.sample_csg(target_all_points)
+		# Iteratively generate a set of primitives to build a CSG model
+		for prim in range(num_prims):
+			# Randomly sample initial reconstruction surface to generate input
+			(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(batch_size, num_input_points, sample_dist)
+			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
+			# Predict next primitive
+			outputs = model(target_input_samples, initial_input_samples)
+			# Add primitive to CSG model
+			csg_model.add_command(*outputs)
+
+		# Sample generated CSG model
+		refined_uniform_distances = csg_model.sample_csg(target_all_points)
 
 		# Compute loss
-		batch_loss = loss(target_all_distances, initial_distances, refined_distances, outputs[0], outputs[1])
-		print(batch_loss)
+		batch_loss = loss(target_all_distances, initial_uniform_distances, refined_uniform_distances, outputs[0], outputs[1])
+		print('Loss:', batch_loss.item())
 
 		# Back propagate
 		optimizer.zero_grad()
@@ -149,4 +147,4 @@ if __name__ == '__main__':
 	loss = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(device)
 	torch.autograd.set_detect_anomaly(True)
 	optimizer = torch.optim.Adam(model.parameters())
-	train_one_epoch(model, loss, optimizer, train_loader)
+	train_one_epoch(model, loss, optimizer, train_loader, args.sample_dist, args.num_prims, device)
