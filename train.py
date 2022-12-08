@@ -42,7 +42,7 @@ def options():
 	parser.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss')
 	parser.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total primitives = num_prims x num_iters)')
 	parser.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
-	parser.add_argument('--batch_size', type=int, default=64, help='Mini-batch size')
+	parser.add_argument('--batch_size', type=int, default=32, help='Mini-batch size (Must be larger than 1)')
 	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 
 	# Training settings
