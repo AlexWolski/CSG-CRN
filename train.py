@@ -15,7 +15,8 @@ from utilities.sdf_csg import CSGModel
 from losses.loss import Loss
 
 
-DATA_SPLIT = [0.8, 0.2]
+# Percentage of data to use for training, validation, and testing
+DATA_SPLIT = [0.85, 0.05, 0.1]
 # Number of options for selecting primitives or operations
 PRIMITIVES_SIZE = 3
 OPERATIONS_SIZE = 2
@@ -79,13 +80,15 @@ def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_
 		data_dir = uniform_to_surface_data(data_dir, file_rel_paths, output_path, sample_dist)
 
 	# Split dataset and save to file
-	train_files, test_files = torch.utils.data.random_split(file_rel_paths, data_split)
-	save_list(os.path.join(output_path, 'train.txt'), train_files)
-	save_list(os.path.join(output_path, 'test.txt'), test_files)
+	(train_rel_paths, val_rel_paths, test_rel_paths) = torch.utils.data.random_split(file_rel_paths, data_split)
+	save_list(os.path.join(output_path, 'train.txt'), train_rel_paths)
+	save_list(os.path.join(output_path, 'val.txt'), val_rel_paths)
+	save_list(os.path.join(output_path, 'test.txt'), test_rel_paths)
 
 	print('Iniitalizing dataset...')
-	train_dataset = PointDataset(data_dir, file_rel_paths, num_input_points, num_loss_points)
-	return train_dataset
+	train_dataset = PointDataset(data_dir, train_rel_paths, num_input_points, num_loss_points)
+
+	return (val_rel_paths, train_dataset)
 
 
 # Iteratively predict primitives and propagate average loss
@@ -146,7 +149,7 @@ def main():
 
 	# Load training set
 	output_path = create_out_dir(args)
-	train_set = load_train_set(args.data_dir, output_path, args.no_preprocess, args.sample_dist, args.num_input_points, args.num_loss_points, DATA_SPLIT)
+	(val_rel_paths, train_set) = load_train_set(args.data_dir, output_path, args.no_preprocess, args.sample_dist, args.num_input_points, args.num_loss_points, DATA_SPLIT)
 	train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
 
 	# Train model
