@@ -70,21 +70,21 @@ def get_device(device):
 # Prepare data files and load training dataset
 def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_points, num_loss_points, data_split):
 	# Load sample files
-	filenames = get_data_files(data_dir)
-	print('Found %i data files' % len(filenames))
+	file_rel_paths = get_data_files(data_dir)
+	print('Found %i data files' % len(file_rel_paths))
 
 	# Create near-surface sample files
 	if not no_preprocess:
 		print('Selecting near-surface points...')
-		data_dir = uniform_to_surface_data(data_dir, filenames, output_path, sample_dist)
+		data_dir = uniform_to_surface_data(data_dir, file_rel_paths, output_path, sample_dist)
 
 	# Split dataset and save to file
-	train_files, test_files = torch.utils.data.random_split(filenames, data_split)
+	train_files, test_files = torch.utils.data.random_split(file_rel_paths, data_split)
 	save_list(os.path.join(output_path, 'train.txt'), train_files)
 	save_list(os.path.join(output_path, 'test.txt'), test_files)
 
 	print('Iniitalizing dataset...')
-	train_dataset = PointDataset(data_dir, filenames, num_input_points, num_loss_points)
+	train_dataset = PointDataset(data_dir, file_rel_paths, num_input_points, num_loss_points)
 	return train_dataset
 
 

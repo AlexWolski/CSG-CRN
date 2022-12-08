@@ -5,19 +5,19 @@ from torch.utils.data import Dataset
 
 
 class PointDataset(Dataset):
-	def __init__(self, data_dir, filenames, num_input_points, num_loss_points):
+	def __init__(self, data_dir, file_rel_paths, num_input_points, num_loss_points):
 		self.data_dir = data_dir
-		self.filenames = filenames
+		self.file_rel_paths = file_rel_paths
 		self.num_input_points = num_input_points
 		self.num_loss_points = num_loss_points
 
 	def __len__(self):
-		return len(self.filenames)
+		return len(self.file_rel_paths)
 
 	def __getitem__(self, idx):
 		# Load all points from file
-		filename = self.filenames[idx]
-		points_path = os.path.join(self.data_dir, filename)
+		file_rel_path = self.file_rel_paths[idx]
+		points_path = os.path.join(self.data_dir, file_rel_path)
 		points = np.load(points_path)
 
 		# Randomly select needed number of input surface points
