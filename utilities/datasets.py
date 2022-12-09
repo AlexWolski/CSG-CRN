@@ -27,7 +27,7 @@ class PointDataset(Dataset):
 
 		# Randomly select needed number of loss surface points
 		replace = (points.shape[0] < self.num_loss_points)
-		select_rows = np.random.choice(points.shape[0], self.num_input_points, replace=replace)
+		select_rows = np.random.choice(points.shape[0], self.num_loss_points, replace=replace)
 		select_loss_points = points[select_rows]
 
 		# Convert numpy arrays to torch tensors
