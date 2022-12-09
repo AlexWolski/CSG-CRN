@@ -18,9 +18,10 @@ class ReconstructionLoss(nn.Module):
 		target_sdf_clamped = torch.clamp(target_sdf, -self.clamp_dist, self.clamp_dist)
 		predicted_sdf_clamped = torch.clamp(predicted_sdf, -self.clamp_dist, self.clamp_dist)
 
-		# Compute average L1 loss of SDF samples
+		# Compute average L1 loss of SDF samples for each batch
 		recon_loss = self.l1_loss(target_sdf_clamped, predicted_sdf_clamped)
-		recon_loss = torch.mean(recon_loss, dim=-1, keepdim=True)
+		# Compute average loss of all batches
+		recon_loss = torch.mean(recon_loss)
 
 		return recon_loss
 

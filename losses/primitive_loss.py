@@ -10,8 +10,14 @@ class PrimitiveLoss(nn.Module):
 		super(PrimitiveLoss, self).__init__()
 
 	def forward(self, sdf_samples):
+		# Compute primitive loss of each batch
 		(primitive_loss, _) = sdf_samples.min(dim=-1, keepdim=True)
-		return torch.square(primitive_loss)
+		primitive_loss = torch.square(primitive_loss)
+
+		# Compute average primitive loss of all batches
+		primitive_loss = torch.mean(primitive_loss)
+
+		return primitive_loss
 
 
 # Test loss

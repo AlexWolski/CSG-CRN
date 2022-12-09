@@ -32,11 +32,11 @@ class Loss(nn.Module):
 		primitive_loss = self.primitive_weight * self.primitive_loss(refined_sdf)
 		shape_reg_loss = self.shape_weight * self.entropy_loss_1(shape_probs)
 		operation_reg_loss = self.operation_weight * self.entropy_loss_2(operation_probs)
-
+		
 		# Combine losses
 		total_loss = delta_loss + primitive_loss + shape_reg_loss + operation_reg_loss
 
-		return torch.mean(total_loss)
+		return total_loss
 
 
 # Test loss

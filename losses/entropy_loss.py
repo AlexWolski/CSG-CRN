@@ -17,9 +17,13 @@ class EntropyLoss(nn.Module):
 		super(EntropyLoss, self).__init__()
 
 	def forward(self, prob_distribution):
+		# Compute average entropy of predicted primitives for each batch
 		prob_distribution = torch.add(prob_distribution, EPSILON)
 		categorical_entropy = -prob_distribution * torch.log(prob_distribution)
 		total_entropy = torch.sum(categorical_entropy, axis=-1)
+
+		# Compute average entropy of all batches
+		total_entropy = torch.mean(total_entropy)
 
 		return total_entropy
 
