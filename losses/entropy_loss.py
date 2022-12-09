@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 
 
+# Constant to add to probability distribution to prevent computing log of zero
+EPSILON = 1e-7
+
+
 # Compute the entropy of a multinomial distribution
 # Input Shape: BxPxF
 # Where B = Batch Size, P = Number of Primitives, F = Number of Features
@@ -13,6 +17,7 @@ class EntropyLoss(nn.Module):
 		super(EntropyLoss, self).__init__()
 
 	def forward(self, prob_distribution):
+		prob_distribution = torch.add(prob_distribution, EPSILON)
 		categorical_entropy = -prob_distribution * torch.log(prob_distribution)
 		total_entropy = torch.sum(categorical_entropy, axis=-1)
 
