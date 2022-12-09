@@ -3,6 +3,7 @@ import argparse
 import torch
 import signal
 import sys
+from tqdm import tqdm
 
 from torch.utils.data import DataLoader
 from torch.distributions.uniform import Uniform
@@ -92,12 +93,11 @@ def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss, optimizer, train_loader, sample_dist, num_prims, device):
-	model.train(True)
+def train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, desc):
+	total_loss = 0
 
-	for (index, data) in enumerate(train_loader):
+	for (target_all_samples, target_input_samples) in tqdm(train_loader, desc=desc):
 		# Load data
-		(target_all_samples, target_input_samples) = data
 		target_all_points = target_all_samples[..., :3]
 		target_all_distances = target_all_samples[..., 3]
 		(batch_size, num_input_points, _) = target_input_samples.size()
@@ -131,17 +131,30 @@ def train_one_epoch(model, loss, optimizer, train_loader, sample_dist, num_prims
 		operation_weights = torch.hstack([x['shape weights'] for x in csg_model.csg_commands])
 
 		# Compute loss
-		batch_loss = loss(target_all_distances, initial_loss_distances, refined_loss_distances, shapes_weights, operation_weights)
-		print('Loss:', batch_loss.item())
+		batch_loss = loss_func(target_all_distances, initial_loss_distances, refined_loss_distances, shapes_weights, operation_weights)
+		total_loss += batch_loss.item()
 
 		# Back propagate
 		optimizer.zero_grad()
 		batch_loss.backward()
 		optimizer.step()
 
+	total_loss /= train_loader.__len__()
+	return total_loss
+
+
+# Train model for max_epochs or until stopped early
+def train(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, max_epochs):
+	model.train(True)
+
+	for epoch in range(max_epochs):
+		desc = f'Epoch {epoch}/{max_epochs}'
+		loss = train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, desc)
+
 
 def main():
 	args = options()
+	print('')
 
 	# Set training device
 	device = get_device(args.device)
@@ -153,11 +166,12 @@ def main():
 	train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
 
 	# Train model
+	print('')
 	model = CSG_CRN(PRIMITIVES_SIZE, OPERATIONS_SIZE).to(device)
-	loss = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(device)
+	loss_func = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(device)
 	torch.autograd.set_detect_anomaly(True)
 	optimizer = torch.optim.Adam(model.parameters())
-	train_one_epoch(model, loss, optimizer, train_loader, args.sample_dist, args.num_prims, device)
+	train(model, loss_func, optimizer, train_loader, args.sample_dist, args.num_prims, device, args.max_epochs)
 
 
 if __name__ == '__main__':
