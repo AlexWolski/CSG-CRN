@@ -127,8 +127,8 @@ def train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_
 		refined_loss_distances = csg_model.sample_csg(target_all_points)
 
 		# Get primitive shape and boolean operation propability distributions
-		shapes_weights = torch.hstack([x['shape weights'] for x in csg_model.csg_commands])
-		operation_weights = torch.hstack([x['shape weights'] for x in csg_model.csg_commands])
+		shapes_weights = torch.cat([x['shape weights'] for x in csg_model.csg_commands]).view(batch_size, num_prims, -1)
+		operation_weights = torch.cat([x['operation weights'] for x in csg_model.csg_commands]).view(batch_size, num_prims, -1)
 
 		# Compute loss
 		batch_loss = loss_func(target_all_distances, initial_loss_distances, refined_loss_distances, shapes_weights, operation_weights)
