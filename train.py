@@ -48,6 +48,7 @@ def options():
 	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 
 	# Training settings
+	parser.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	parser.add_argument('--num_workers', type=int, default=8, help='Number of processes spawned for data loader')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
 
@@ -70,7 +71,7 @@ def get_device(device):
 
 
 # Prepare data files and load training dataset
-def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_points, num_loss_points, data_split):
+def load_train_set(data_dir, output_dir, no_preprocess, sample_dist, num_input_points, num_loss_points, data_split):
 	# Load sample files
 	file_rel_paths = get_data_files(data_dir)
 	print('Found %i data files' % len(file_rel_paths))
@@ -78,13 +79,13 @@ def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_
 	# Create near-surface sample files
 	if not no_preprocess:
 		print('Selecting near-surface points...')
-		data_dir = uniform_to_surface_data(data_dir, file_rel_paths, output_path, sample_dist)
+		data_dir = uniform_to_surface_data(data_dir, file_rel_paths, output_dir, sample_dist)
 
 	# Split dataset and save to file
 	(train_rel_paths, val_rel_paths, test_rel_paths) = torch.utils.data.random_split(file_rel_paths, data_split)
-	save_list(os.path.join(output_path, 'train.txt'), train_rel_paths)
-	save_list(os.path.join(output_path, 'val.txt'), val_rel_paths)
-	save_list(os.path.join(output_path, 'test.txt'), test_rel_paths)
+	save_list(os.path.join(output_dir, 'train.txt'), train_rel_paths)
+	save_list(os.path.join(output_dir, 'val.txt'), val_rel_paths)
+	save_list(os.path.join(output_dir, 'test.txt'), test_rel_paths)
 
 	print('Iniitalizing dataset...')
 	train_dataset = PointDataset(data_dir, train_rel_paths, num_input_points, num_loss_points)
@@ -93,7 +94,7 @@ def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, desc):
+def train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, desc=''):
 	total_loss = 0
 
 	for (target_input_samples, target_all_samples) in tqdm(train_loader, desc=desc):
@@ -144,12 +145,17 @@ def train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_
 
 
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, max_epochs):
+def train(model, loss_func, optimizer, train_loader, sample_dist, num_prims, checkpoint_dir, checkpoint_freq, device, max_epochs):
 	model.train(True)
 
 	for epoch in range(max_epochs):
-		desc = f'Epoch {epoch}/{max_epochs}'
+		desc = f'Epoch {epoch+1}/{max_epochs}'
 		loss = train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, desc)
+
+		# Save model parameters
+		if (epoch+1) % checkpoint_freq == 0:
+			checkpoint_path = os.path.join(checkpoint_dir, f'Epoch_{epoch+1}.pt')
+			torch.save(model.state_dict(), checkpoint_path)
 
 
 def main():
@@ -161,8 +167,8 @@ def main():
 	torch.multiprocessing.set_start_method('spawn')
 
 	# Load training set
-	output_path = create_out_dir(args)
-	(val_rel_paths, train_set) = load_train_set(args.data_dir, output_path, args.no_preprocess, args.sample_dist, args.num_input_points, args.num_loss_points, DATA_SPLIT)
+	(output_dir, checkpoint_dir) = create_out_dir(args)
+	(val_rel_paths, train_set) = load_train_set(args.data_dir, output_dir, args.no_preprocess, args.sample_dist, args.num_input_points, args.num_loss_points, DATA_SPLIT)
 	train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
 
 	# Train model
@@ -171,7 +177,7 @@ def main():
 	loss_func = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(device)
 	torch.autograd.set_detect_anomaly(True)
 	optimizer = torch.optim.Adam(model.parameters())
-	train(model, loss_func, optimizer, train_loader, args.sample_dist, args.num_prims, device, args.max_epochs)
+	train(model, loss_func, optimizer, train_loader, args.sample_dist, args.num_prims, checkpoint_dir, args.checkpoint_freq, device, args.max_epochs)
 
 
 if __name__ == '__main__':

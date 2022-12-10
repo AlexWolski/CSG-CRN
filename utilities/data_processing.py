@@ -10,14 +10,19 @@ def create_out_dir(args):
 	# Create output folder name from settings
 	output_folder = dataset_name + '_' + str(args.sample_dist) + 'dist_' + str(args.num_input_points) +\
 	'input_points_' + str(args.num_loss_points) + 'loss_points_' + str(args.num_prims) + 'prims'
-	output_path = os.path.join(args.output_dir, output_folder)
+	output_dir = os.path.join(args.output_dir, output_folder)
 
-	if not os.path.exists(output_path):
-		os.mkdir(output_path)
-	elif len(os.listdir(output_path)) != 0 and not args.overwrite:
-		raise Exception('The output folder "%s" is already populated' % output_path)
+	# Create output directory
+	if not os.path.exists(output_dir):
+		os.makedirs(output_dir)
+	elif len(os.listdir(output_dir)) != 0 and not args.overwrite:
+		raise Exception('The output folder "%s" is already populated' % output_dir)
 
-	return output_path
+	# Create checkpoint folder
+	checkpoint_dir = os.path.join(output_dir, 'checkpoints')
+	os.makedirs(checkpoint_dir, exist_ok=True)
+
+	return (output_dir, checkpoint_dir)
 
 
 # Find all data files in a given directory
@@ -40,11 +45,8 @@ def save_list(file_path, list):
 
 
 # Find and save all near-surface point samples
-def uniform_to_surface_data(data_dir, uniform_rel_paths, output_path, sample_dist):
-	surface_points_dir = os.path.join(output_path, 'near_surface_samples')
-
-	if not os.path.exists(surface_points_dir):
-		os.mkdir(surface_points_dir)
+def uniform_to_surface_data(data_dir, uniform_rel_paths, output_dir, sample_dist):
+	surface_points_dir = os.path.join(output_dir, 'near_surface_samples')
 
 	for uniform_rel_path in uniform_rel_paths:
 		# Select points for which the distance to the surface is within the threshold
