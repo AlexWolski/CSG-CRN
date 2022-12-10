@@ -26,7 +26,7 @@ class Loss(nn.Module):
 		# Compute change is loss after refinement
 		initial_recon_loss = self.recon_loss_1(target_sdf, initial_sdf)
 		refined_recon_loss = self.recon_loss_2(target_sdf, refined_sdf)
-		delta_loss = initial_recon_loss - refined_recon_loss
+		delta_loss = refined_recon_loss - initial_recon_loss
 
 		# Compute weighted regularizer losses
 		primitive_loss = self.primitive_weight * self.primitive_loss(refined_sdf)
