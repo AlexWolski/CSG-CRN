@@ -96,7 +96,7 @@ def load_train_set(data_dir, output_path, no_preprocess, sample_dist, num_input_
 def train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, desc):
 	total_loss = 0
 
-	for (target_all_samples, target_input_samples) in tqdm(train_loader, desc=desc):
+	for (target_input_samples, target_all_samples) in tqdm(train_loader, desc=desc):
 		# Load data
 		target_all_points = target_all_samples[..., :3]
 		target_all_distances = target_all_samples[..., 3]
