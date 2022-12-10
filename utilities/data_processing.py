@@ -45,14 +45,14 @@ def save_list(file_path, list):
 
 
 # Find and save all near-surface point samples
-def uniform_to_surface_data(data_dir, uniform_rel_paths, output_dir, sample_dist):
-	surface_points_dir = os.path.join(output_dir, 'near_surface_samples')
+def uniform_to_surface_data(args, uniform_rel_paths):
+	surface_points_dir = os.path.join(args.output_dir, 'near_surface_samples')
 
 	for uniform_rel_path in uniform_rel_paths:
 		# Select points for which the distance to the surface is within the threshold
-		uniform_path = os.path.join(data_dir, uniform_rel_path)
+		uniform_path = os.path.join(args.data_dir, uniform_rel_path)
 		uniform_points = np.load(uniform_path)
-		surface_points_rows = np.where(abs(uniform_points[:,3]) <= sample_dist)
+		surface_points_rows = np.where(abs(uniform_points[:,3]) <= args.sample_dist)
 		surface_points = uniform_points[surface_points_rows]
 
 		# Save selected near-surface points
