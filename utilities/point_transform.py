@@ -2,11 +2,12 @@ import torch
 
 
 # Converts a Bx4 quaternion tensor to a Bx3x3 rotation matrix tensor
+# Where B = Batch size
 # Where B is the number of quaternions
 def quats_to_rot_matrices(quaternions):
 	# Allocate space for B rotation matrices
-	B = quaternions.size(dim=0)
-	matrices = quaternions.new_zeros((B, 3, 3))
+	batch_size = quaternions.size(dim=0)
+	matrices = quaternions.new_zeros((batch_size, 3, 3))
 
 	# Quaternion stored as [w, x, y, z]
 	w = quaternions[:, 0]
@@ -14,16 +15,16 @@ def quats_to_rot_matrices(quaternions):
 	y = quaternions[:, 2]
 	z = quaternions[:, 3]
 
-	wx2 = 2*w*x
-	wy2 = 2*w*y
-	wz2 = 2*w*z
-	xy2 = 2*x*y
-	yz2 = 2*y*z
-	xz2 = 2*x*z
+	wx2 = w*x*2
+	wy2 = w*y*2
+	wz2 = w*z*2
+	xy2 = x*y*2
+	yz2 = y*z*2
+	xz2 = x*z*2
 
-	xx2 = 2*x*x
-	yy2 = 2*y*y
-	zz2 = 2*z*z
+	xx2 = x*x*2
+	yy2 = y*y*2
+	zz2 = z*z*2
 
 	# Construct rotation matrices
 	matrices[:, 0, 0] = 1 - yy2 - zz2
@@ -42,17 +43,14 @@ def quats_to_rot_matrices(quaternions):
 
 
 # Transforms a BxNx3 point cloud tensor to a given space
-# Where B is the number of point clouds and N is the number of points in each cloud
-# Target space is defined by a Bx3 translation tensor, a Bx4 quaternion tensor, and a Bx3 scale tensor
+# Where B = Batch size and N = Number of points
+# Target space is defined by a Bx3 translation tensor and a Bx4 quaternion tensor
 def transform_point_clouds(point_clouds, translations, rotations):
-	B = point_clouds.size(dim=0)
-
 	# Translate points
 	transformed_points = point_clouds - translations.unsqueeze(1)
 
 	# Rotate points
-	rot_matrices = quats_to_rot_matrices(rotations)
-	rot_matrices = rot_matrices.unsqueeze(1)
+	rot_matrices = quats_to_rot_matrices(rotations).unsqueeze(1)
 	transformed_points = transformed_points.unsqueeze(-1)
 	transformed_points = rot_matrices.matmul(transformed_points).squeeze(-1)
 
@@ -60,7 +58,7 @@ def transform_point_clouds(point_clouds, translations, rotations):
 
 
 # Test transform
-if __name__ == "__main__":
+def test():
 	batch_size = 2
 	num_points = 2
 
