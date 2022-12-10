@@ -158,9 +158,9 @@ class CSGModel():
 		uniform_distances = uniform_distances[all_indices]
 		# Reshape
 		uniform_points = uniform_points.view(batch_size, num_points, 3)
-		uniform_distances = uniform_distances.view(batch_size, num_points, 1)
+		uniform_distances = uniform_distances.view(batch_size, num_points)
 
-		return (uniform_points, uniform_distances.view(batch_size, num_points))
+		return (uniform_points, uniform_distances)
 
 
 # Test SDFs
