@@ -1,3 +1,4 @@
+import math
 import torch
 from torch.distributions.uniform import Uniform
 from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder
@@ -7,8 +8,8 @@ from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder
 MAX_BOUND = 0.5
 # Maximum SDF value is twice the radius
 MAX_SDF_VALUE = MAX_BOUND * 2
-# Estimated number of uniform points per surface points
-SURFACE_SAMPLE_RATIO = 10
+# Multiplier to estimate number of uniform points needed to sample near-surface points
+SURFACE_SAMPLE_RATIO = 5
 
 
 # Smooth minimum and maximum borrowed from iquilezles.org
@@ -121,7 +122,7 @@ class CSGModel():
 	# Sample a given number of signed distances at near-surface points
 	def sample_csg_surface(self, batch_size, num_points, sample_dist):
 		# Get uniform points
-		num_uniform_points = num_points * SURFACE_SAMPLE_RATIO
+		num_uniform_points = math.ceil(num_points / sample_dist) * SURFACE_SAMPLE_RATIO
 		(uniform_points, uniform_distances) = self.sample_csg_uniform(batch_size, num_uniform_points)
 
 		# Store all indices in flat tensor
