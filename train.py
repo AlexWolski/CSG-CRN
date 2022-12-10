@@ -34,6 +34,7 @@ def options():
 	# Data settings
 	parser.add_argument('--data_dir', type=str, required=True, help='Dataset parent directory (data in subdirectories is included)')
 	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
+	parser.add_argument('--model_params', type=str, default='', help='Load model parameters from checkpoint file')
 	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 	parser.add_argument('--no_preprocess', default=False, action='store_true', help='Disable near-surface sample preprocessing')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample during preprocessing (Memory requirement increases for smaller sample_dist, must be >0)')
@@ -91,6 +92,18 @@ def load_train_set(data_dir, output_dir, no_preprocess, sample_dist, num_input_p
 	train_dataset = PointDataset(data_dir, train_rel_paths, num_input_points, num_loss_points)
 
 	return (val_rel_paths, train_dataset)
+
+
+# Load CSG-CRN network model
+def load_model(primitives_size, operations_size, device, model_params=''):
+	# Initialize model
+	model = CSG_CRN(primitives_size, operations_size).to(device)
+
+	# Load model parameters if available
+	if model_params != '':
+		model.load_state_dict(torch.load(model_params))
+
+	return model
 
 
 # Iteratively predict primitives and propagate average loss
@@ -151,6 +164,7 @@ def train(model, loss_func, optimizer, train_loader, sample_dist, num_prims, che
 	for epoch in range(max_epochs):
 		desc = f'Epoch {epoch+1}/{max_epochs}'
 		loss = train_one_epoch(model, loss_func, optimizer, train_loader, sample_dist, num_prims, device, desc)
+		print('Total Loss:', loss)
 
 		# Save model parameters
 		if (epoch+1) % checkpoint_freq == 0:
@@ -166,6 +180,11 @@ def main():
 	device = get_device(args.device)
 	torch.multiprocessing.set_start_method('spawn')
 
+	# Initialize model
+	model = load_model(PRIMITIVES_SIZE, OPERATIONS_SIZE, device, args.model_params)
+	loss_func = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(device)
+	optimizer = torch.optim.Adam(model.parameters())
+
 	# Load training set
 	(output_dir, checkpoint_dir) = create_out_dir(args)
 	(val_rel_paths, train_set) = load_train_set(args.data_dir, output_dir, args.no_preprocess, args.sample_dist, args.num_input_points, args.num_loss_points, DATA_SPLIT)
@@ -173,10 +192,6 @@ def main():
 
 	# Train model
 	print('')
-	model = CSG_CRN(PRIMITIVES_SIZE, OPERATIONS_SIZE).to(device)
-	loss_func = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(device)
-	torch.autograd.set_detect_anomaly(True)
-	optimizer = torch.optim.Adam(model.parameters())
 	train(model, loss_func, optimizer, train_loader, args.sample_dist, args.num_prims, checkpoint_dir, args.checkpoint_freq, device, args.max_epochs)
 
 
