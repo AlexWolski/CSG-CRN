@@ -71,7 +71,7 @@ def get_device(device):
 
 
 # Prepare data files and load training dataset
-def load_train_set(args, data_split):
+def load_data_sets(args, data_split):
 	# Load sample files
 	file_rel_paths = get_data_files(args.data_dir)
 	print('Found %i data files' % len(file_rel_paths))
@@ -87,10 +87,10 @@ def load_train_set(args, data_split):
 	save_list(os.path.join(args.output_dir, 'val.txt'), val_rel_paths)
 	save_list(os.path.join(args.output_dir, 'test.txt'), test_rel_paths)
 
-	print('Iniitalizing dataset...')
 	train_dataset = PointDataset(args.data_dir, train_rel_paths, args.num_input_points, args.num_loss_points)
+	val_dataset = PointDataset(args.data_dir, val_rel_paths, args.num_input_points, args.num_loss_points)
 
-	return (val_rel_paths, train_dataset)
+	return (val_dataset, train_dataset)
 
 
 # Load CSG-CRN network model
@@ -105,65 +105,89 @@ def load_model(primitives_size, operations_size, args):
 	return model
 
 
+# Run a forwards pass of the network model
+def model_forward(model, loss_func, target_input_samples, target_all_samples, args):
+	# Load data
+	target_all_points = target_all_samples[..., :3]
+	target_all_distances = target_all_samples[..., 3]
+	(batch_size, num_input_points, _) = target_input_samples.size()
+
+	# Initialize SDF CSG model
+	csg_model = CSGModel(args.device)
+
+	# Send all data to training device
+	target_all_points = target_all_points.to(args.device)
+	target_all_distances = target_all_distances.to(args.device)
+	target_input_samples = target_input_samples.to(args.device)
+
+	# Sample initial reconstruction for loss function
+	initial_loss_distances = csg_model.sample_csg(target_all_points)
+
+	# Iteratively generate a set of primitives to build a CSG model
+	for prim in range(args.num_prims):
+		# Randomly sample initial reconstruction surface to generate input
+		(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(batch_size, num_input_points, args.sample_dist)
+		initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
+		# Predict next primitive
+		outputs = model(target_input_samples, initial_input_samples)
+		# Add primitive to CSG model
+		csg_model.add_command(*outputs)
+
+	# Sample generated CSG model
+	refined_loss_distances = csg_model.sample_csg(target_all_points)
+
+	# Get primitive shape and boolean operation propability distributions
+	shapes_weights = torch.cat([x['shape weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
+	operation_weights = torch.cat([x['operation weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
+
+	# Compute loss
+	loss = loss_func(target_all_distances, initial_loss_distances, refined_loss_distances, shapes_weights, operation_weights)
+
+	return loss
+
+
 # Iteratively predict primitives and propagate average loss
 def train_one_epoch(model, loss_func, optimizer, train_loader, args, desc=''):
-	total_loss = 0
+	total_train_loss = 0
 
 	for (target_input_samples, target_all_samples) in tqdm(train_loader, desc=desc):
-		# Load data
-		target_all_points = target_all_samples[..., :3]
-		target_all_distances = target_all_samples[..., 3]
-		(batch_size, num_input_points, _) = target_input_samples.size()
-
-		# Initialize SDF CSG model
-		csg_model = CSGModel(args.device)
-
-		# Send all data to training device
-		target_all_points = target_all_points.to(args.device)
-		target_all_distances = target_all_distances.to(args.device)
-		target_input_samples = target_input_samples.to(args.device)
-
-		# Sample initial reconstruction for loss function
-		initial_loss_distances = csg_model.sample_csg(target_all_points)
-
-		# Iteratively generate a set of primitives to build a CSG model
-		for prim in range(args.num_prims):
-			# Randomly sample initial reconstruction surface to generate input
-			(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(batch_size, num_input_points, args.sample_dist)
-			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
-			# Predict next primitive
-			outputs = model(target_input_samples, initial_input_samples)
-			# Add primitive to CSG model
-			csg_model.add_command(*outputs)
-
-		# Sample generated CSG model
-		refined_loss_distances = csg_model.sample_csg(target_all_points)
-
-		# Get primitive shape and boolean operation propability distributions
-		shapes_weights = torch.cat([x['shape weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
-		operation_weights = torch.cat([x['operation weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
-
-		# Compute loss
-		batch_loss = loss_func(target_all_distances, initial_loss_distances, refined_loss_distances, shapes_weights, operation_weights)
-		total_loss += batch_loss.item()
+		# Forward pass
+		batch_loss = model_forward(model, loss_func, target_input_samples, target_all_samples, args)
+		total_train_loss += batch_loss.item()
 
 		# Back propagate
 		optimizer.zero_grad()
 		batch_loss.backward()
 		optimizer.step()
 
-	total_loss /= train_loader.__len__()
-	return total_loss
+	total_train_loss /= train_loader.__len__()
+	return total_train_loss
+
+
+def validate(model, loss_func, val_loader, args):
+	total_val_loss = 0
+
+	with torch.no_grad():
+		for (target_input_samples, target_all_samples) in val_loader:
+			batch_loss = model_forward(model, loss_func, target_input_samples, target_all_samples, args)
+			total_val_loss += batch_loss.item()
+
+	total_val_loss /= val_loader.__len__()
+	return total_val_loss
 
 
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, train_loader, args):
+def train(model, loss_func, optimizer, train_loader, val_loader, args):
 	model.train(True)
 
 	for epoch in range(args.max_epochs):
 		desc = f'Epoch {epoch+1}/{args.max_epochs}'
-		loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, desc)
-		print('Total Loss:', loss)
+		train_loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, desc)
+
+		val_loss = validate(model, loss_func, val_loader, args)
+
+		print('Training Loss:  ', train_loss)
+		print('Validation Loss:', val_loss)
 
 		# Save model parameters
 		if (epoch+1) % args.checkpoint_freq == 0:
@@ -185,12 +209,13 @@ def main():
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
-	(args.val_rel_paths, args.train_set) = load_train_set(args, DATA_SPLIT)
-	train_loader = DataLoader(args.train_set, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
+	(val_dataset, train_dataset) = load_data_sets(args, DATA_SPLIT)
+	train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
+	val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
 
 	# Train model
 	print('')
-	train(model, loss_func, optimizer, train_loader, args)
+	train(model, loss_func, optimizer, train_loader, val_loader, args)
 
 
 if __name__ == '__main__':
