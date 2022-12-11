@@ -21,7 +21,7 @@ class PrimitiveLoss(nn.Module):
 
 
 # Test loss
-if __name__ == "__main__":
+def test():
 	batch_size = 2
 
 	sdf_samples = torch.tensor([0.4,0.6,0.8], dtype=float).repeat(batch_size,1)
