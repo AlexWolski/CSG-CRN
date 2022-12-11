@@ -50,7 +50,6 @@ def options():
 
 	# Training settings
 	parser.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
-	parser.add_argument('--num_workers', type=int, default=8, help='Number of processes spawned for data loader')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
 
 	args = parser.parse_args()
@@ -163,7 +162,7 @@ def train(model, loss_func, optimizer, train_loader, args):
 
 	for epoch in range(args.max_epochs):
 		desc = f'Epoch {epoch+1}/{args.max_epochs}'
-		loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, args.device, desc)
+		loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, desc)
 		print('Total Loss:', loss)
 
 		# Save model parameters
@@ -178,7 +177,6 @@ def main():
 
 	# Set training device
 	args.device = get_device(args.device)
-	torch.multiprocessing.set_start_method('spawn')
 
 	# Initialize model
 	model = load_model(PRIMITIVES_SIZE, OPERATIONS_SIZE, args)
@@ -188,7 +186,7 @@ def main():
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
 	(args.val_rel_paths, args.train_set) = load_train_set(args, DATA_SPLIT)
-	train_loader = DataLoader(args.train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
+	train_loader = DataLoader(args.train_set, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
 
 	# Train model
 	print('')
