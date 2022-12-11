@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from torch.utils.data import DataLoader
 from torch.distributions.uniform import Uniform
+from torch.optim import Adam, lr_scheduler
 
 from utilities.data_processing import *
 from utilities.datasets import PointDataset
@@ -25,6 +26,9 @@ OPERATIONS_SIZE = 2
 PRIMITIVE_WEIGHT = 0.01
 SHAPE_WEIGHT = 0.01
 OPERATION_WEIGHT = 0.01
+# Adaptive scheduling and early stopping
+SCHEDULE_PATIENCE = 5
+EARLY_STOP_PATIENCE = 10
 
 
 # Parse commandline arguments
@@ -177,14 +181,14 @@ def validate(model, loss_func, val_loader, args):
 
 
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, train_loader, val_loader, args):
+def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args):
 	model.train(True)
 
 	for epoch in range(args.max_epochs):
 		desc = f'Epoch {epoch+1}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, desc)
-
 		val_loss = validate(model, loss_func, val_loader, args)
+		scheduler.step(val_loss)
 
 		print('Training Loss:  ', train_loss)
 		print('Validation Loss:', val_loss)
@@ -205,7 +209,8 @@ def main():
 	# Initialize model
 	model = load_model(PRIMITIVES_SIZE, OPERATIONS_SIZE, args)
 	loss_func = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(args.device)
-	optimizer = torch.optim.Adam(model.parameters())
+	optimizer = Adam(model.parameters())
+	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=SCHEDULE_PATIENCE)
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
@@ -215,7 +220,7 @@ def main():
 
 	# Train model
 	print('')
-	train(model, loss_func, optimizer, train_loader, val_loader, args)
+	train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args)
 
 
 if __name__ == '__main__':
