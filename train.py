@@ -38,7 +38,7 @@ def options():
 	# Data settings
 	parser.add_argument('--data_dir', type=str, required=True, help='Dataset parent directory (data in subdirectories is included)')
 	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
-	parser.add_argument('--model_params', type=str, default='', help='Load model parameters from checkpoint file')
+	parser.add_argument('--model_params', type=str, default='', help='Load model parameters from checkpoint file (Make sure to use the same settings)')
 	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 	parser.add_argument('--no_preprocess', default=False, action='store_true', help='Disable near-surface sample preprocessing')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample during preprocessing (Memory requirement increases for smaller sample_dist, must be >0)')
@@ -48,11 +48,13 @@ def options():
 	parser.add_argument('--num_loss_points', type=int, default=20000, help='Number of points to use when computing the loss')
 	parser.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
 	parser.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
+	parser.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
+	parser.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
+
+	# Training settings
 	parser.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
 	parser.add_argument('--batch_size', type=int, default=32, help='Mini-batch size (Must be larger than 1)')
 	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
-
-	# Training settings
 	parser.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
 
@@ -99,8 +101,11 @@ def load_data_sets(args, data_split):
 
 # Load CSG-CRN network model
 def load_model(primitives_size, operations_size, args):
+	predict_blending = not args.no_blending
+	predict_roundness = not args.no_roundness
+
 	# Initialize model
-	model = CSG_CRN(primitives_size, operations_size).to(args.device)
+	model = CSG_CRN(primitives_size, operations_size, predict_blending, predict_roundness).to(args.device)
 
 	# Load model parameters if available
 	if args.model_params != '':

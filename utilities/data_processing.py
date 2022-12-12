@@ -7,9 +7,17 @@ import numpy as np
 def create_out_dir(args):
 	# Use parent directory name as dataset name
 	dataset_name = os.path.basename(os.path.normpath(args.data_dir))
+
 	# Create output folder name from settings
 	output_folder = dataset_name + '_' + str(args.sample_dist) + 'dist_' + str(args.num_input_points) +\
 	'input_points_' + str(args.num_loss_points) + 'loss_points_' + str(args.num_prims) + 'prims'
+
+	if args.no_blending:
+		output_folder += '_no_blending'
+
+	if args.no_roundness:
+		output_folder += '_no_roundness'
+
 	output_dir = os.path.join(args.output_dir, output_folder)
 
 	# Create output directory

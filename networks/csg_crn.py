@@ -6,14 +6,19 @@ from networks.regressor_decoder import PrimitiveRegressor
 
 
 class CSG_CRN(nn.Module):
-	def __init__(self, num_primitives, num_operations):
+	def __init__(self, num_primitives, num_operations,
+		predict_blending=True, predict_roundness=True):
+
 		super(CSG_CRN, self).__init__()
 		self.num_primitives = num_primitives
 		self.num_operations = num_operations
+		self.predict_blending = predict_blending
+		self.predict_roundness = predict_roundness
 
 		self.point_encoder = PointNetfeat(global_feat=True)
 		self.siamese_encoder = SiameseEncoder(self.point_encoder, 1024)
-		self.regressor_decoder = PrimitiveRegressor(num_primitives, num_operations)
+		self.regressor_decoder = PrimitiveRegressor(self.num_primitives, self.num_operations,
+			predict_blending=self.predict_blending, predict_roundness=self.predict_roundness)
 
 
 	def forward(self, target_input, initial_recon_input):

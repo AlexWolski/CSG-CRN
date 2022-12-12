@@ -150,7 +150,9 @@ class PrimitiveRegressor(nn.Module):
 		num_primitives, num_operations,
 		translation_scale=0.6,
 		min_scale=0.005, max_scale=0.5,
-		min_blending=0.001, max_blending=1):
+		predict_blending=True,
+		min_blending=0.001, max_blending=1,
+		predict_roundness=True):
 
 		super(PrimitiveRegressor, self).__init__()
 
@@ -159,18 +161,26 @@ class PrimitiveRegressor(nn.Module):
 		self.translation = TranslationRegressor(translation_scale)
 		self.rotation = RotationRegressor()
 		self.scale = ScaleRegressor(min_scale, max_scale)
-		self.blending = BlendingRegressor(min_blending, max_blending)
-		self.roundness = RoundnessRegressor()
+		self.blending = BlendingRegressor(min_blending, max_blending) if (predict_blending) else (None)
+		self.roundness = RoundnessRegressor() if (predict_roundness) else (None)
 	
 	def forward(self, X):
+		shape = self.shape.forward(X)
+		operation = self.operation.forward(X)
+		translation = self.translation.forward(X)
+		rotation = self.rotation.forward(X)
+		scale = self.scale.forward(X)
+		blending = self.blending.forward(X) if (self.blending is not None) else (None)
+		roundness = self.roundness.forward(X) if (self.roundness is not None) else (None)
+
 		return(
-			self.shape.forward(X),
-			self.operation.forward(X),
-			self.translation.forward(X),
-			self.rotation.forward(X),
-			self.scale.forward(X),
-			self.blending.forward(X),
-			self.roundness.forward(X),
+			shape,
+			operation,
+			translation,
+			rotation,
+			scale,
+			blending,
+			roundness
 		)
 
 

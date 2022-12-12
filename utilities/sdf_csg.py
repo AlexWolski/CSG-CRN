@@ -17,17 +17,23 @@ SURFACE_SAMPLE_RATIO = 5
 
 
 def smooth_min(a, b, blending):
-	absolute_diff = (a-b).abs()
-	h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
-	smooth_factor = h * h * blending * 0.25
+	if blending is None:
+		smooth_factor = 0
+	else:
+		absolute_diff = (a-b).abs()
+		h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
+		smooth_factor = h * h * blending * 0.25
 
 	return torch.min(a, b) - smooth_factor
 
 
 def smooth_max(a, b, blending):
-	absolute_diff = (a-b).abs()
-	h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
-	smooth_factor = h * h * blending * 0.25
+	if blending is None:
+		smooth_factor = 0
+	else:
+		absolute_diff = (a-b).abs()
+		h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
+		smooth_factor = h * h * blending * 0.25
 
 	return torch.max(a, b) + smooth_factor
 
@@ -61,7 +67,7 @@ class CSGModel():
 
 
 	# Add a primitive to the CSG model
-	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending, roundness):
+	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending=None, roundness=None):
 		self.csg_commands.append({
 			'shape weights': shape_weights,
 			'operation weights': operation_weights,
@@ -76,10 +82,15 @@ class CSGModel():
 	def sample_sdf(query_points, command):
 		distances = 0
 
+		if command['roundness'] is None:
+			roundness = 0
+		else:
+			roundness = command['roundness']
+
 		# Compute weighted averge distance
 		for shape in range(command['shape weights'].size(dim=-1)):
 			weight = command['shape weights'][:,shape].unsqueeze(-1)
-			distances += weight * CSGModel.sdf_functions[shape](query_points, *command['transforms'], command['roundness'])
+			distances += weight * CSGModel.sdf_functions[shape](query_points, *command['transforms'], roundness)
 
 		return distances
 
