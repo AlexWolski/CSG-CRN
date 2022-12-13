@@ -19,9 +19,6 @@ from losses.loss import Loss
 
 # Percentage of data to use for training, validation, and testing
 DATA_SPLIT = [0.85, 0.05, 0.1]
-# Number of options for selecting primitives or operations
-PRIMITIVES_SIZE = 3
-OPERATIONS_SIZE = 2
 # Weights for regressor functions
 PRIMITIVE_WEIGHT = 0.01
 SHAPE_WEIGHT = 0.01
@@ -224,7 +221,7 @@ def main():
 	args.device = get_device(args.device)
 
 	# Initialize model
-	model = load_model(PRIMITIVES_SIZE, OPERATIONS_SIZE, args)
+	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args)
 	loss_func = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(args.device)
 	optimizer = Adam(model.parameters())
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=SCHEDULE_PATIENCE)

@@ -8,11 +8,6 @@ from networks.csg_crn import CSG_CRN
 from utilities.sdf_csg import CSGModel
 
 
-# Number of options for selecting primitives or operations
-PRIMITIVES_SIZE = 3
-OPERATIONS_SIZE = 2
-
-
 # Parse commandline arguments
 def options():
 	parser = argparse.ArgumentParser()
@@ -112,7 +107,7 @@ def main():
 	predict_blending = not args.no_blending
 	predict_roundness = not args.no_roundness
 
-	model = CSG_CRN(PRIMITIVES_SIZE, OPERATIONS_SIZE, predict_blending, predict_roundness).to(args.device)
+	model = CSG_CRN(CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness).to(args.device)
 	model.load_state_dict(torch.load(args.model_params))
 	model.eval()
 

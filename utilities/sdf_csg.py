@@ -60,6 +60,10 @@ class CSGModel():
 		subtract_sdf
 	]
 
+	num_shapes = len(sdf_functions)
+	num_operations = len(operation_functions)
+
+
 	def __init__(self, device=torch.device('cpu')):
 		# List of all primitives and operations to build CSG model
 		self.csg_commands = []
