@@ -115,6 +115,36 @@ def view_sdf(csg_model, num_points, point_size, args):
 	viewer = pyrender.Viewer(scene, use_raymond_lighting=True, point_size=point_size)
 
 
+def pretty_print_tensor(message, tensor):
+	print(message, end='')
+
+	raw_list = tensor.tolist()[0]
+	pretty_list = [f'{item:.5f}' for item in raw_list]
+
+	print(pretty_list)
+
+
+def print_csg_commands(csg_model):
+	count = 1
+
+	for command in csg_model.csg_commands:
+		print(f'Command {count}:')
+		pretty_print_tensor('Shape:\t\t', command['shape weights'])
+		pretty_print_tensor('Operation:\t', command['operation weights'])
+		pretty_print_tensor('Translation:\t', command['transforms'][0])
+		pretty_print_tensor('Rotation:\t', command['transforms'][1])
+		pretty_print_tensor('Scale:\t\t', command['transforms'][2])
+
+		if command['blending'] is not None:
+			pretty_print_tensor('Blending:\t', command['blending'])
+
+		if command['roundness'] is not None:
+			pretty_print_tensor('Roundness:\t', command['roundness'])
+
+		print('')
+		count += 1
+
+
 
 def main():
 	args = options()
@@ -126,7 +156,8 @@ def main():
 	input_data = load_input_points(args)
 	csg_model = run_model(model, input_data, args)
 
-	print(csg_model.csg_commands)
+	# Pretty print csg commands
+	print_csg_commands(csg_model)
 
 	# View reconstruction
 	view_sdf(csg_model, 50000, 2, args)
