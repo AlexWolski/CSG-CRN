@@ -54,6 +54,7 @@ def options():
 	# Training settings
 	parser.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
 	parser.add_argument('--batch_size', type=int, default=32, help='Mini-batch size (Must be larger than 1)')
+	parser.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	parser.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
@@ -87,16 +88,26 @@ def load_data_sets(args, data_split):
 		print('Selecting near-surface points...')
 		args.data_dir = uniform_to_surface_data(args, file_rel_paths)
 
-	# Split dataset and save to file
+	# Split dataset
 	(train_rel_paths, val_rel_paths, test_rel_paths) = torch.utils.data.random_split(file_rel_paths, data_split)
+	print(f'Training set:\t{len(train_rel_paths.indices)} samples')
+	print(f'Validation set:\t{len(val_rel_paths.indices)} samples')
+	print(f'Testing set:\t{len(test_rel_paths.indices)} samples')
+
+	# Save dataset lists
 	save_list(os.path.join(args.output_dir, 'train.txt'), train_rel_paths)
 	save_list(os.path.join(args.output_dir, 'val.txt'), val_rel_paths)
 	save_list(os.path.join(args.output_dir, 'test.txt'), test_rel_paths)
 
+	if not args.keep_last_batch:
+		for dataset in [('Train', train_rel_paths), ('Validation', val_rel_paths), ('Test', test_rel_paths)]:
+			if len(dataset[1].indices) < args.batch_size:
+				raise Exception(f'{dataset[0]} dataset ({len(dataset[1].indices)}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option')
+
 	train_dataset = PointDataset(args.data_dir, train_rel_paths, args.num_input_points, args.num_loss_points)
 	val_dataset = PointDataset(args.data_dir, val_rel_paths, args.num_input_points, args.num_loss_points)
 
-	return (val_dataset, train_dataset)
+	return (train_dataset, val_dataset)
 
 
 # Load CSG-CRN network model
@@ -219,9 +230,9 @@ def main():
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
-	(val_dataset, train_dataset) = load_data_sets(args, DATA_SPLIT)
-	train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
-	val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
+	(train_dataset, val_dataset) = load_data_sets(args, DATA_SPLIT)
+	train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
+	val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
 
 	# Train model
 	print('')
