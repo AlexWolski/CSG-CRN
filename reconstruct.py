@@ -14,9 +14,10 @@ def options():
 
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file')
 	parser.add_argument('--input_samples', type=str, required=True, help='File containing sample points and SDF values of input shape')
-	parser.add_argument('--num_input_points', type=int, required=True, help='Number of points in the inputs (Memory requirement scales with num_input_points)')
-	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
-	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample')
+	parser.add_argument('--num_input_points', type=int, required=True, help='Number of points in the inputs (Use same value as during training)')
+	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate before computing loss')
+	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample the reconstruction (Use same value as during training)')
+	parser.add_argument('--sample_uniform', default=False, action='store_true', help='View generated reconstruciton with uniform samples instead of near-surface samples')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
 
 	args = parser.parse_args()
@@ -94,8 +95,12 @@ def run_model(model, input_data, args):
 	return csg_model
 
 
-def view_sdf(csg_model, num_points, point_size, sample_dist):
-	(points, sdf) = csg_model.sample_csg_surface(1, num_points, sample_dist)
+def view_sdf(csg_model, num_points, point_size, args):
+	if args.sample_uniform:
+		(points, sdf) = csg_model.sample_csg_uniform(1, num_points)
+	else:
+		(points, sdf) = csg_model.sample_csg_surface(1, num_points, args.sample_dist)
+
 	points = points[0].to(torch.device('cpu'))
 	sdf = sdf[0].to(torch.device('cpu'))
 
@@ -124,7 +129,7 @@ def main():
 	print(csg_model.csg_commands)
 
 	# View reconstruction
-	view_sdf(csg_model, 50000, 2, 0.1)
+	view_sdf(csg_model, 50000, 2, args)
 
 
 if __name__ == '__main__':
