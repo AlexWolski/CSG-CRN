@@ -24,7 +24,8 @@ def create_out_dir(args):
 	if not os.path.exists(output_dir):
 		os.makedirs(output_dir)
 	elif len(os.listdir(output_dir)) != 0 and not args.overwrite:
-		raise Exception('The output folder "%s" is already populated' % output_dir)
+		err_msg = f'The output folder "{output_dir}" is already populated'
+		raise Exception(err_msg)
 
 	# Create checkpoint folder
 	checkpoint_dir = os.path.join(output_dir, 'checkpoints')
@@ -40,7 +41,8 @@ def get_data_files(data_dir):
 	file_rel_paths = [os.path.relpath(file_path, data_dir) for file_path in file_paths]
 
 	if len(file_rel_paths) == 0:
-		raise Exception('No .npy data files found in directory "%s"' % data_dir)
+		err_msg = f'No .npy data files found in directory "{data_dir}"'
+		raise Exception(err_msg)
 
 	return file_rel_paths
 

@@ -102,7 +102,8 @@ def load_data_sets(args, data_split):
 	if not args.keep_last_batch:
 		for dataset in [('Train', train_rel_paths), ('Validation', val_rel_paths), ('Test', test_rel_paths)]:
 			if len(dataset[1].indices) < args.batch_size:
-				raise Exception(f'{dataset[0]} dataset ({len(dataset[1].indices)}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option')
+				err_msg = f'{dataset[0]} dataset ({len(dataset[1].indices)}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
+				raise Exception(err_msg)
 
 	train_dataset = PointDataset(args.data_dir, train_rel_paths, args.num_input_points, args.num_loss_points)
 	val_dataset = PointDataset(args.data_dir, val_rel_paths, args.num_input_points, args.num_loss_points)
