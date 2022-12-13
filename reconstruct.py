@@ -16,8 +16,6 @@ def options():
 	parser.add_argument('--input_samples', type=str, required=True, help='File containing sample points and SDF values of input shape')
 	parser.add_argument('--num_input_points', type=int, required=True, help='Number of points in the inputs (Memory requirement scales with num_input_points)')
 	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
-	parser.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
-	parser.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
 
@@ -39,6 +37,23 @@ def get_device(device):
 	return device
 
 
+def load_model(args):
+	# Load model parameters
+	state_dict = torch.load(args.model_params)
+
+	# Check for weights corresponding to blending and roundness regressors
+	predict_blending = 'regressor_decoder.blending.fc1.weight' in state_dict
+	predict_roundness = 'regressor_decoder.roundness.fc1.weight' in state_dict
+
+	# Initialize model
+	model = CSG_CRN(CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness).to(args.device)
+	model.load_state_dict(state_dict)
+	model.eval()
+
+	return model
+
+
+# Randomly sample input points
 def load_input_points(args):
 	# Load all points from file
 	points = np.load(args.input_samples)
@@ -100,21 +115,10 @@ def main():
 	args = options()
 	print('')
 
-	# Set training device
-	args.device = get_device(args.device)
-
-	# Initialize model
-	predict_blending = not args.no_blending
-	predict_roundness = not args.no_roundness
-
-	model = CSG_CRN(CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness).to(args.device)
-	model.load_state_dict(torch.load(args.model_params))
-	model.eval()
-
-	# Load data
-	input_data = load_input_points(args)
-
 	# Run model
+	args.device = get_device(args.device)
+	model = load_model(args)
+	input_data = load_input_points(args)
 	csg_model = run_model(model, input_data, args)
 
 	print(csg_model.csg_commands)
