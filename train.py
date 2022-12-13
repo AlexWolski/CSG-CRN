@@ -13,7 +13,7 @@ from utilities.data_processing import *
 from utilities.datasets import PointDataset
 
 from networks.csg_crn import CSG_CRN
-from utilities.sdf_csg import CSGModel
+from utilities.csg_model import CSGModel
 from losses.loss import Loss
 
 

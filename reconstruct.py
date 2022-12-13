@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 from networks.csg_crn import CSG_CRN
-from utilities.sdf_csg import CSGModel
+from utilities.csg_model import CSGModel
 
 
 # Parse commandline arguments
