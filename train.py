@@ -23,9 +23,6 @@ DATA_SPLIT = [0.85, 0.05, 0.1]
 PRIMITIVE_WEIGHT = 0.01
 SHAPE_WEIGHT = 0.01
 OPERATION_WEIGHT = 0.01
-# Adaptive scheduling and early stopping
-SCHEDULE_PATIENCE = 5
-EARLY_STOP_PATIENCE = 10
 
 
 # Parse commandline arguments
@@ -53,6 +50,8 @@ def options():
 	parser.add_argument('--batch_size', type=int, default=32, help='Mini-batch size (Must be larger than 1)')
 	parser.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
+	parser.add_argument('--lr_patience', type=int, default=5, help='Number of training epochs without improvement before the learning rate is adjusted')
+	parser.add_argument('--early_stop_patience', type=int, default=10, help='Number of training epochs without improvement before training terminates')
 	parser.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
 
@@ -204,7 +203,12 @@ def validate(model, loss_func, val_loader, args):
 def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args):
 	model.train(True)
 
+	early_stop_counter = 0
+	min_val_loss = float('inf')
+
+	# Train until model stops improving or a maximum number of epochs is reached
 	for epoch in range(args.max_epochs):
+		# Train model
 		desc = f'Epoch {epoch+1}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, desc)
 		val_loss = validate(model, loss_func, val_loader, args)
@@ -212,11 +216,31 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 
 		print('Training Loss:  ', train_loss)
 		print('Validation Loss:', val_loss)
+		print('Learning Rate:  ', optimizer.param_groups[0]['lr'])
 
-		# Save model parameters
+		# Check for early stopping
+		if val_loss < min_val_loss:
+			min_val_loss = val_loss
+			early_stop_counter = 0
+		else:
+			early_stop_counter += 1
+			
+		if early_stop_counter > args.early_stop_patience:
+			print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
+			break
+
+		# Save checkpoint parameters
 		if (epoch+1) % args.checkpoint_freq == 0:
-			checkpoint_path = os.path.join(args.checkpoint_dir, f'Epoch_{epoch+1}.pt')
+			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch+1}.pt')
 			torch.save(model.state_dict(), checkpoint_path)
+			print(f'Checkpoint saved to:')
+			print(checkpoint_path)
+
+	# Save final trained model
+	trained_model_path = os.path.join(args.output_dir, 'trained_model_params.pt')
+	torch.save(model.state_dict(), trained_model_path)
+	print('\nTraining complete! Model parameters saved to:')
+	print(trained_model_path)
 
 
 def main():
@@ -230,7 +254,7 @@ def main():
 	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args)
 	loss_func = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(args.device)
 	optimizer = Adam(model.parameters())
-	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=SCHEDULE_PATIENCE)
+	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.lr_patience)
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
