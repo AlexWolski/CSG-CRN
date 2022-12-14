@@ -96,11 +96,17 @@ def load_data_sets(args, data_split):
 	save_list(os.path.join(args.output_dir, 'val.txt'), val_rel_paths)
 	save_list(os.path.join(args.output_dir, 'test.txt'), test_rel_paths)
 
-	if not args.keep_last_batch:
-		for dataset in [('Train', train_rel_paths), ('Validation', val_rel_paths), ('Test', test_rel_paths)]:
-			if len(dataset[1].indices) < args.batch_size:
-				err_msg = f'{dataset[0]} dataset ({len(dataset[1].indices)}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
-				raise Exception(err_msg)
+	# Ensure each dataset has enough samples
+	for dataset in [('Train', train_rel_paths), ('Validation', val_rel_paths), ('Test', test_rel_paths)]:
+		# Check if any dataset is empty
+		if len(dataset[1].indices) == 0:
+			err_msg = f'{dataset[0]} dataset is empty! Add more data samples'
+			raise Exception(err_msg)
+
+		# Check if batch size is larger than dataset size
+		if (not args.keep_last_batch) and (len(dataset[1].indices) < args.batch_size):
+			err_msg = f'{dataset[0]} dataset ({len(dataset[1].indices)}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
+			raise Exception(err_msg)
 
 	train_dataset = PointDataset(args.data_dir, train_rel_paths, args.num_input_points, args.num_loss_points)
 	val_dataset = PointDataset(args.data_dir, val_rel_paths, args.num_input_points, args.num_loss_points)
