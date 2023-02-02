@@ -114,12 +114,12 @@ def load_data_sets(args, data_split):
 
 
 # Load CSG-CRN network model
-def load_model(primitives_size, operations_size, args):
+def load_model(num_shapes, num_operations, args):
 	predict_blending = not args.no_blending
 	predict_roundness = not args.no_roundness
 
 	# Initialize model
-	model = CSG_CRN(primitives_size, operations_size, predict_blending, predict_roundness).to(args.device)
+	model = CSG_CRN(num_shapes, num_operations, predict_blending, predict_roundness).to(args.device)
 
 	# Load model parameters if available
 	if args.model_params != '':

@@ -10,12 +10,12 @@ LEAKY_RELU_NEGATIVE_SLOPE = 0.2
 
 # Predict probability distribution for output shape primitive
 class ShapeRegressor(nn.Module):
-	def __init__(self, num_primitives):
+	def __init__(self, num_shapes):
 		super(ShapeRegressor, self).__init__()
-		self.num_primitives = num_primitives
+		self.num_shapes = num_shapes
 
 		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, num_primitives)
+		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, num_shapes)
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = nn.Softmax(dim=-1)
 
@@ -147,7 +147,7 @@ class RoundnessRegressor(nn.Module):
 # Pridict all primitive parameters 
 class PrimitiveRegressor(nn.Module):
 	def __init__(self,
-		num_primitives, num_operations,
+		num_shapes, num_operations,
 		translation_scale=0.6,
 		min_scale=0.005, max_scale=0.5,
 		predict_blending=True,
@@ -156,7 +156,7 @@ class PrimitiveRegressor(nn.Module):
 
 		super(PrimitiveRegressor, self).__init__()
 
-		self.shape = ShapeRegressor(num_primitives)
+		self.shape = ShapeRegressor(num_shapes)
 		self.operation = OperationRegressor(num_operations)
 		self.translation = TranslationRegressor(translation_scale)
 		self.rotation = RotationRegressor()
