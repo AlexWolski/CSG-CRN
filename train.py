@@ -38,7 +38,7 @@ def options():
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample during preprocessing (Memory requirement increases for smaller sample_dist, must be >0)')
 
 	# Model settings
-	parser.add_argument('--num_input_points', type=int, default=1024, help='Number of points in the inputs (Memory requirement scales with num_input_points)')
+	parser.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
 	parser.add_argument('--num_loss_points', type=int, default=20000, help='Number of points to use when computing the loss')
 	parser.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
 	parser.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')

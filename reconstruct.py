@@ -13,8 +13,8 @@ def options():
 	parser = argparse.ArgumentParser()
 
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file')
-	parser.add_argument('--input_samples', type=str, required=True, help='File containing sample points and SDF values of input shape')
-	parser.add_argument('--num_input_points', type=int, required=True, help='Number of points in the inputs (Use same value as during training)')
+	parser.add_argument('--input_file', type=str, required=True, help='File containing sample points and SDF values of input shape')
+	parser.add_argument('--num_input_points', type=int, required=True, help='Number of points to use from each input sample (Use same value as during training)')
 	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate before computing loss')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample the reconstruction (Use same value as during training)')
 	parser.add_argument('--sample_uniform', default=False, action='store_true', help='View generated reconstruciton with uniform samples instead of near-surface samples')
@@ -57,7 +57,7 @@ def load_model(args):
 # Randomly sample input points
 def load_input_points(args):
 	# Load all points from file
-	points = np.load(args.input_samples)
+	points = np.load(args.input_file)
 
 	# Randomly select needed number of input surface points
 	replace = (points.shape[0] < args.num_input_points)
