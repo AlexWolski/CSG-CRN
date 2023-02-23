@@ -20,9 +20,9 @@ from losses.loss import Loss
 # Percentage of data to use for training, validation, and testing
 DATA_SPLIT = [0.85, 0.05, 0.1]
 # Weights for regressor functions
-PRIMITIVE_WEIGHT = 0.01
-SHAPE_WEIGHT = 0.01
-OPERATION_WEIGHT = 0.01
+PRIM_LOSS_WEIGHT = 0.01
+SHAPE_LOSS_WEIGHT = 0.01
+OP_LOSS_WEIGHT = 0.01
 
 
 # Parse commandline arguments
@@ -252,7 +252,7 @@ def main():
 
 	# Initialize model
 	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args)
-	loss_func = Loss(args.clamp_dist, PRIMITIVE_WEIGHT, SHAPE_WEIGHT, OPERATION_WEIGHT).to(args.device)
+	loss_func = Loss(args.clamp_dist, PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(args.device)
 	optimizer = Adam(model.parameters())
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.lr_patience)
 
