@@ -6,7 +6,7 @@ from losses.reconstruction_loss import ReconstructionLoss
 
 
 class Loss(nn.Module):
-	def __init__(self, clamp_dist, prim_loss_weight, shape_loss_weight, op_loss_weight):
+	def __init__(self, clamp_dist, prim_loss_weight=0, shape_loss_weight=0, op_loss_weight=0):
 		super(Loss, self).__init__()
 
 		self.clamp_dist = clamp_dist
@@ -22,7 +22,7 @@ class Loss(nn.Module):
 		self.entropy_loss_2 = EntropyLoss()
 
 
-	def forward(self, target_sdf, initial_sdf, refined_sdf, shape_probs, operation_probs):
+	def forward(self, target_sdf, initial_sdf, refined_sdf, shape_probs=None, operation_probs=None):
 		# Compute change is loss after refinement
 		initial_recon_loss = self.recon_loss_1(target_sdf, initial_sdf)
 		refined_recon_loss = self.recon_loss_2(target_sdf, refined_sdf)
@@ -30,8 +30,16 @@ class Loss(nn.Module):
 
 		# Compute weighted regularizer losses
 		primitive_loss = self.prim_loss_weight * self.primitive_loss(refined_sdf)
-		shape_reg_loss = self.shape_loss_weight * self.entropy_loss_1(shape_probs)
-		operation_reg_loss = self.op_loss_weight * self.entropy_loss_2(operation_probs)
+
+		if shape_probs is not None:
+			shape_reg_loss = self.shape_loss_weight * self.entropy_loss_1(shape_probs)
+		else:
+			shape_reg_loss = 0
+
+		if operation_probs is not None:
+			operation_reg_loss = self.op_loss_weight * self.entropy_loss_2(operation_probs)
+		else:
+			operation_reg_loss = 0
 		
 		# Combine losses
 		total_loss = delta_loss + primitive_loss + shape_reg_loss + operation_reg_loss
