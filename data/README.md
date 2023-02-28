@@ -12,31 +12,12 @@ Each of the *N* rows contain a 3D coordiate and an SDF value.
 | Sample N  |            |            |            |            |
 
 
-### Process a 3D Mesh
-The steps to prepare a 3D mesh are:
-1. Scale the raw 3D mesh to fit a unit sphere.
-2. Generate a uniform point cloud in the unit sphere. 100,000 points or more is recommended.
-3. Compute the distance from each point to the surface of the mesh.
+### Create Custom Dataset
 
-This processing can be done with the help of the **[mesh-to-sdf](https://pypi.org/project/mesh-to-sdf/)** python package.<br>
+The **[prepare_sdf_dataset.py](https://github.com/AlexWolski/CSG-CRN/blob/master/prepare_sdf_dataset.py)** utility can be used to convert mesh files to SDF samples. This process relies on the **[mesh-to-sdf](https://pypi.org/project/mesh-to-sdf/)** python package and can quite slow.<br>
 <br>
-**Example Code:**
-```python
-import numpy
-import trimesh
-import mesh_to_sdf
-from mesh_to_sdf.utils import sample_uniform_points_in_unit_sphere
-from mesh_to_sdf.utils import scale_to_unit_sphere
-
-mesh = trimesh.load('chair.obj')
-mesh = scale_to_unit_sphere(mesh)
-
-points = sample_uniform_points_in_unit_sphere(100000)
-sdf = mesh_to_sdf.mesh_to_sdf(mesh, points)
-combined = numpy.concatenate((points, numpy.expand_dims(sdf, axis=1)), 1)
-
-numpy.save('chair_sample.npy', combined)
-```
+**Example Usage:**<br>
+`python prepare_sdf_dataset.py [mesh_files_directory] [output_directory] [number_of_samples]`
 
 
 ### Process the ShapeNet Dataset
