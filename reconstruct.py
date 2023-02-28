@@ -57,7 +57,7 @@ def load_model(args):
 # Randomly sample input points
 def load_input_points(args):
 	# Load all points from file
-	points = np.load(args.input_file)
+	points = np.load(args.input_file).astype(np.float32)
 
 	# Randomly select needed number of input surface points
 	replace = (points.shape[0] < args.num_input_points)

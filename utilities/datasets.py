@@ -18,7 +18,7 @@ class PointDataset(Dataset):
 		# Load all points from file
 		file_rel_path = self.file_rel_paths[idx]
 		points_path = os.path.join(self.data_dir, file_rel_path)
-		points = np.load(points_path)
+		points = np.load(points_path).astype(np.float32)
 
 		# Randomly select needed number of input surface points
 		replace = (points.shape[0] < self.num_input_points)
