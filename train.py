@@ -34,10 +34,10 @@ def options():
 	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
 	parser.add_argument('--model_params', type=str, default='', help='Load model parameters from checkpoint file (Make sure to use the same settings)')
 	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
-	parser.add_argument('--no_preprocess', default=False, action='store_true', help='Disable near-surface sample preprocessing')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample during preprocessing (Memory requirement increases for smaller sample_dist, must be >0)')
 
 	# Model settings
+	parser.add_argument('--sample_method', default='uniform', choices=['uniform', 'near-surface'], nargs=1, help='Compute SDF samples uniformly or near object surfaces. Selecting near-surface enables pre-processing')
 	parser.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
 	parser.add_argument('--num_loss_points', type=int, default=20000, help='Number of points to use when computing the loss')
 	parser.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
@@ -80,7 +80,7 @@ def load_data_sets(args, data_split):
 	print('Found %i data files' % len(file_rel_paths))
 
 	# Create near-surface sample files
-	if not args.no_preprocess:
+	if args.sample_method[0] == 'near-surface':
 		print('Selecting near-surface points...')
 		args.data_dir = uniform_to_surface_data(args, file_rel_paths)
 
@@ -126,7 +126,6 @@ def load_model(num_shapes, num_operations, args):
 		model.load_state_dict(torch.load(args.model_params))
 
 	return model
-
 
 # Run a forwards pass of the network model
 def model_forward(model, loss_func, target_input_samples, target_all_samples, args):
