@@ -45,7 +45,7 @@ def options():
 	parser.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 
 	# Training settings
-	parser.add_argument('--sample_method', default='uniform', choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
+	parser.add_argument('--sample_method', default=['uniform'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (Smaller sample_dist increases memory requirement, must be >0)')
 	parser.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
 	parser.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
@@ -153,7 +153,11 @@ def model_forward(model, loss_func, target_input_samples, target_all_samples, ar
 	# Iteratively generate a set of primitives to build a CSG model
 	for prim in range(args.num_prims):
 		# Randomly sample initial reconstruction surface to generate input
-		(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(batch_size, num_input_points, args.sample_dist)
+		if args.sample_method[0] == 'uniform':
+			(initial_input_points, initial_input_distances) = csg_model.sample_csg_uniform(batch_size, num_input_points)
+		else:
+			(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(batch_size, num_input_points, args.sample_dist)
+
 		initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
 		# Predict next primitive
 		outputs = model(target_input_samples, initial_input_samples)

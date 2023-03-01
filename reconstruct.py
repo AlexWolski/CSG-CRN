@@ -16,6 +16,7 @@ def options():
 	parser.add_argument('--input_file', type=str, required=True, help='File containing sample points and SDF values of input shape')
 	parser.add_argument('--num_input_points', type=int, required=True, help='Number of points to use from each input sample (Use same value as during training)')
 	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate before computing loss')
+	parser.add_argument('--sample_method', default=['uniform'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces (Use same value as during training)')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample the reconstruction (Use same value as during training)')
 	parser.add_argument('--view_sampling', default='near-surface', choices=['uniform', 'near-surface'], nargs=1, help='Visualize uniform SDF samples or samples near recosntruction surface')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
@@ -56,9 +57,14 @@ def load_model(args):
 
 
 # Randomly sample input points
-def load_input_points(args):
+def load_input_samples(args):
 	# Load all points from file
 	points = np.load(args.input_file).astype(np.float32)
+
+	# Select near-surface points if needed
+	if args.sample_method[0] == 'near-surface':
+		surface_sample_rows = np.where(abs(points[:,3]) <= args.sample_dist)
+		points = points[surface_sample_rows]
 
 	# Randomly select needed number of input surface points
 	replace = (points.shape[0] < args.num_input_points)
@@ -77,7 +83,7 @@ def load_input_points(args):
 	return select_input_points
 
 
-def run_model(model, input_data, args):
+def run_model(model, input_samples, args):
 	with torch.no_grad():
 		# Initialize SDF CSG model
 		csg_model = CSGModel(args.device)
@@ -85,11 +91,15 @@ def run_model(model, input_data, args):
 		# Iteratively generate a set of primitives to build a CSG model
 		for prim in range(args.num_prims):
 			# Randomly sample initial reconstruction surface to generate input
-			(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(1, args.num_input_points, args.sample_dist)
+			if args.sample_method[0] == 'uniform':
+				(initial_input_points, initial_input_distances) = csg_model.sample_csg_uniform(1, args.num_input_points)
+			else:
+				(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(1, args.num_input_points, args.sample_dist)
+
 			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
 
 			# Predict next primitive
-			outputs = model(input_data, initial_input_samples)
+			outputs = model(input_samples, initial_input_samples)
 			# Add primitive to CSG model
 			csg_model.add_command(*outputs)
 
@@ -154,8 +164,8 @@ def main():
 	# Run model
 	args.device = get_device(args.device)
 	model = load_model(args)
-	input_data = load_input_points(args)
-	csg_model = run_model(model, input_data, args)
+	input_samples = load_input_samples(args)
+	csg_model = run_model(model, input_samples, args)
 
 	# Pretty print csg commands
 	print_csg_commands(csg_model)
