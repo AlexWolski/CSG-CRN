@@ -17,7 +17,7 @@ def options():
 	parser.add_argument('--num_input_points', type=int, required=True, help='Number of points to use from each input sample (Use same value as during training)')
 	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate before computing loss')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample the reconstruction (Use same value as during training)')
-	parser.add_argument('--sample_uniform', default=False, action='store_true', help='View generated reconstruciton with uniform samples instead of near-surface samples')
+	parser.add_argument('--view_sampling', default='near-surface', choices=['uniform', 'near-surface'], nargs=1, help='Visualize uniform SDF samples or samples near recosntruction surface')
 	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
 
 	args = parser.parse_args()
@@ -97,7 +97,7 @@ def run_model(model, input_data, args):
 
 
 def view_sdf(csg_model, num_points, point_size, args):
-	if args.sample_uniform:
+	if args.view_sampling[0] == 'uniform':
 		(points, sdf) = csg_model.sample_csg_uniform(1, num_points)
 	else:
 		(points, sdf) = csg_model.sample_csg_surface(1, num_points, args.sample_dist)

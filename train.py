@@ -34,7 +34,6 @@ def options():
 	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
 	parser.add_argument('--model_params', type=str, default='', help='Load model parameters from checkpoint file (Make sure to use the same settings)')
 	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
-	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample during preprocessing (Memory requirement increases for smaller sample_dist, must be >0)')
 
 	# Model settings
 	parser.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
@@ -43,12 +42,13 @@ def options():
 	parser.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
 	parser.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	parser.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
+	parser.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 
 	# Training settings
-	parser.add_argument('--sample_method', default='uniform', choices=['uniform', 'near-surface'], nargs=1, help='Compute SDF samples uniformly or near object surfaces. Selecting near-surface enables pre-processing')
+	parser.add_argument('--sample_method', default='uniform', choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
+	parser.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (Smaller sample_dist increases memory requirement, must be >0)')
 	parser.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
 	parser.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
-	parser.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 	parser.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	parser.add_argument('--lr_patience', type=int, default=5, help='Number of training epochs without improvement before the learning rate is adjusted')
