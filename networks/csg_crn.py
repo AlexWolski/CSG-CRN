@@ -7,7 +7,7 @@ from networks.regressor_decoder import PrimitiveRegressor
 
 class CSG_CRN(nn.Module):
 	def __init__(self, num_shapes, num_operations,
-		predict_blending=True, predict_roundness=True):
+		predict_blending=True, predict_roundness=True, no_batch_norm=False):
 
 		super(CSG_CRN, self).__init__()
 		self.num_shapes = num_shapes
@@ -15,8 +15,8 @@ class CSG_CRN(nn.Module):
 		self.predict_blending = predict_blending
 		self.predict_roundness = predict_roundness
 
-		self.point_encoder = PointNetfeat(global_feat=True)
-		self.siamese_encoder = SiameseEncoder(self.point_encoder, 1024)
+		self.point_encoder = PointNetfeat(global_feat=True, no_batch_norm=no_batch_norm)
+		self.siamese_encoder = SiameseEncoder(self.point_encoder, 1024, no_batch_norm)
 		self.regressor_decoder = PrimitiveRegressor(self.num_shapes, self.num_operations,
 			predict_blending=self.predict_blending, predict_roundness=self.predict_roundness)
 

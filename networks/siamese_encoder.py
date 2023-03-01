@@ -4,7 +4,7 @@ import torch.nn as nn
 
 # Encode two inputs with a weight-sharing siamese encoder and learn combined feature vector
 class SiameseEncoder(nn.Module):
-	def __init__(self, encoder, encoder_feature_size):
+	def __init__(self, encoder, encoder_feature_size, no_batch_norm=False):
 		super(SiameseEncoder, self).__init__()
 		self.encoder = encoder
 		self.encoder_feature_size = encoder_feature_size
@@ -15,10 +15,18 @@ class SiameseEncoder(nn.Module):
 		self.fc2 = nn.Linear(1024, 512)
 		self.fc3 = nn.Linear(512, 512)
 		self.fc4 = nn.Linear(512, 256)
-		self.bn1 = nn.BatchNorm1d(1024)
-		self.bn2 = nn.BatchNorm1d(512)
-		self.bn3 = nn.BatchNorm1d(512)
-		self.bn4 = nn.BatchNorm1d(256)
+
+		if no_batch_norm:
+			self.bn1 = nn.Identity()
+			self.bn2 = nn.Identity()
+			self.bn3 = nn.Identity()
+			self.bn4 = nn.Identity()
+		else:
+			self.bn1 = nn.BatchNorm1d(1024)
+			self.bn2 = nn.BatchNorm1d(512)
+			self.bn3 = nn.BatchNorm1d(512)
+			self.bn4 = nn.BatchNorm1d(256)
+
 		self.relu = nn.ReLU()
 
 

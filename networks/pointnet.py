@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 
 class STN4d(nn.Module):
-    def __init__(self):
+    def __init__(self, no_batch_norm=False):
         super(STN4d, self).__init__()
         self.conv1 = torch.nn.Conv1d(4, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
@@ -19,11 +19,18 @@ class STN4d(nn.Module):
         self.fc3 = nn.Linear(256, 16)
         self.relu = nn.ReLU()
 
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1024)
-        self.bn4 = nn.BatchNorm1d(512)
-        self.bn5 = nn.BatchNorm1d(256)
+        if no_batch_norm:
+            self.bn1 = nn.Identity()
+            self.bn2 = nn.Identity()
+            self.bn3 = nn.Identity()
+            self.bn4 = nn.Identity()
+            self.bn5 = nn.Identity()
+        else:
+            self.bn1 = nn.BatchNorm1d(64)
+            self.bn2 = nn.BatchNorm1d(128)
+            self.bn3 = nn.BatchNorm1d(1024)
+            self.bn4 = nn.BatchNorm1d(512)
+            self.bn5 = nn.BatchNorm1d(256)
 
 
     def forward(self, x):
@@ -47,7 +54,7 @@ class STN4d(nn.Module):
 
 
 class STNkd(nn.Module):
-    def __init__(self, k=64):
+    def __init__(self, k=64, no_batch_norm=False):
         super(STNkd, self).__init__()
         self.conv1 = torch.nn.Conv1d(k, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
@@ -57,11 +64,18 @@ class STNkd(nn.Module):
         self.fc3 = nn.Linear(256, k*k)
         self.relu = nn.ReLU()
 
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1024)
-        self.bn4 = nn.BatchNorm1d(512)
-        self.bn5 = nn.BatchNorm1d(256)
+        if no_batch_norm:
+            self.bn1 = nn.Identity()
+            self.bn2 = nn.Identity()
+            self.bn3 = nn.Identity()
+            self.bn4 = nn.Identity()
+            self.bn5 = nn.Identity()
+        else:
+            self.bn1 = nn.BatchNorm1d(64)
+            self.bn2 = nn.BatchNorm1d(128)
+            self.bn3 = nn.BatchNorm1d(1024)
+            self.bn4 = nn.BatchNorm1d(512)
+            self.bn5 = nn.BatchNorm1d(256)
 
         self.k = k
 
@@ -85,23 +99,30 @@ class STNkd(nn.Module):
         return x
 
 class PointNetfeat(nn.Module):
-    def __init__(self, global_feat = True, input_transform = False, feature_transform = False):
+    def __init__(self, global_feat=True, input_transform=False, feature_transform=False, no_batch_norm=False):
         super(PointNetfeat, self).__init__()
         self.conv1 = torch.nn.Conv1d(4, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1024)
+
+        if no_batch_norm:
+            self.bn1 = nn.Identity()
+            self.bn2 = nn.Identity()
+            self.bn3 = nn.Identity()
+        else:
+            self.bn1 = nn.BatchNorm1d(64)
+            self.bn2 = nn.BatchNorm1d(128)
+            self.bn3 = nn.BatchNorm1d(1024)
+
         self.global_feat = global_feat
         self.input_transform = input_transform
         self.feature_transform = feature_transform
 
         if self.input_transform:
-            self.stn = STN4d()
+            self.stn = STN4d(no_batch_norm=no_batch_norm)
 
         if self.feature_transform:
-            self.fstn = STNkd(k=64)
+            self.fstn = STNkd(k=64, no_batch_norm=no_batch_norm)
 
     def forward(self, x):
         n_pts = x.size()[2]
@@ -137,7 +158,7 @@ class PointNetfeat(nn.Module):
             return torch.cat([x, pointfeat], 1), trans_input, trans_feat
 
 class PointNetCls(nn.Module):
-    def __init__(self, k=2, input_transform=False, feature_transform=False):
+    def __init__(self, k=2, input_transform=False, feature_transform=False, no_batch_norm=False):
         super(PointNetCls, self).__init__()
         self.input_transform = input_transform
         self.feature_transform = feature_transform
@@ -146,8 +167,15 @@ class PointNetCls(nn.Module):
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k)
         self.dropout = nn.Dropout(p=0.3)
-        self.bn1 = nn.BatchNorm1d(512)
-        self.bn2 = nn.BatchNorm1d(256)
+
+        if no_batch_norm:
+            self.bn1 = nn.Identity()
+            self.bn2 = nn.Identity()
+        else:
+            self.bn1 = nn.BatchNorm1d(512)
+            self.bn2 = nn.BatchNorm1d(256)
+
+
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -159,7 +187,7 @@ class PointNetCls(nn.Module):
 
 
 class PointNetDenseCls(nn.Module):
-    def __init__(self, k = 2, input_transform=False, feature_transform=False):
+    def __init__(self, k = 2, input_transform=False, feature_transform=False, no_batch_norm=False):
         super(PointNetDenseCls, self).__init__()
         self.k = k
         self.input_transform = input_transform
@@ -169,9 +197,15 @@ class PointNetDenseCls(nn.Module):
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
         self.conv4 = torch.nn.Conv1d(128, self.k, 1)
-        self.bn1 = nn.BatchNorm1d(512)
-        self.bn2 = nn.BatchNorm1d(256)
-        self.bn3 = nn.BatchNorm1d(128)
+
+        if no_batch_norm:
+            self.bn1 = nn.Identity()
+            self.bn2 = nn.Identity()
+            self.bn3 = nn.Identity()
+        else:
+            self.bn1 = nn.BatchNorm1d(512)
+            self.bn2 = nn.BatchNorm1d(256)
+            self.bn3 = nn.BatchNorm1d(128)
 
     def forward(self, x):
         batchsize = x.size()[0]

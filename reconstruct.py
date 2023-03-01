@@ -45,9 +45,10 @@ def load_model(args):
 	# Check for weights corresponding to blending and roundness regressors
 	predict_blending = 'regressor_decoder.blending.fc1.weight' in state_dict
 	predict_roundness = 'regressor_decoder.roundness.fc1.weight' in state_dict
+	no_batch_norm = not 'point_encoder.bn1.weight' in state_dict
 
 	# Initialize model
-	model = CSG_CRN(CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness).to(args.device)
+	model = CSG_CRN(CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness, no_batch_norm).to(args.device)
 	model.load_state_dict(state_dict)
 	model.eval()
 
