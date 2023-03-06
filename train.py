@@ -32,7 +32,7 @@ def options():
 	# Data settings
 	parser.add_argument('--data_dir', type=str, required=True, help='Dataset parent directory (data in subdirectories is included)')
 	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
-	parser.add_argument('--model_params', type=str, default='', help='Load model parameters from checkpoint file (Make sure to use the same settings)')
+	parser.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Overwrites all other model settings')
 	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
 	# Model settings
@@ -127,8 +127,8 @@ def load_model(num_shapes, num_operations, args):
 	model = CSG_CRN(num_shapes, num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(args.device)
 
 	# Load model parameters if available
-	if args.model_params != '':
-		model.load_state_dict(torch.load(args.model_params))
+	if args.model_path != '':
+		model.load_state_dict(torch.load(args.model_path))
 
 	return model
 
@@ -245,7 +245,7 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 			print(checkpoint_path)
 
 	# Save final trained model
-	trained_model_path = os.path.join(args.output_dir, 'trained_model_params.pt')
+	trained_model_path = os.path.join(args.output_dir, 'trained_model.pt')
 	torch.save(model.state_dict(), trained_model_path)
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)
