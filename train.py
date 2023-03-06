@@ -240,13 +240,13 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 		# Save checkpoint parameters
 		if (epoch+1) % args.checkpoint_freq == 0:
 			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch+1}.pt')
-			torch.save(model.state_dict(), checkpoint_path)
+			torch.save({'model': model.state_dict(), 'args': args}, checkpoint_path)
 			print(f'Checkpoint saved to:')
 			print(checkpoint_path)
 
 	# Save final trained model
 	trained_model_path = os.path.join(args.output_dir, 'trained_model.pt')
-	torch.save(model.state_dict(), trained_model_path)
+	torch.save({'model': model.state_dict(), 'args': args}, trained_model_path)
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)
 
