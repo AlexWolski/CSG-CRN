@@ -1,5 +1,6 @@
 import os
 import argparse
+import yaml
 import torch
 import signal
 import sys
@@ -43,21 +44,32 @@ def options():
 	parser.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	parser.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	parser.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
-
-	# Training settings
 	parser.add_argument('--sample_method', default=['uniform'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
 	parser.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (Smaller sample_dist increases memory requirement, must be >0)')
 	parser.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
+
+	# Training settings
 	parser.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
 	parser.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	parser.add_argument('--lr_patience', type=int, default=5, help='Number of training epochs without improvement before the learning rate is adjusted')
 	parser.add_argument('--early_stop_patience', type=int, default=10, help='Number of training epochs without improvement before training terminates')
 	parser.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
-	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
+	parser.add_argument('--device', type=str, default='', help='Select preferred training device')
 
 	args = parser.parse_args()
 
+
+	# Expand paths
+	args.data_dir = os.path.abspath(args.data_dir)
+
+	if args.output_dir != '':
+		args.output_dir = os.path.abspath(args.output_dir)
+
+	if args.model_path != '':
+		args.model_path = os.path.abspath(args.model_path)
+
+	# Disable batch norm for SDG
 	if args.batch_size == 1:
 		args.no_batch_norm = True
 
@@ -84,24 +96,11 @@ def load_data_sets(args, data_split):
 	file_rel_paths = get_data_files(args.data_dir)
 	print('Found %i data files' % len(file_rel_paths))
 
-	# Create near-surface sample files
-	if args.sample_method[0] == 'near-surface':
-		print('Selecting near-surface points...')
-		args.data_dir = uniform_to_surface_data(args, file_rel_paths)
-
 	# Split dataset
-	(train_rel_paths, val_rel_paths, test_rel_paths) = torch.utils.data.random_split(file_rel_paths, data_split)
-	print(f'Training set:\t{len(train_rel_paths.indices)} samples')
-	print(f'Validation set:\t{len(val_rel_paths.indices)} samples')
-	print(f'Testing set:\t{len(test_rel_paths.indices)} samples')
-
-	# Save dataset lists
-	save_list(os.path.join(args.output_dir, 'train.txt'), train_rel_paths)
-	save_list(os.path.join(args.output_dir, 'val.txt'), val_rel_paths)
-	save_list(os.path.join(args.output_dir, 'test.txt'), test_rel_paths)
+	(train_split, val_split, test_split) = torch.utils.data.random_split(file_rel_paths, data_split)
 
 	# Ensure each dataset has enough samples
-	for dataset in [('Train', train_rel_paths), ('Validation', val_rel_paths), ('Test', test_rel_paths)]:
+	for dataset in [('Train', train_split), ('Validation', val_split), ('Test', test_split)]:
 		# Check if any dataset is empty
 		if len(dataset[1].indices) == 0:
 			err_msg = f'{dataset[0]} dataset is empty! Add more data samples'
@@ -112,19 +111,33 @@ def load_data_sets(args, data_split):
 			err_msg = f'{dataset[0]} dataset ({len(dataset[1].indices)}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
 			raise Exception(err_msg)
 
-	train_dataset = PointDataset(args.data_dir, train_rel_paths, args.num_input_points, args.num_loss_points)
-	val_dataset = PointDataset(args.data_dir, val_rel_paths, args.num_input_points, args.num_loss_points)
+	# Create near-surface sample files
+	if args.sample_method[0] == 'near-surface':
+		print('Selecting near-surface points...')
+		args.data_dir = uniform_to_surface_data(args, file_rel_paths)
+
+	# Save dataset lists
+	save_list(os.path.join(args.output_dir, 'train.txt'), train_split)
+	save_list(os.path.join(args.output_dir, 'val.txt'), val_split)
+	save_list(os.path.join(args.output_dir, 'test.txt'), test_split)
+
+	print(f'Training set:\t{len(train_split.indices)} samples')
+	print(f'Validation set:\t{len(val_split.indices)} samples')
+	print(f'Testing set:\t{len(test_split.indices)} samples')
+
+	train_dataset = PointDataset(args.data_dir, train_split, args.num_input_points, args.num_loss_points)
+	val_dataset = PointDataset(args.data_dir, val_split, args.num_input_points, args.num_loss_points)
 
 	return (train_dataset, val_dataset)
 
 
 # Load CSG-CRN network model
-def load_model(num_shapes, num_operations, args):
+def load_model(num_shapes, num_operations, args, device):
 	predict_blending = not args.no_blending
 	predict_roundness = not args.no_roundness
 
 	# Initialize model
-	model = CSG_CRN(num_shapes, num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(args.device)
+	model = CSG_CRN(num_shapes, num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(device)
 
 	# Load model parameters if available
 	if args.model_path != '':
@@ -133,19 +146,19 @@ def load_model(num_shapes, num_operations, args):
 	return model
 
 # Run a forwards pass of the network model
-def model_forward(model, loss_func, target_input_samples, target_all_samples, args):
+def model_forward(model, loss_func, target_input_samples, target_all_samples, args, device):
 	# Load data
 	target_all_points = target_all_samples[..., :3]
 	target_all_distances = target_all_samples[..., 3]
 	(batch_size, num_input_points, _) = target_input_samples.size()
 
 	# Initialize SDF CSG model
-	csg_model = CSGModel(args.device)
+	csg_model = CSGModel(device)
 
 	# Send all data to training device
-	target_all_points = target_all_points.to(args.device)
-	target_all_distances = target_all_distances.to(args.device)
-	target_input_samples = target_input_samples.to(args.device)
+	target_all_points = target_all_points.to(device)
+	target_all_distances = target_all_distances.to(device)
+	target_input_samples = target_input_samples.to(device)
 
 	# Sample initial reconstruction for loss function
 	initial_loss_distances = csg_model.sample_csg(target_all_points)
@@ -178,12 +191,12 @@ def model_forward(model, loss_func, target_input_samples, target_all_samples, ar
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss_func, optimizer, train_loader, args, desc=''):
+def train_one_epoch(model, loss_func, optimizer, train_loader, args, device, desc=''):
 	total_train_loss = 0
 
 	for (target_input_samples, target_all_samples) in tqdm(train_loader, desc=desc):
 		# Forward pass
-		batch_loss = model_forward(model, loss_func, target_input_samples, target_all_samples, args)
+		batch_loss = model_forward(model, loss_func, target_input_samples, target_all_samples, args, device)
 		total_train_loss += batch_loss.item()
 
 		# Back propagate
@@ -195,12 +208,12 @@ def train_one_epoch(model, loss_func, optimizer, train_loader, args, desc=''):
 	return total_train_loss
 
 
-def validate(model, loss_func, val_loader, args):
+def validate(model, loss_func, val_loader, args, device):
 	total_val_loss = 0
 
 	with torch.no_grad():
 		for (target_input_samples, target_all_samples) in val_loader:
-			batch_loss = model_forward(model, loss_func, target_input_samples, target_all_samples, args)
+			batch_loss = model_forward(model, loss_func, target_input_samples, target_all_samples, args, device)
 			total_val_loss += batch_loss.item()
 
 	total_val_loss /= val_loader.__len__()
@@ -208,7 +221,7 @@ def validate(model, loss_func, val_loader, args):
 
 
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args):
+def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args, device):
 	model.train(True)
 
 	early_stop_counter = 0
@@ -218,8 +231,8 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 	for epoch in range(args.max_epochs):
 		# Train model
 		desc = f'Epoch {epoch+1}/{args.max_epochs}'
-		train_loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, desc)
-		val_loss = validate(model, loss_func, val_loader, args)
+		train_loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, device, desc)
+		val_loss = validate(model, loss_func, val_loader, args, device)
 		scheduler.step(val_loss)
 
 		print('Training Loss:  ', train_loss)
@@ -256,11 +269,11 @@ def main():
 	print('')
 
 	# Set training device
-	args.device = get_device(args.device)
+	device = get_device(args.device)
 
 	# Initialize model
-	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args)
-	loss_func = Loss(args.clamp_dist, PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(args.device)
+	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args, device)
+	loss_func = Loss(args.clamp_dist, PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
 	optimizer = Adam(model.parameters())
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.lr_patience)
 
@@ -270,9 +283,15 @@ def main():
 	train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
 	val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
 
+	# Save settings to file
+	settings_path = os.path.join(args.output_dir, 'settings.yml')
+
+	with open(settings_path, 'w') as out_path:
+		yaml.dump(args.__dict__, out_path, sort_keys=False)
+
 	# Train model
 	print('')
-	train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args)
+	train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args, device)
 
 
 if __name__ == '__main__':
