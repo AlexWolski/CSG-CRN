@@ -41,7 +41,8 @@ def get_device(device):
 
 def load_model(args):
 	# Load model parameters
-	state_dict = torch.load(args.model_params)
+	save_data = torch.load(args.model_params)
+	state_dict = save_data['model']
 
 	# Check for weights corresponding to blending and roundness regressors
 	predict_blending = 'regressor_decoder.blending.fc1.weight' in state_dict
