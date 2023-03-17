@@ -14,12 +14,9 @@ def options():
 
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file')
 	parser.add_argument('--input_file', type=str, required=True, help='File containing sample points and SDF values of input shape')
-	parser.add_argument('--num_input_points', type=int, required=True, help='Number of points to use from each input sample (Use same value as during training)')
-	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate before computing loss')
-	parser.add_argument('--sample_method', default=['uniform'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces (Use same value as during training)')
-	parser.add_argument('--sample_dist', type=float, default=0.1, help='Distance from the surface to sample the reconstruction (Use same value as during training)')
+	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate')
 	parser.add_argument('--view_sampling', default='near-surface', choices=['uniform', 'near-surface'], nargs=1, help='Visualize uniform SDF samples or samples near recosntruction surface')
-	parser.add_argument('--device', type=str, default='', help='Select preffered training device')
+	parser.add_argument('--device', type=str, default='', help='Select preferred training device')
 
 	args = parser.parse_args()
 	return args
@@ -40,9 +37,15 @@ def get_device(device):
 
 
 def load_model(args):
-	# Load model parameters
+	# Load model parameters and arguments
 	save_data = torch.load(args.model_params)
 	state_dict = save_data['model']
+	saved_args = save_data['args']
+
+	# Load training args
+	args.num_input_points = saved_args.num_input_points
+	args.sample_method = saved_args.sample_method
+	args.sample_dist = saved_args.sample_dist
 
 	# Check for weights corresponding to blending and roundness regressors
 	predict_blending = 'regressor_decoder.blending.fc1.weight' in state_dict
