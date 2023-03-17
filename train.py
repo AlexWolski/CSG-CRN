@@ -28,46 +28,63 @@ OP_LOSS_WEIGHT = 0.01
 
 # Parse commandline arguments
 def options():
-	parser = argparse.ArgumentParser()
+	parser1 = argparse.ArgumentParser()
+	parser2 = argparse.ArgumentParser()
 
 	# Data settings
-	parser.add_argument('--data_dir', type=str, required=True, help='Dataset parent directory (data in subdirectories is included)')
-	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
-	parser.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Overwrites all other model settings')
-	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
+	parser1.add_argument('--data_dir', type=str, required=True, help='Dataset parent directory (data in subdirectories is included)')
+	parser1.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
+	parser1.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Overwrites all other model settings')
+	parser1.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
-	# Model settings
-	parser.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
-	parser.add_argument('--num_loss_points', type=int, default=20000, help='Number of points to use when computing the loss')
-	parser.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
-	parser.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
-	parser.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
-	parser.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
-	parser.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
-	parser.add_argument('--sample_method', default=['uniform'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
-	parser.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (Smaller sample_dist increases memory requirement, must be >0)')
-	parser.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
+	args, remaining_args = parser1.parse_known_args()
 
-	# Training settings
-	parser.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
-	parser.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
-	parser.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
-	parser.add_argument('--lr_patience', type=int, default=5, help='Number of training epochs without improvement before the learning rate is adjusted')
-	parser.add_argument('--early_stop_patience', type=int, default=10, help='Number of training epochs without improvement before training terminates')
-	parser.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
-	parser.add_argument('--device', type=str, default='', help='Select preferred training device')
+	# Load settings from saved model file
+	if args.model_path != '':
+		data_dir = args.data_dir
+		output_dir = args.output_dir
+		overwrite = args.overwrite
 
-	args = parser.parse_args()
+		save_data = torch.load(args.model_path)
+		args = save_data['args']
 
+		args.data_dir = data_dir
+		args.output_dir = output_dir
+		args.overwrite = overwrite
+
+	# Parse all arguments
+	else:
+		# Model settings
+		parser2.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
+		parser2.add_argument('--num_loss_points', type=int, default=20000, help='Number of points to use when computing the loss')
+		parser2.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
+		parser2.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
+		parser2.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
+		parser2.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
+		parser2.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
+		parser2.add_argument('--sample_method', default=['uniform'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
+		parser2.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (Smaller sample_dist increases memory requirement, must be >0)')
+		parser2.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
+
+		# Training settings
+		parser2.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
+		parser2.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
+		parser2.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
+		parser2.add_argument('--lr_patience', type=int, default=5, help='Number of training epochs without improvement before the learning rate is adjusted')
+		parser2.add_argument('--early_stop_patience', type=int, default=10, help='Number of training epochs without improvement before training terminates')
+		parser2.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
+		parser2.add_argument('--device', type=str, default='', help='Select preferred training device')
+
+		args = parser2.parse_args(args=remaining_args, namespace=args)
 
 	# Expand paths
 	args.data_dir = os.path.abspath(args.data_dir)
 
-	if args.output_dir != '':
-		args.output_dir = os.path.abspath(args.output_dir)
-
 	if args.model_path != '':
 		args.model_path = os.path.abspath(args.model_path)
+
+	if args.output_dir != '':
+		args.output_dir = os.path.abspath(args.output_dir)
 
 	# Disable batch norm for SDG
 	if args.batch_size == 1:
