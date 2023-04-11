@@ -6,6 +6,7 @@ import torch
 
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
+from losses.reconstruction_loss import ReconstructionLoss
 
 
 # Parse commandline arguments
@@ -119,8 +120,6 @@ def view_sdf(csg_model, num_points, point_size, args):
 	points = points[0].to(torch.device('cpu'))
 	sdf = sdf[0].to(torch.device('cpu'))
 
-	print(sdf)
-
 	colors = np.zeros(points.shape)
 	colors[sdf < 0, 2] = 1
 	colors[sdf > 0, 0] = 1
@@ -160,6 +159,16 @@ def print_csg_commands(csg_model):
 		count += 1
 
 
+def print_recon_loss(input_samples, csg_model):
+	input_points = input_samples[:,:,:3]
+	input_sdf = input_samples[:,:,3]
+
+	csg_sdf = csg_model.sample_csg(input_points)
+
+	recon_loss = ReconstructionLoss(1)
+	print('Reconstruction Loss:')
+	print(recon_loss.forward(input_sdf, csg_sdf))
+
 
 def main():
 	args = options()
@@ -173,6 +182,9 @@ def main():
 
 	# Pretty print csg commands
 	print_csg_commands(csg_model)
+
+	# Print reconstruction loss
+	print_recon_loss(input_samples, csg_model)
 
 	# View reconstruction
 	view_sdf(csg_model, 50000, 2, args)
