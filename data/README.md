@@ -14,7 +14,7 @@ Each of the *N* rows contain a 3D coordiate and an SDF value.
 
 ### Create Custom Dataset
 
-The **[prepare_sdf_dataset.py](https://github.com/AlexWolski/CSG-CRN/blob/master/prepare_sdf_dataset.py)** utility can be used to convert mesh files to SDF samples. This process relies on the **[mesh-to-sdf](https://pypi.org/project/mesh-to-sdf/)** python package and can quite slow.<br>
+The **[prepare_sdf_dataset.py](https://github.com/AlexWolski/CSG-CRN/blob/master/prepare_sdf_dataset.py)** utility can be used to convert mesh files to SDF samples. This process relies on the **[mesh-to-sdf](https://pypi.org/project/mesh-to-sdf/)** python package and can be quite slow.<br>
 <br>
 **Example Usage:**<br>
 `python prepare_sdf_dataset.py [mesh_files_directory] [output_directory] [number_of_samples]`
