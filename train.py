@@ -260,6 +260,10 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 		if val_loss < min_val_loss:
 			min_val_loss = val_loss
 			early_stop_counter = 0
+
+			# Save final trained model
+			trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
+			torch.save({'model': model.state_dict(), 'args': args}, trained_model_path)
 		else:
 			early_stop_counter += 1
 			
@@ -274,9 +278,6 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 			print(f'Checkpoint saved to:')
 			print(checkpoint_path)
 
-	# Save final trained model
-	trained_model_path = os.path.join(args.output_dir, 'trained_model.pt')
-	torch.save({'model': model.state_dict(), 'args': args}, trained_model_path)
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)
 
