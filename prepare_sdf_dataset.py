@@ -4,10 +4,45 @@ import argparse
 import numpy as np
 import trimesh
 import mesh_to_sdf
+from enum import Enum
 from mesh_to_sdf.utils import sample_uniform_points_in_unit_sphere
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from mesh_to_sdf import BadMeshException
 from tqdm import tqdm
+
+
+class RotationAxis(Enum):
+    xAxis = 'X'
+    yAxis = 'Y'
+    zAxis = 'Z'
+    random = 'RANDOM'
+    allAxes = 'ALL'
+
+    def __str__(self):
+        return self.value
+
+    # Make constructor case-insensitive
+    @classmethod
+    def _missing_(self, value):
+        return self(value.upper())
+
+
+class ScaleAxis(Enum):
+    xAxis = 'X'
+    yAxis = 'Y'
+    zAxis = 'Z'
+    xyPlane = 'XY'
+    yzPlane = 'YZ'
+    xzPlane = 'XZ'
+    random = 'RANDOM'
+
+    def __str__(self):
+        return self.value
+
+    # Make constructor case-insensitive
+    @classmethod
+    def _missing_(self, value):
+        return self(value.upper())
 
 
 # Parse commandline arguments
@@ -17,6 +52,15 @@ def options():
 	parser.add_argument('--data_dir', type=str, required=True, help='Parent directory containing input 3D data files (3mf, obj, off, glb, gltf, ply, stl, 3dxml)')
 	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory to store SDF samples')
 	parser.add_argument('--num_samples', type=int, default=200000, help='Number of SDF samples to compute')
+	parser.add_argument('--augment_data', default=False, action='store_true', help='Enable random rotation and scaling of object samples')
+	parser.add_argument('--augment_copies', type=int, default=1, help='Number of augmented copies of each object to create')
+	parser.add_argument('--keep_original', default=False, action='store_true', help='Include the non-augmented object in an augmented output')
+	parser.add_argument('--no_rotation', default=False, action='store_true', help='Disable rotations in data augmentation')
+	parser.add_argument('--mo_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
+	parser.add_argument('--rotate_axis', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
+	parser.add_argument('--scale_axis', type=ScaleAxis, choices=list(ScaleAxis), help='Axes to scale')
+	parser.add_argument('--min_scale', type=float, default=1.0, help='Lower bound on random scale value')
+	parser.add_argument('--max_scale', type=float, default=2.0, help='Upper bound on random scale value')
 	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
 	args = parser.parse_args()
@@ -39,6 +83,15 @@ def get_mesh_files(data_dir):
 	return mesh_file_paths
 
 
+# Create output directory
+def create_output_dir(output_dir):
+	if not os.path.exists(args.output_dir):
+		os.makedirs(args.output_dir)
+	elif len(os.listdir(args.output_dir)) != 0 and not args.overwrite:
+		err_msg = f'The output folder "{output_dir}" is already populated'
+		raise Exception(err_msg)
+
+
 # Compute SDF samples 
 def sample_sdf(mesh_file_path, num_samples):
 	mesh = trimesh.load(mesh_file_path)
@@ -52,22 +105,15 @@ def sample_sdf(mesh_file_path, num_samples):
 
 
 # Compute SDF samples for all 3D files in given directory
-def prepare_dataset(data_dir, output_dir, num_samples):
-	# Create output directory
-	if not os.path.exists(output_dir):
-		os.makedirs(output_dir)
-	elif len(os.listdir(output_dir)) != 0 and not args.overwrite:
-		err_msg = f'The output folder "{output_dir}" is already populated'
-		raise Exception(err_msg)
-
+def prepare_dataset(data_dir, output_dir, args):
 	# Convert all meshes
-	mesh_file_paths = get_mesh_files(data_dir)
+	mesh_file_paths = get_mesh_files(args.data_dir)
 	print(f'Processing {len(mesh_file_paths)} files...')
 
 	for mesh_file_path in tqdm(mesh_file_paths):
 		try:
 			# Compute SDF samples
-			sdf_samples = sample_sdf(mesh_file_path, num_samples)
+			sdf_samples = sample_sdf(mesh_file_path, args.num_samples)
 
 			# Get output file path
 			rel_path = os.path.relpath(mesh_file_path, data_dir)
@@ -87,4 +133,6 @@ def prepare_dataset(data_dir, output_dir, num_samples):
 
 if __name__ == '__main__':
 	args = options()
-	prepare_dataset(args.data_dir, args.output_dir, args.num_samples)
+
+	create_output_dir(args.output_dir)
+	prepare_dataset(args.data_dir, args.output_dir, args)
