@@ -86,7 +86,7 @@ def options():
 	if args.output_dir != '':
 		args.output_dir = os.path.abspath(args.output_dir)
 
-	# Disable batch norm for SDG
+	# Disable batch norm for SGD
 	if args.batch_size == 1:
 		args.no_batch_norm = True
 
