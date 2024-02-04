@@ -24,9 +24,10 @@ def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
 	# Transform query points to primitive space
 	transformed_query_points = transform_point_clouds(query_points, translations, rotations)
 
-	# Compute roundness value
+	# Adjust roundness value per dimension to keep the rounding effect uniform
 	(min_dims, _) = torch.min(dimensions, dim=-1, keepdim=True)
 	adjusted_roundness = roundness * min_dims
+	# Adjust the dimensions to compensate for the shrinking caused by rounding
 	adjusted_dimensions = dimensions - adjusted_roundness
 	adjusted_dimensions = adjusted_dimensions.unsqueeze(1)
 
