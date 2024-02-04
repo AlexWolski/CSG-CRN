@@ -24,7 +24,7 @@ def create_out_dir(args):
 	if not os.path.exists(output_dir):
 		os.makedirs(output_dir)
 	elif len(os.listdir(output_dir)) != 0 and not args.overwrite:
-		err_msg = f'The output folder "{output_dir}" is already populated'
+		err_msg = f'The output folder "{output_dir}" is already populated. Use another directory or the --overwrite option.'
 		raise Exception(err_msg)
 
 	# Create checkpoint folder
