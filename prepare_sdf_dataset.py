@@ -2,9 +2,12 @@ import os
 import glob
 import argparse
 import numpy as np
+import torch
 import trimesh
 import mesh_to_sdf
 from enum import Enum
+from utilities.point_transform import rotate_point_cloud
+from scipy.spatial.transform import Rotation
 from mesh_to_sdf.utils import sample_uniform_points_in_unit_sphere
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from mesh_to_sdf import BadMeshException
@@ -56,7 +59,7 @@ def options():
 	parser.add_argument('--augment_copies', type=int, default=1, help='Number of augmented copies of each object to create')
 	parser.add_argument('--keep_original', default=False, action='store_true', help='Include the non-augmented object in an augmented output')
 	parser.add_argument('--no_rotation', default=False, action='store_true', help='Disable rotations in data augmentation')
-	parser.add_argument('--mo_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
+	parser.add_argument('--no_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
 	parser.add_argument('--rotate_axis', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
 	parser.add_argument('--scale_axis', type=ScaleAxis, choices=list(ScaleAxis), help='Axes to scale')
 	parser.add_argument('--min_scale', type=float, default=1.0, help='Lower bound on random scale value')
@@ -88,51 +91,107 @@ def create_output_dir(output_dir):
 	if not os.path.exists(args.output_dir):
 		os.makedirs(args.output_dir)
 	elif len(os.listdir(args.output_dir)) != 0 and not args.overwrite:
-		err_msg = f'The output folder "{output_dir}" is already populated'
+		err_msg = f'The output folder "{output_dir}" is already populated. Use another directory or the --overwrite option.'
 		raise Exception(err_msg)
 
 
-# Compute SDF samples 
+# Compute SDF samples
 def sample_sdf(mesh_file_path, num_samples):
+	# Prepare mesh
 	mesh = trimesh.load(mesh_file_path)
 	mesh = scale_to_unit_sphere(mesh)
 
+	# Sample mesh surface
 	points = sample_uniform_points_in_unit_sphere(num_samples).astype(np.float32)
 	distance = mesh_to_sdf.mesh_to_sdf(mesh, points).astype(np.float32)
 	sdf_samples = np.concatenate((points, np.expand_dims(distance, axis=1)), 1)
 
+	# Convert to torch tensor
+	sdf_samples = torch.from_numpy(sdf_samples)
+
 	return sdf_samples
+
+
+# Rotate and scale SDF point clouds
+def augment_samples(sdf_samples, args):
+	augmented_samples_list = []
+
+	# Save original samples
+	if args.keep_original:
+		augmented_samples_list.append(sdf_samples)
+	
+	points = sdf_samples[:,:3]
+	distances = sdf_samples[:,3]
+	distances = distances.unsqueeze(0).transpose(0, 1)
+
+	# Augment and save samples
+	for i in range(args.augment_copies):
+		augmented_points = points
+
+		# Rotate
+		if not args.no_rotation:
+			random_rot = Rotation.random().as_quat().astype(np.float32)
+			random_rot = torch.from_numpy(random_rot)
+
+			augmented_points = rotate_point_cloud(augmented_points, random_rot)
+
+		# Scale
+		if not args.no_scale:
+			pass
+
+		# Save augmented samples
+		augmented_samples = torch.cat((augmented_points, distances), dim=1)
+		augmented_samples_list.append(augmented_samples)
+
+	return augmented_samples_list
 
 
 # Compute SDF samples for all 3D files in given directory
 def prepare_dataset(data_dir, output_dir, args):
 	# Convert all meshes
 	mesh_file_paths = get_mesh_files(args.data_dir)
+	create_output_dir(args.output_dir)
 	print(f'Processing {len(mesh_file_paths)} files...')
 
 	for mesh_file_path in tqdm(mesh_file_paths):
+		# Compute SDF samples
 		try:
-			# Compute SDF samples
 			sdf_samples = sample_sdf(mesh_file_path, args.num_samples)
-
-			# Get output file path
-			rel_path = os.path.relpath(mesh_file_path, data_dir)
-			output_path = os.path.join(output_dir, rel_path)
-
-			# Create any subdirectories if they don't exist
-			output_subdir = os.path.dirname(os.path.realpath(output_path))
-			os.makedirs(output_subdir, exist_ok=True)
-
-			# Save samples to .npy file
-			output_path = os.path.splitext(output_path)[0]
-			np.save(output_path, sdf_samples)
-
+		# Skip meshes that raise an error
 		except BadMeshException:
 			tqdm.write(f'Skipping Bad Mesh\n: {mesh_file_path}')
+			continue
+
+		# Augment samples
+		if args.augment_data:
+			augmented_samples = augment_samples(sdf_samples, args)
+		else:
+			augmented_samples = [sdf_samples]
+
+		# Save samples
+		i = 0
+
+		for augmented_sample in augmented_samples:
+			# Get path to input 3D model file
+			rel_path = os.path.relpath(mesh_file_path, data_dir)
+			model_path = os.path.join(output_dir, rel_path)
+
+			# Create any subdirectories if they don't exist
+			output_subdir = os.path.dirname(os.path.realpath(model_path))
+			os.makedirs(output_subdir, exist_ok=True)
+
+			# Adjsut file name for duplicate samples
+			model_path = os.path.splitext(model_path)[0]
+			output_path = model_path
+
+			if i > 0:
+				output_path = output_path + f' ({i})'
+
+			# Save samples to .npy file
+			np.save(output_path, augmented_sample.numpy())
+			i += 1
 
 
 if __name__ == '__main__':
 	args = options()
-
-	create_output_dir(args.output_dir)
 	prepare_dataset(args.data_dir, args.output_dir, args)
