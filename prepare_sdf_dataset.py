@@ -1,5 +1,6 @@
 import os
 import glob
+import random
 import argparse
 import numpy as np
 import torch
@@ -15,37 +16,49 @@ from tqdm import tqdm
 
 
 class RotationAxis(Enum):
-    xAxis = 'X'
-    yAxis = 'Y'
-    zAxis = 'Z'
-    random = 'RANDOM'
-    allAxes = 'ALL'
+	xAxis = 'X'
+	yAxis = 'Y'
+	zAxis = 'Z'
+	random = 'RANDOM'
+	allAxes = 'ALL'
 
-    def __str__(self):
-        return self.value
+	# Make constructor case-insensitive
+	@classmethod
+	def _missing_(self, value):
+		return self(value.upper())
 
-    # Make constructor case-insensitive
-    @classmethod
-    def _missing_(self, value):
-        return self(value.upper())
+	def __str__(self):
+		return self.value
+
+	# Randomly select of of the 3 concrete enum states X, Y, and Z
+	@classmethod
+	def random_value(self):
+		index = random.randrange(3)
+		return list(RotationAxis)[index]
 
 
 class ScaleAxis(Enum):
-    xAxis = 'X'
-    yAxis = 'Y'
-    zAxis = 'Z'
-    xyPlane = 'XY'
-    yzPlane = 'YZ'
-    xzPlane = 'XZ'
-    random = 'RANDOM'
+	xAxis = 'X'
+	yAxis = 'Y'
+	zAxis = 'Z'
+	xyPlane = 'XY'
+	yzPlane = 'YZ'
+	xzPlane = 'XZ'
+	random = 'RANDOM'
 
-    def __str__(self):
-        return self.value
+	# Make constructor case-insensitive
+	@classmethod
+	def _missing_(self, value):
+		return self(value.upper())
 
-    # Make constructor case-insensitive
-    @classmethod
-    def _missing_(self, value):
-        return self(value.upper())
+	def __str__(self):
+		return self.value
+
+	# Randomly select of of the 6 concrete enum states X, Y, Z, XY, YZ, and XZ
+	@classmethod
+	def random_value(self):
+		index = randrange(5)
+		return list(ScaleAxis)[index]
 
 
 # Parse commandline arguments
@@ -60,7 +73,7 @@ def options():
 	parser.add_argument('--keep_original', default=False, action='store_true', help='Include the non-augmented object in an augmented output')
 	parser.add_argument('--no_rotation', default=False, action='store_true', help='Disable rotations in data augmentation')
 	parser.add_argument('--no_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
-	parser.add_argument('--rotate_axis', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
+	parser.add_argument('--rotate_axis', default='ALL', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
 	parser.add_argument('--scale_axis', type=ScaleAxis, choices=list(ScaleAxis), help='Axes to scale')
 	parser.add_argument('--min_scale', type=float, default=1.0, help='Lower bound on random scale value')
 	parser.add_argument('--max_scale', type=float, default=2.0, help='Upper bound on random scale value')
@@ -112,6 +125,29 @@ def sample_sdf(mesh_file_path, num_samples):
 	return sdf_samples
 
 
+# Convert a SciPy Rotation object to a quaternion PyTorch tensor
+def rotation_to_quat_tensor(rotation):
+	return torch.from_numpy(rotation.as_quat().astype(np.float32))
+
+
+# Generate a random rotation quaternion
+def random_rotation(rotate_axis):
+	# Generate a quaternion with random rotations on all axes
+	if rotate_axis == RotationAxis('ALL'):
+		random_rot = rotation_to_quat_tensor(Rotation.random())
+		return random_rot
+
+	# Select an axis to rotate around
+	if rotate_axis == RotationAxis('RANDOM'):
+		rotate_axis = RotationAxis.random_value()
+
+	# Generate a random rotation
+	random_rot = Rotation.from_euler(rotate_axis.value, random.uniform(0,360), degrees=True)
+	random_rot = rotation_to_quat_tensor(random_rot)
+
+	return random_rot
+
+
 # Rotate and scale SDF point clouds
 def augment_samples(sdf_samples, args):
 	augmented_samples_list = []
@@ -130,9 +166,7 @@ def augment_samples(sdf_samples, args):
 
 		# Rotate
 		if not args.no_rotation:
-			random_rot = Rotation.random().as_quat().astype(np.float32)
-			random_rot = torch.from_numpy(random_rot)
-
+			random_rot = random_rotation(args.rotate_axis)
 			augmented_points = rotate_point_cloud(augmented_points, random_rot)
 
 		# Scale
