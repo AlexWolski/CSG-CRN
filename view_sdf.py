@@ -1,5 +1,6 @@
 from mesh_to_sdf import sample_sdf_near_surface
 
+import os
 import argparse
 import numpy as np
 import trimesh
@@ -18,6 +19,10 @@ def options():
 	return args
 
 
+def get_filename(args):
+	return os.path.basename(args.npy_file)
+
+
 def load_samples(args):
 	samples = np.load(args.npy_file).astype(np.float32)
 
@@ -34,14 +39,21 @@ def load_samples(args):
 	return (points, sdf)
 
 
-def display_points(points, sdf):
+def display_points(points, sdf, filename):
 	colors = np.zeros(points.shape)
 	colors[sdf < 0, 2] = 1
 	colors[sdf > 0, 0] = 1
 	cloud = pyrender.Mesh.from_points(points, colors=colors)
 	scene = pyrender.Scene()
 	scene.add(cloud)
-	viewer = pyrender.Viewer(scene, use_raymond_lighting=True, point_size=2, show_world_axis=True, viewport_size=(1000,1000))
+	viewer = pyrender.Viewer(
+		scene,
+		use_raymond_lighting=True,
+		point_size=2,
+		show_world_axis=True,
+		viewport_size=(1000,1000),
+		window_title=filename,
+		view_center=[0,0,0])
 
 
 def main():
@@ -49,7 +61,8 @@ def main():
 	print('')
 
 	(points, sdf) = load_samples(args)
-	display_points(points, sdf)
+	filename = get_filename(args)
+	display_points(points, sdf, filename)
 
 
 if __name__ == '__main__':
