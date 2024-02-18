@@ -41,7 +41,7 @@ def display_points(points, sdf):
 	cloud = pyrender.Mesh.from_points(points, colors=colors)
 	scene = pyrender.Scene()
 	scene.add(cloud)
-	viewer = pyrender.Viewer(scene, use_raymond_lighting=True, point_size=2)
+	viewer = pyrender.Viewer(scene, use_raymond_lighting=True, point_size=2, show_world_axis=True, viewport_size=(1000,1000))
 
 
 def main():
