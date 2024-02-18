@@ -30,7 +30,7 @@ class RotationAxis(Enum):
 	def __str__(self):
 		return self.value
 
-	# Randomly select of of the 3 concrete enum states X, Y, and Z
+	# Randomly select one of the 3 concrete enum states X, Y, and Z
 	@classmethod
 	def random_value(self):
 		index = random.randrange(3)
@@ -41,10 +41,8 @@ class ScaleAxis(Enum):
 	xAxis = 'X'
 	yAxis = 'Y'
 	zAxis = 'Z'
-	xyPlane = 'XY'
-	yzPlane = 'YZ'
-	xzPlane = 'XZ'
 	random = 'RANDOM'
+	allAxes = 'ALL'
 
 	# Make constructor case-insensitive
 	@classmethod
@@ -54,10 +52,10 @@ class ScaleAxis(Enum):
 	def __str__(self):
 		return self.value
 
-	# Randomly select of of the 6 concrete enum states X, Y, Z, XY, YZ, and XZ
+	# Randomly select one of the 3 concrete enum states X, Y, and Z
 	@classmethod
 	def random_value(self):
-		index = randrange(5)
+		index = random.randrange(3)
 		return list(ScaleAxis)[index]
 
 
@@ -74,8 +72,8 @@ def options():
 	parser.add_argument('--no_rotation', default=False, action='store_true', help='Disable rotations in data augmentation')
 	parser.add_argument('--no_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
 	parser.add_argument('--rotate_axis', default='ALL', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
-	parser.add_argument('--scale_axis', type=ScaleAxis, choices=list(ScaleAxis), help='Axes to scale')
-	parser.add_argument('--min_scale', type=float, default=1.0, help='Lower bound on random scale value')
+	parser.add_argument('--scale_axis', default='ALL', type=ScaleAxis, choices=list(ScaleAxis), help='Axes to scale')
+	parser.add_argument('--min_scale', type=float, default=0.5, help='Lower bound on random scale value')
 	parser.add_argument('--max_scale', type=float, default=2.0, help='Upper bound on random scale value')
 	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
@@ -131,7 +129,9 @@ def rotation_to_quat_tensor(rotation):
 
 
 # Generate a random rotation quaternion
-def random_rotation(rotate_axis):
+def random_rotation(args):
+	rotate_axis = args.rotate_axis
+
 	# Generate a quaternion with random rotations on all axes
 	if rotate_axis == RotationAxis('ALL'):
 		random_rot = rotation_to_quat_tensor(Rotation.random())
@@ -142,10 +142,31 @@ def random_rotation(rotate_axis):
 		rotate_axis = RotationAxis.random_value()
 
 	# Generate a random rotation
-	random_rot = Rotation.from_euler(rotate_axis.value, random.uniform(0,360), degrees=True)
+	random_rot = Rotation.from_euler(rotate_axis.value, random.uniform(0, 360), degrees=True)
 	random_rot = rotation_to_quat_tensor(random_rot)
 
 	return random_rot
+
+
+# Generate a random scale vector
+def random_scale(args):
+	scale_axis = args.scale_axis
+
+	# Generate a random value for each axis
+	if scale_axis == ScaleAxis('ALL'):
+		scale_vec = [random.uniform(args.min_scale, args.max_scale) for i in range(3)]
+		return scale_vec
+
+	# Select an axis to scale
+	if scale_axis == ScaleAxis('RANDOM'):
+		scale_axis = ScaleAxis.random_value()
+
+	# Generate a random scalar for each axis
+	axes = [ScaleAxis('X'), ScaleAxis('Y'), ScaleAxis('Z')]
+	scale_vec = [random.uniform(args.min_scale, args.max_scale)
+				if scale_axis == axes[i] else 1.0 for i in range(3)]
+
+	return scale_vec
 
 
 # Rotate and scale SDF point clouds
@@ -166,12 +187,13 @@ def augment_samples(sdf_samples, args):
 
 		# Rotate
 		if not args.no_rotation:
-			random_rot = random_rotation(args.rotate_axis)
-			augmented_points = rotate_point_cloud(augmented_points, random_rot)
+			rotation_quat = random_rotation(args)
+			augmented_points = rotate_point_cloud(augmented_points, rotation_quat)
 
 		# Scale
 		if not args.no_scale:
-			pass
+			scale_vec = random_scale(args)
+			# augmented_scale = scale_point_cloud(augmented_points, scale_vec)
 
 		# Save augmented samples
 		augmented_samples = torch.cat((augmented_points, distances), dim=1)
