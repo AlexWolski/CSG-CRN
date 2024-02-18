@@ -44,7 +44,7 @@ def quats_to_rot_matrices(quaternions):
 # Translates a BxNx3 point cloud tensor by a Bx3 translation tensor
 # Where B = Batch size and N = Number of points
 def translate_point_clouds(point_clouds, translations):
-	return point_clouds - translations.unsqueeze(1)
+	return point_clouds + translations.unsqueeze(1)
 
 
 # Translates an Nx3 point cloud matrix by a translation vector
@@ -79,8 +79,8 @@ def transform_point_clouds(point_clouds, translations, rotations):
 
 # Transforms a Nx3 point cloud tensor to a given space
 def transform_point_cloud(point_cloud, translation, rotation):
-	transformed_points = translate_point_cloud(point_cloud, translation)
 	transformed_points = rotate_point_cloud(point_cloud, rotation)
+	transformed_points = translate_point_cloud(point_cloud, translation)
 	return transformed_points
 
 
