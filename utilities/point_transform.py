@@ -49,10 +49,8 @@ def translate_point_clouds(point_clouds, translations):
 
 # Translates an Nx3 point cloud matrix by a translation vector
 def translate_point_cloud(point_cloud, translation):
-	point_cloud = point_cloud.unsqueeze(-1)
-	translation = translation.unsqueeze(-1)
-	transformed_points = translate_point_clouds(point_cloud, translation)
-	return translate_point_clouds.squeeze(-1)
+	transformed_points = translate_point_clouds(point_cloud.unsqueeze(0), translation.unsqueeze(0))
+	return transformed_points.squeeze(0)
 
 
 # Rotates a BxNx3 point cloud tensor by a Bx4 rotation tensor
@@ -66,10 +64,8 @@ def rotate_point_clouds(point_clouds, rotations):
 
 # Rotates an Nx3 point cloud matrix by a rotation vector
 def rotate_point_cloud(point_cloud, rotation):
-	point_cloud = point_cloud
-	rotation = rotation.unsqueeze(-1).transpose(0, 1)
-	rotated_points = rotate_point_clouds(point_cloud, rotation).squeeze(0)
-	return rotated_points
+	rotated_points = rotate_point_clouds(point_cloud.unsqueeze(0), rotation.unsqueeze(0))
+	return rotated_points.squeeze(0)
 
 
 # Transforms a BxNx3 point cloud tensor to a given space
@@ -97,8 +93,6 @@ def test():
 	batch_translations = torch.rand([batch_size, 3])
 	batch_rotations = torch.rand([batch_size, 4])
 	batch_rotations = torch.nn.functional.normalize(batch_rotations, p=2, dim=-1)
-
-	print(batch_translations.shape())
 
 	print('Transformed Batch Points:')
 	print(transform_point_clouds(batch_points, batch_translations, batch_rotations))
