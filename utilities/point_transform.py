@@ -3,7 +3,7 @@ import torch
 
 # Converts a Bx4 quaternion tensor to a Bx3x3 rotation matrix tensor
 # Where B = Batch size
-def quats_to_rot_matrices(quaternions):
+def quat_to_rot_matrix_batch(quaternions):
 	# Allocate space for B rotation matrices
 	batch_size = quaternions.size(dim=0)
 	matrices = quaternions.new_zeros((batch_size, 3, 3))
@@ -43,37 +43,37 @@ def quats_to_rot_matrices(quaternions):
 
 # Translates a BxNx3 point cloud tensor by a Bx3 translation tensor
 # Where B = Batch size and N = Number of points
-def translate_point_clouds(point_clouds, translations):
+def translate_point_cloud_batch(point_clouds, translations):
 	return point_clouds + translations.unsqueeze(1)
 
 
 # Translates an Nx3 point cloud matrix by a translation vector
 def translate_point_cloud(point_cloud, translation):
-	transformed_points = translate_point_clouds(point_cloud.unsqueeze(0), translation.unsqueeze(0))
+	transformed_points = translate_point_cloud_batch(point_cloud.unsqueeze(0), translation.unsqueeze(0))
 	return transformed_points.squeeze(0)
 
 
 # Rotates a BxNx3 point cloud tensor by a Bx4 rotation tensor
 # Where B = Batch size and N = Number of points
-def rotate_point_clouds(point_clouds, rotations):
-	rot_matrices = quats_to_rot_matrices(rotations).unsqueeze(1)
+def rotate_point_cloud_batch(point_clouds, rotations):
+	rot_matrices = quat_to_rot_matrix_batch(rotations).unsqueeze(1)
 	rotated_points = point_clouds.unsqueeze(-1)
-	rotated_points = rot_matrices.matmul(rotated_points).squeeze(-1)
-	return rotated_points
+	rotated_points = rot_matrices.matmul(rotated_points)
+	return rotated_points.squeeze(-1)
 
 
 # Rotates an Nx3 point cloud matrix by a rotation vector
 def rotate_point_cloud(point_cloud, rotation):
-	rotated_points = rotate_point_clouds(point_cloud.unsqueeze(0), rotation.unsqueeze(0))
+	rotated_points = rotate_point_cloud_batch(point_cloud.unsqueeze(0), rotation.unsqueeze(0))
 	return rotated_points.squeeze(0)
 
 
 # Transforms a BxNx3 point cloud tensor to a given space
 # Where B = Batch size and N = Number of points
 # Target space is defined by a Bx3 translation tensor and a Bx4 quaternion tensor
-def transform_point_clouds(point_clouds, translations, rotations):
-	transformed_points = translate_point_clouds(point_clouds, translations)
-	transformed_points = rotate_point_clouds(point_clouds, rotations)
+def transform_point_cloud_batch(point_clouds, translations, rotations):
+	transformed_points = translate_point_cloud_batch(point_clouds, translations)
+	transformed_points = rotate_point_cloud_batch(point_clouds, rotations)
 	return transformed_points
 
 
@@ -95,7 +95,7 @@ def test():
 	batch_rotations = torch.nn.functional.normalize(batch_rotations, p=2, dim=-1)
 
 	print('Transformed Batch Points:')
-	print(transform_point_clouds(batch_points, batch_translations, batch_rotations))
+	print(transform_point_cloud_batch(batch_points, batch_translations, batch_rotations))
 
 	points = torch.rand([num_points, 3])
 	translations = torch.rand([3])
