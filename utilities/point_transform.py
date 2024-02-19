@@ -1,12 +1,12 @@
 import torch
 
 
-# Converts a Bx4 quaternion tensor to a Bx3x3 rotation matrix tensor
+# Converts a Bx4 quaternion tensor to a Bx4x4 rotation matrix tensor
 # Where B = Batch size
-def quat_to_rot_matrix_batch(quaternions):
+def quat_to_mat4_batch(quaternions):
 	# Allocate space for B rotation matrices
 	batch_size = quaternions.size(dim=0)
-	matrices = quaternions.new_zeros((batch_size, 3, 3))
+	matrices = quaternions.new_zeros((batch_size, 4, 4))
 
 	# Quaternion stored as [w, x, y, z]
 	w = quaternions[:, 0]
@@ -14,6 +14,7 @@ def quat_to_rot_matrix_batch(quaternions):
 	y = quaternions[:, 2]
 	z = quaternions[:, 3]
 
+	# Precompute repeated terms
 	wx2 = w*x*2
 	wy2 = w*y*2
 	wz2 = w*z*2
@@ -38,7 +39,27 @@ def quat_to_rot_matrix_batch(quaternions):
 	matrices[:, 2, 1] = yz2 + wx2
 	matrices[:, 2, 2] = 1 - xx2 - yy2
 
+	matrices[:, 3, 3] = 1
+
 	return matrices
+
+
+# Convert a point cloud from a BxNx3 cartesian coordinate system to a BxNx4 homogeneous coordinate system
+def to_homogeneous_batch(point_clouds):
+	(batch_size, rows, cols) = point_clouds.size()
+	new_row = torch.zeros((batch_size, 1, cols), dtype=torch.float)
+	new_col = torch.zeros((batch_size, rows+1, 1), dtype=torch.float)
+
+	point_clouds_homo = torch.cat((point_clouds, new_row), dim=1)
+	point_clouds_homo = torch.cat((point_clouds_homo, new_col), dim=2)
+	point_clouds_homo[:, rows, cols] = 1
+
+	return point_clouds_homo
+
+
+# Convert a point cloud from a BxNx4 homogeneous coordinate system to a BxNx3 cartesian coordinate system
+def to_cartesian_batch(point_clouds):
+	return point_clouds[:,:-1,:-1]
 
 
 # Translates a BxNx3 point cloud tensor by a Bx3 translation tensor
@@ -56,10 +77,11 @@ def translate_point_cloud(point_cloud, translation):
 # Rotates a BxNx3 point cloud tensor by a Bx4 rotation tensor
 # Where B = Batch size and N = Number of points
 def rotate_point_cloud_batch(point_clouds, rotations):
-	rot_matrices = quat_to_rot_matrix_batch(rotations).unsqueeze(1)
-	rotated_points = point_clouds.unsqueeze(-1)
-	rotated_points = rot_matrices.matmul(rotated_points)
-	return rotated_points.squeeze(-1)
+	rot_matrices = quat_to_mat4_batch(rotations).unsqueeze(1)
+	point_clouds_homo = to_homogeneous_batch(point_clouds).unsqueeze(-1)
+	rotated_points = rot_matrices.matmul(point_clouds_homo).squeeze(-1)
+	rotated_points = to_cartesian_batch(rotated_points)
+	return rotated_points
 
 
 # Rotates an Nx3 point cloud matrix by a rotation vector
