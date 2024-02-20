@@ -61,27 +61,30 @@ def translation_to_mat4_batch(translations):
 # Convert a point cloud from a BxNx3 cartesian coordinate system to a BxNx4 homogeneous coordinate system
 def to_homogeneous_batch(point_clouds):
 	(batch_size, rows, cols) = point_clouds.size()
-	new_row = torch.zeros((batch_size, 1, cols), dtype=torch.float)
-	new_col = torch.zeros((batch_size, rows+1, 1), dtype=torch.float)
 
-	point_clouds_homo = torch.cat((point_clouds, new_row), dim=1)
-	point_clouds_homo = torch.cat((point_clouds_homo, new_col), dim=2)
-	point_clouds_homo[:, rows, cols] = 1
+	# Add new column of ones
+	new_col = torch.ones((batch_size, rows, 1), dtype=torch.float)
+	point_clouds_homo = torch.cat((point_clouds, new_col), dim=2)
+
+	# Transpose so that each column represents a point
+	point_clouds_homo = point_clouds_homo.transpose(1,2)
 
 	return point_clouds_homo
 
 
 # Convert a point cloud from a BxNx4 homogeneous coordinate system to a BxNx3 cartesian coordinate system
 def to_cartesian_batch(point_clouds):
-	return point_clouds[:,:-1,:-1]
+	point_clouds = point_clouds[:,:-1,:]
+	point_clouds = point_clouds.transpose(1,2)
+	return point_clouds
 
 
 # Translates a BxNx3 point cloud tensor by a Bx3 translation tensor
 # Where B = Batch size and N = Number of points
 def translate_point_cloud_batch(point_clouds, translations):
-	translation_matrices = translation_to_mat4_batch(translations).unsqueeze(1)
-	point_clouds_homo = to_homogeneous_batch(point_clouds).unsqueeze(-1)
-	translated_points = translation_matrices.matmul(point_clouds_homo).squeeze(-1)
+	point_clouds_homo = to_homogeneous_batch(point_clouds)
+	translation_matrices = translation_to_mat4_batch(translations)
+	translated_points = translation_matrices.matmul(point_clouds_homo)
 	translated_points = to_cartesian_batch(translated_points)
 	return translated_points
 
@@ -95,9 +98,9 @@ def translate_point_cloud(point_cloud, translation):
 # Rotates a BxNx3 point cloud tensor by a Bx4 rotation tensor
 # Where B = Batch size and N = Number of points
 def rotate_point_cloud_batch(point_clouds, rotations):
-	rot_matrices = quat_to_mat4_batch(rotations).unsqueeze(1)
-	point_clouds_homo = to_homogeneous_batch(point_clouds).unsqueeze(-1)
-	rotated_points = rot_matrices.matmul(point_clouds_homo).squeeze(-1)
+	point_clouds_homo = to_homogeneous_batch(point_clouds)
+	rot_matrices = quat_to_mat4_batch(rotations)
+	rotated_points = rot_matrices.matmul(point_clouds_homo)
 	rotated_points = to_cartesian_batch(rotated_points)
 	return rotated_points
 
