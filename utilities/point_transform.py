@@ -44,6 +44,20 @@ def quat_to_mat4_batch(quaternions):
 	return matrices
 
 
+# Converts a Bx3 translation tensor to a Bx4x4 translation matrix tensor
+# Where B = Batch size
+def translation_to_mat4_batch(translations):
+	(batch_size, _) = translations.size()
+	translation_transpose = translations.unsqueeze(-1)
+
+	# Bx4x4 identity matrix
+	translation_matrix = torch.eye(4).repeat(batch_size, 1, 1)
+	# Copy the translation to identity matrix
+	translation_matrix[:,:3,3:4] = translation_transpose
+
+	return translation_matrix
+
+
 # Convert a point cloud from a BxNx3 cartesian coordinate system to a BxNx4 homogeneous coordinate system
 def to_homogeneous_batch(point_clouds):
 	(batch_size, rows, cols) = point_clouds.size()
@@ -65,7 +79,11 @@ def to_cartesian_batch(point_clouds):
 # Translates a BxNx3 point cloud tensor by a Bx3 translation tensor
 # Where B = Batch size and N = Number of points
 def translate_point_cloud_batch(point_clouds, translations):
-	return point_clouds + translations.unsqueeze(1)
+	translation_matrices = translation_to_mat4_batch(translations).unsqueeze(1)
+	point_clouds_homo = to_homogeneous_batch(point_clouds).unsqueeze(-1)
+	translated_points = translation_matrices.matmul(point_clouds_homo).squeeze(-1)
+	translated_points = to_cartesian_batch(translated_points)
+	return translated_points
 
 
 # Translates an Nx3 point cloud matrix by a translation vector
