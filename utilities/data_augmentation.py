@@ -120,10 +120,16 @@ def augment_samples(sdf_samples, args):
 		# Scale
 		if not args.no_scale:
 			scale_vec = random_scale(args)
-			# augmented_scale = scale_point_cloud(augmented_points, scale_vec)
+			# augmented_points = scale_point_cloud(augmented_points, scale_vec)
 
-		# Save augmented samples
+		# Combine points and distances
 		augmented_samples = torch.cat((augmented_points, distances), dim=1)
+
+		# Add noise to the points and distances
+		if not args.no_noise:
+			noise_matrix = torch.randn(augmented_samples.size(), dtype=augmented_samples.dtype, device=augmented_samples.device)
+			augmented_samples = augmented_samples + (args.noise_std * noise_matrix)
+
 		augmented_samples_list.append(augmented_samples)
 
 	return augmented_samples_list
