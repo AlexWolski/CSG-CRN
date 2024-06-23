@@ -47,6 +47,7 @@ def load_model(args):
 	args.num_input_points = saved_args.num_input_points
 	args.sample_method = saved_args.sample_method
 	args.sample_dist = saved_args.sample_dist
+	args.clamp_dist = saved_args.clamp_dist
 
 	# Check for weights corresponding to blending and roundness regressors
 	predict_blending = 'regressor_decoder.blending.fc1.weight' in state_dict
@@ -159,13 +160,13 @@ def print_csg_commands(csg_model):
 		count += 1
 
 
-def print_recon_loss(input_samples, csg_model):
+def print_recon_loss(input_samples, csg_model, args):
 	input_points = input_samples[:,:,:3]
 	input_sdf = input_samples[:,:,3]
 
 	csg_sdf = csg_model.sample_csg(input_points)
 
-	recon_loss = ReconstructionLoss(1)
+	recon_loss = ReconstructionLoss(args.clamp_dist)
 	print('Reconstruction Loss:')
 	print(recon_loss.forward(input_sdf, csg_sdf))
 
@@ -184,7 +185,7 @@ def main():
 	print_csg_commands(csg_model)
 
 	# Print reconstruction loss
-	print_recon_loss(input_samples, csg_model)
+	print_recon_loss(input_samples, csg_model, args)
 
 	# View reconstruction
 	view_sdf(csg_model, 50000, 2, args)
