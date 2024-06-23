@@ -8,7 +8,7 @@ import math
 def quat_to_mat4_batch(quaternions):
 	# Allocate space for B rotation matrices
 	batch_size = quaternions.size(dim=0)
-	matrices = quaternions.new_zeros((batch_size, 4, 4)).to(quaternions.get_device())
+	matrices = quaternions.new_zeros((batch_size, 4, 4)).to(quaternions.device)
 
 	# Quaternion stored as [w, x, y, z]
 	w = quaternions[:, 0]
@@ -53,7 +53,7 @@ def translation_to_mat4_batch(translations):
 	translation_transpose = translations.unsqueeze(-1)
 
 	# Bx4x4 identity matrix
-	translation_matrix = torch.eye(4).repeat(batch_size, 1, 1).to(translations.get_device())
+	translation_matrix = torch.eye(4).repeat(batch_size, 1, 1).to(translations.device)
 	# Copy the translation to identity matrix
 	translation_matrix[:,:3,3:4] = translation_transpose
 
@@ -65,7 +65,7 @@ def to_homogeneous_batch(point_clouds):
 	(batch_size, rows, cols) = point_clouds.size()
 
 	# Add new column of ones
-	new_col = torch.ones((batch_size, rows, 1), dtype=torch.float).to(point_clouds.get_device())
+	new_col = torch.ones((batch_size, rows, 1), dtype=torch.float).to(point_clouds.device)
 	point_clouds_homo = torch.cat((point_clouds, new_col), dim=2)
 
 	# Transpose so that each column represents a point
