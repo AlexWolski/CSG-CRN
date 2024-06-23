@@ -115,15 +115,15 @@ def rotate_point_cloud(point_cloud, rotation):
 # Where B = Batch size and N = Number of points
 # Target space is defined by a Bx3 translation tensor and a Bx4 quaternion tensor
 def transform_point_cloud_batch(point_clouds, translations, rotations):
+	transformed_points = translate_point_cloud_batch(transformed_points, translations)
 	transformed_points = rotate_point_cloud_batch(point_clouds, rotations)
-	transformed_points = translate_point_cloud_batch(point_clouds, translations)
 	return transformed_points
 
 
 # Transforms a Nx3 point cloud tensor to a given space
 def transform_point_cloud(point_cloud, translation, rotation):
+	transformed_points = translate_point_cloud(transformed_points, translation)
 	transformed_points = rotate_point_cloud(point_cloud, rotation)
-	transformed_points = translate_point_cloud(point_cloud, translation)
 	return transformed_points
 
 
