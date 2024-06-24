@@ -15,18 +15,15 @@ class Loss(nn.Module):
 		self.shape_loss_weight = shape_loss_weight
 		self.op_loss_weight = op_loss_weight
 
-		self.recon_loss_1 = ReconstructionLoss(self.clamp_dist)
-		self.recon_loss_2 = ReconstructionLoss(self.clamp_dist)
+		self.recon_loss = ReconstructionLoss(self.clamp_dist)
 		self.primitive_loss = PrimitiveLoss()
 		self.entropy_loss_1 = EntropyLoss()
 		self.entropy_loss_2 = EntropyLoss()
 
 
-	def forward(self, target_sdf, initial_sdf, refined_sdf, shape_probs=None, operation_probs=None):
-		# Compute change is loss after refinement
-		initial_recon_loss = self.recon_loss_1(target_sdf, initial_sdf)
-		refined_recon_loss = self.recon_loss_2(target_sdf, refined_sdf)
-		delta_loss = refined_recon_loss - initial_recon_loss
+	def forward(self, target_sdf, refined_sdf, shape_probs=None, operation_probs=None):
+		# Compute reconstruction loss
+		refined_recon_loss = self.recon_loss(target_sdf, refined_sdf)
 
 		# Compute weighted regularizer losses
 		primitive_loss = self.prim_loss_weight * self.primitive_loss(refined_sdf)
@@ -42,7 +39,7 @@ class Loss(nn.Module):
 			operation_reg_loss = 0
 		
 		# Combine losses
-		total_loss = delta_loss + primitive_loss + shape_reg_loss + operation_reg_loss
+		total_loss = refined_recon_loss + primitive_loss + shape_reg_loss + operation_reg_loss
 
 		return total_loss
 
@@ -57,7 +54,6 @@ def test():
 	op_loss_weight = 0.001
 
 	target_sdf = torch.rand([batch_size, num_points]) * clamp_dist
-	initial_sdf = torch.rand([batch_size, num_points]) * clamp_dist
 	refined_sdf = torch.rand([batch_size, num_points]) * clamp_dist
 
 	shape_probs = torch.tensor([0.2,0.3,0.5], dtype=float).repeat(batch_size,1)
@@ -66,4 +62,4 @@ def test():
 	loss = Loss(clamp_dist, prim_loss_weight, shape_loss_weight, op_loss_weight)
 
 	print('Total Loss:')
-	print(loss.forward(target_sdf, initial_sdf, refined_sdf, shape_probs, operation_probs))
+	print(loss.forward(target_sdf, refined_sdf, shape_probs, operation_probs))

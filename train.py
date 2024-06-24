@@ -202,7 +202,7 @@ def model_forward(model, loss_func, target_input_samples, target_all_samples, ar
 	operation_weights = torch.cat([x['operation weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
 
 	# Compute loss
-	loss = loss_func(target_all_distances, initial_loss_distances, refined_loss_distances, shapes_weights, operation_weights)
+	loss = loss_func(target_all_distances, refined_loss_distances, shapes_weights, operation_weights)
 
 	return loss
 

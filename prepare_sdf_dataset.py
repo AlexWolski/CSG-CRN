@@ -18,7 +18,7 @@ def options():
 	parser = argparse.ArgumentParser()
 
 	parser.add_argument('--data_dir', type=str, required=True, help='Parent directory containing input 3D data files (3mf, obj, off, glb, gltf, ply, stl, 3dxml)')
-	parser.add_argument('--output_dir', type=str, default='./output', help='Output directory to store SDF samples')
+	parser.add_argument('--output_dir', type=str, default='./data/output', help='Output directory to store SDF samples')
 	parser.add_argument('--num_samples', type=int, default=200000, help='Number of SDF samples to compute')
 	parser.add_argument('--augment_data', default=False, action='store_true', help='Enable offline augmentation of object samples with random rotation, scaling, and noise')
 	parser.add_argument('--augment_copies', type=int, default=1, help='Number of augmented copies of each object to create')
