@@ -61,6 +61,7 @@ def main():
 	print('')
 
 	(points, sdf) = load_samples(args)
+	print(f'Point samples: {points.shape[0]}')
 	filename = get_filename(args)
 	display_points(points, sdf, filename)
 
