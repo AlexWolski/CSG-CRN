@@ -63,7 +63,7 @@ def options():
 		parser2.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 		parser2.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 		parser2.add_argument('--sample_method', default=['uniform'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
-		parser2.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (Smaller sample_dist increases memory requirement, must be >0)')
+		parser2.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
 		parser2.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
 
 		# Training settings
