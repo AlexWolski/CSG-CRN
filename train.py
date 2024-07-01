@@ -64,7 +64,6 @@ def options():
 		parser2.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 		parser2.add_argument('--sample_method', default=['uniform'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
 		parser2.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
-		parser2.add_argument('--clamp_dist', type=float, default=0.1, help='SDF clamping value for computing reconstruciton loss (Recommended to set clamp_dist to sample_dist)')
 
 		# Training settings
 		parser2.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
@@ -291,7 +290,7 @@ def main():
 
 	# Initialize model
 	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args, device)
-	loss_func = Loss(args.clamp_dist, PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
+	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
 	optimizer = Adam(model.parameters())
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.lr_patience)
 

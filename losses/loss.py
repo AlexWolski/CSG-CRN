@@ -6,15 +6,14 @@ from losses.reconstruction_loss import ReconstructionLoss
 
 
 class Loss(nn.Module):
-	def __init__(self, clamp_dist, prim_loss_weight=0, shape_loss_weight=0, op_loss_weight=0):
+	def __init__(self, prim_loss_weight=0, shape_loss_weight=0, op_loss_weight=0):
 		super(Loss, self).__init__()
 
-		self.clamp_dist = clamp_dist
 		self.prim_loss_weight = prim_loss_weight
 		self.shape_loss_weight = shape_loss_weight
 		self.op_loss_weight = op_loss_weight
 
-		self.recon_loss = ReconstructionLoss(self.clamp_dist)
+		self.recon_loss = ReconstructionLoss()
 		self.primitive_loss = PrimitiveLoss()
 		self.entropy_loss_1 = EntropyLoss()
 		self.entropy_loss_2 = EntropyLoss()
@@ -45,18 +44,17 @@ class Loss(nn.Module):
 def test():
 	batch_size = 2
 	num_points = 2
-	clamp_dist = 0.1
 	prim_loss_weight = 0.001
 	shape_loss_weight = 0.001
 	op_loss_weight = 0.001
 
-	target_sdf = torch.rand([batch_size, num_points]) * clamp_dist
-	refined_sdf = torch.rand([batch_size, num_points]) * clamp_dist
+	target_sdf = torch.rand([batch_size, num_points])
+	refined_sdf = torch.rand([batch_size, num_points])
 
 	shape_probs = torch.tensor([0.2,0.3,0.5], dtype=float).repeat(batch_size,1)
 	operation_probs = torch.tensor([0.9,0.1], dtype=float).repeat(batch_size,1)
 
-	loss = Loss(clamp_dist, prim_loss_weight, shape_loss_weight, op_loss_weight)
+	loss = Loss(prim_loss_weight, shape_loss_weight, op_loss_weight)
 
 	print('Total Loss:')
 	print(loss.forward(target_sdf, refined_sdf, shape_probs, operation_probs))
