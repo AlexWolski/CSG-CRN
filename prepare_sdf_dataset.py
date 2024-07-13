@@ -18,7 +18,7 @@ def options():
 	# Parsers
 	help_parser = argparse.ArgumentParser(add_help=False)
 	data_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
-	augment_parser = get_augment_parser()
+	augment_parser = get_augment_parser('OFFLINE AUGMENT SETTINGS')
 	data_group = data_parser.add_argument_group('DATA SETTINGS')
 
 	# Help flag
