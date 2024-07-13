@@ -47,7 +47,10 @@ def options():
 	args, remaining_args = data_parser.parse_known_args(args=remaining_args, namespace=args)
 
 	# Load settings from saved model file
-	if args.model_path != '':
+	if args.model_path:
+		print('\nLoading Arguments From Model File:')
+		print(os.path.abspath(args.model_path))
+
 		# Cache data settings
 		data_args = (args.data_dir, args.output_dir, args.overwrite)
 		# Load arguments from modle file
@@ -67,6 +70,13 @@ def options():
 
 	# Disable batch norm for SGD
 	args.no_batch_norm = True if args.batch_size == 1 else args.no_batch_norm
+
+    # Print arguments
+	print('\nArguments:')
+	print('----------')
+
+	for arg in vars(args):
+		print('{0:20} - {1}'.format(arg, getattr(args, arg)))
 
 	return args
 
@@ -110,6 +120,7 @@ def get_model_parser():
 	training_group.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
 	training_group.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
+	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_patience', type=int, default=5, help='Number of training epochs without improvement before the learning rate is adjusted')
 	training_group.add_argument('--early_stop_patience', type=int, default=10, help='Number of training epochs without improvement before training terminates')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
@@ -182,7 +193,7 @@ def load_model(num_shapes, num_operations, args, device):
 	model = CSG_CRN(num_shapes, num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(device)
 
 	# Load model parameters if available
-	if args.model_path != '':
+	if args.model_path:
 		model.load_state_dict(torch.load(args.model_path))
 
 	return model
@@ -281,17 +292,21 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 		print('Validation Loss:', val_loss)
 		print('Learning Rate:  ', optimizer.param_groups[0]['lr'])
 
-		# Check for early stopping
+		# Update learning rate
+		args.init_lr = optimizer.param_groups[0]['lr']
+
+		# Check for loss improvement
 		if val_loss < min_val_loss:
 			min_val_loss = val_loss
 			early_stop_counter = 0
 
-			# Save final trained model
+			# Save current best model
 			trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
 			torch.save({'model': model.state_dict(), 'args': args}, trained_model_path)
 		else:
 			early_stop_counter += 1
 			
+		# Check for early stopping
 		if early_stop_counter > args.early_stop_patience:
 			print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
 			break
@@ -300,6 +315,7 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 		if (epoch+1) % args.checkpoint_freq == 0:
 			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch+1}.pt')
 			torch.save({'model': model.state_dict(), 'args': args}, checkpoint_path)
+
 			print(f'Checkpoint saved to:')
 			print(checkpoint_path)
 
@@ -317,7 +333,7 @@ def main():
 	# Initialize model
 	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args, device)
 	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
-	optimizer = Adam(model.parameters())
+	optimizer = Adam(model.parameters(), lr=args.init_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.lr_patience)
 
 	# Load training set
