@@ -10,30 +10,41 @@ from mesh_to_sdf.utils import sample_uniform_points_in_unit_sphere
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from mesh_to_sdf import BadMeshException
 from tqdm import tqdm
-from utilities.data_augmentation import RotationAxis, ScaleAxis, augment_samples
+from utilities.data_augmentation import get_augment_parser, augment_samples
 
 
 # Parse commandline arguments
 def options():
-	parser = argparse.ArgumentParser()
+	# Parsers
+	help_parser = argparse.ArgumentParser(add_help=False)
+	data_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
+	augment_parser = get_augment_parser()
+	data_group = data_parser.add_argument_group('DATA SETTINGS')
 
-	parser.add_argument('--data_dir', type=str, required=True, help='Parent directory containing input 3D data files (3mf, obj, off, glb, gltf, ply, stl, 3dxml)')
-	parser.add_argument('--output_dir', type=str, default='./data/output', help='Output directory to store SDF samples')
-	parser.add_argument('--num_samples', type=int, default=200000, help='Number of SDF samples to compute')
-	parser.add_argument('--augment_data', default=False, action='store_true', help='Enable offline augmentation of object samples with random rotation, scaling, and noise')
-	parser.add_argument('--augment_copies', type=int, default=1, help='Number of augmented copies of each object to create')
-	parser.add_argument('--keep_original', default=False, action='store_true', help='Include the non-augmented object in an augmented output')
-	parser.add_argument('--no_rotation', default=False, action='store_true', help='Disable rotations in data augmentation')
-	parser.add_argument('--no_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
-	parser.add_argument('--no_noise', default=False, action='store_true', help='Disable gaussian noise for sample points and distances')
-	parser.add_argument('--rotate_axis', default='ALL', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
-	parser.add_argument('--scale_axis', default='ALL', type=ScaleAxis, choices=list(ScaleAxis), help='Axes to scale')
-	parser.add_argument('--min_scale', type=float, default=0.5, help='Lower bound on random scale value')
-	parser.add_argument('--max_scale', type=float, default=2.0, help='Upper bound on random scale value')
-	parser.add_argument('--noise_variance', type=float, default=1e-6, help='The variance of the gaussian noise aded to each sample point and distance')
-	parser.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
+	# Help flag
+	help_parser.add_argument('-h', '--help', default=False, action='store_true', help='Print help text')
 
-	args = parser.parse_args()
+	# Data settings
+	data_group.add_argument('--data_dir', type=str, required=True, help='Parent directory containing input 3D data files (3mf, obj, off, glb, gltf, ply, stl, 3dxml)')
+	data_group.add_argument('--output_dir', type=str, default='./data/output', help='Output directory to store SDF samples')
+	data_group.add_argument('--num_samples', type=int, default=200000, help='Number of SDF samples to compute')
+
+
+	# Parse and handle Help argument
+	args, remaining_args = help_parser.parse_known_args()
+
+	if args.help or not remaining_args:
+		print()
+		data_parser.print_help()
+		print('\n')
+		augment_parser.print_help()
+		exit()
+
+	# Parse data settings
+	args, remaining_args = data_parser.parse_known_args(args=remaining_args, namespace=args)
+
+	# Parse augment settings
+	augment_parser.parse_args(args=remaining_args, namespace=args)
 	args.noise_std = math.sqrt(args.noise_variance)
 
 	return args

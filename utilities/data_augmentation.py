@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import random
 import torch
@@ -48,6 +49,26 @@ class ScaleAxis(Enum):
 	def random_value(self):
 		index = random.randrange(3)
 		return list(ScaleAxis)[index]
+
+
+def get_augment_parser():
+	parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
+	parser_group = parser.add_argument_group('AUGMENT SETTINGS')
+
+	parser_group.add_argument('--augment_data', default=False, action='store_true', help='Enable augmentation of object samples with random rotation, scaling, and noise')
+	parser_group.add_argument('--augment_copies', type=int, default=1, help='Number of augmented copies of each object to create')
+	parser_group.add_argument('--keep_original', default=False, action='store_true', help='Include the non-augmented object in an augmented output')
+	parser_group.add_argument('--no_rotation', default=False, action='store_true', help='Disable rotations in data augmentation')
+	parser_group.add_argument('--no_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
+	parser_group.add_argument('--no_noise', default=False, action='store_true', help='Disable gaussian noise for sample points and distances')
+	parser_group.add_argument('--rotate_axis', default='ALL', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
+	parser_group.add_argument('--scale_axis', default='ALL', type=ScaleAxis, choices=list(ScaleAxis), help='Axes to scale')
+	parser_group.add_argument('--min_scale', type=float, default=0.5, help='Lower bound on random scale value')
+	parser_group.add_argument('--max_scale', type=float, default=2.0, help='Upper bound on random scale value')
+	parser_group.add_argument('--noise_variance', type=float, default=1e-6, help='The variance of the gaussian noise aded to each sample point and distance')
+	parser_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
+
+	return parser
 
 
 # Convert a SciPy Rotation object to a quaternion PyTorch tensor
