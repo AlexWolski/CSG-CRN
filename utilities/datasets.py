@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from utilities.data_augmentation import augment_sample
 
 
 class PointDataset(Dataset):
@@ -13,23 +14,32 @@ class PointDataset(Dataset):
 		return len(self.file_rel_paths)
 
 	def __getitem__(self, idx):
-		# Load all points and distances from sample file
+		# Load all points and distances from sdf sample file
 		file_rel_path = self.file_rel_paths[idx]
 		sample_path = os.path.join(self.args.data_dir, file_rel_path)
-		sample = np.load(sample_path).astype(np.float32)
+		sdf_sample = np.load(sample_path).astype(np.float32)
+		sdf_sample = torch.from_numpy(sdf_sample)
 
-		# Randomly select needed number of input surface samples
-		replace = (sample.shape[0] < self.args.num_input_points)
-		select_rows = np.random.choice(sample.shape[0], self.args.num_input_points, replace=replace)
-		select_input_samples = sample[select_rows]
+		# Augment sample
+		if self.args.augment_data:
+			points = sdf_sample[:,:3]
+			distances = sdf_sample[:,3]
+			distances = distances.unsqueeze(0).transpose(0, 1)
 
-		# Randomly select needed number of loss surface samples
-		replace = (sample.shape[0] < self.args.num_loss_points)
-		select_rows = np.random.choice(sample.shape[0], self.args.num_loss_points, replace=replace)
-		select_loss_samples = sample[select_rows]
+			augmented_points, augmented_distances = augment_sample(points, distances, self.args)
 
-		# Convert numpy arrays to torch tensors
-		select_input_samples = torch.from_numpy(select_input_samples)
-		select_loss_samples = torch.from_numpy(select_loss_samples)
+			sdf_sample = torch.cat((augmented_points, augmented_distances), dim=1)
+
+		# Randomly select indices for needed number of input surface samples
+		replace = (sdf_sample.shape[0] < self.args.num_input_points)
+		select_input_rows = np.random.choice(sdf_sample.shape[0], self.args.num_input_points, replace=replace)
+
+		# Randomly select indices for needed number of loss surface samples
+		replace = (sdf_sample.shape[0] < self.args.num_loss_points)
+		select_loss_rows = np.random.choice(sdf_sample.shape[0], self.args.num_loss_points, replace=replace)
+
+		# Index the sdf tensor to get input and loss tensors
+		select_input_samples = sdf_sample[select_input_rows]
+		select_loss_samples = sdf_sample[select_loss_rows]
 
 		return (select_input_samples, select_loss_samples)
