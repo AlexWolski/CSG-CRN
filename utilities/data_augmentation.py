@@ -117,40 +117,41 @@ def random_scale(args):
 	return scale_vec
 
 
-# Rotate and scale SDF point clouds
-def augment_samples(sdf_samples, args):
+# Generate a list of augmented copies
+def generate_augmented_copies(points, distances, args):
 	augmented_samples_list = []
 
-	# Save original samples
+	# Save original points and distances
 	if args.keep_original:
-		augmented_samples_list.append(sdf_samples)
-	
-	points = sdf_samples[:,:3]
-	distances = sdf_samples[:,3]
-	distances = distances.unsqueeze(0).transpose(0, 1)
+		augmented_samples_list.append((points, distances))
 
-	# Augment and save samples
+	# Create and save augmented copies
 	for i in range(args.augment_copies):
-		augmented_points = points
-
-		# Rotate
-		if not args.no_rotation:
-			rotation_quat = random_rotation(args)
-			augmented_points = rotate_point_cloud(augmented_points, rotation_quat)
-
-		# Scale
-		if not args.no_scale:
-			scale_vec = random_scale(args)
-			# augmented_points = scale_point_cloud(augmented_points, scale_vec)
-
-		# Combine points and distances
-		augmented_samples = torch.cat((augmented_points, distances), dim=1)
-
-		# Add noise to the points and distances
-		if not args.no_noise:
-			noise_matrix = torch.randn(augmented_samples.size(), dtype=augmented_samples.dtype, device=augmented_samples.device)
-			augmented_samples = augmented_samples + (args.noise_std * noise_matrix)
-
-		augmented_samples_list.append(augmented_samples)
+		augmented_samples_list.append(augment_sample(points, distances, args))
 
 	return augmented_samples_list
+
+
+# Augment a single SDF sample
+def augment_sample(points, distances, args):
+	augmented_points, augmented_distances = points, distances
+
+	# Rotate
+	if not args.no_rotation:
+		rotation_quat = random_rotation(args)
+		augmented_points = rotate_point_cloud(augmented_points, rotation_quat)
+
+	# Scale
+	if not args.no_scale:
+		scale_vec = random_scale(args)
+		# TODO: Implement scaling
+		# augmented_points = scale_point_cloud(augmented_points, scale_vec)
+
+	# Add noise to the points and distances
+	if not args.no_noise:
+		points_noise = torch.randn(points.size(), dtype=points.dtype, device=points.device) * args.noise_std
+		distances_noise = torch.randn(distances.size(), dtype=distances.dtype, device=distances.device) * args.noise_std
+		augmented_points += points_noise
+		augmented_distances += distances_noise
+
+	return (augmented_points, augmented_distances)

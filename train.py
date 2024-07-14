@@ -12,6 +12,7 @@ from torch.optim import Adam, lr_scheduler
 
 from utilities.data_processing import *
 from utilities.datasets import PointDataset
+from utilities.data_augmentation import get_augment_parser
 
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
@@ -31,6 +32,7 @@ def options():
 	help_parser = get_help_parser()
 	data_parser = get_data_parser()
 	model_parser = get_model_parser()
+	augment_parser = get_augment_parser('ONLINE AUGMENT SETTINGS')
 
 
 	# Parse and handle Help argument
@@ -41,6 +43,8 @@ def options():
 		data_parser.print_help()
 		print('\n')
 		model_parser.print_help()
+		print('\n')
+		augment_parser.print_help()
 		exit()
 
 	# Parse data settings
@@ -60,7 +64,8 @@ def options():
 
 	# Parse all arguments
 	else:
-		model_parser.parse_args(args=remaining_args, namespace=args)
+		args, remaining_args = model_parser.parse_known_args(args=remaining_args, namespace=args)
+		augment_parser.parse_args(args=remaining_args, namespace=args)
 
 
 	# Expand paths
@@ -178,8 +183,8 @@ def load_data_sets(args, data_split):
 	print(f'Validation set:\t{len(val_split.indices)} samples')
 	print(f'Testing set:\t{len(test_split.indices)} samples')
 
-	train_dataset = PointDataset(args.data_dir, train_split, args.num_input_points, args.num_loss_points)
-	val_dataset = PointDataset(args.data_dir, val_split, args.num_input_points, args.num_loss_points)
+	train_dataset = PointDataset(train_split, args)
+	val_dataset = PointDataset(val_split, args)
 
 	return (train_dataset, val_dataset)
 

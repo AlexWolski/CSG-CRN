@@ -10,7 +10,7 @@ from mesh_to_sdf.utils import sample_uniform_points_in_unit_sphere
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from mesh_to_sdf import BadMeshException
 from tqdm import tqdm
-from utilities.data_augmentation import get_augment_parser, augment_samples
+from utilities import data_augmentation
 
 
 # Parse commandline arguments
@@ -18,7 +18,7 @@ def options():
 	# Parsers
 	help_parser = argparse.ArgumentParser(add_help=False)
 	data_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
-	augment_parser = get_augment_parser('OFFLINE AUGMENT SETTINGS')
+	augment_parser = data_augmentation.get_augment_parser('OFFLINE AUGMENT SETTINGS')
 	data_group = data_parser.add_argument_group('DATA SETTINGS')
 
 	# Help flag
@@ -83,13 +83,13 @@ def sample_sdf(mesh_file_path, num_samples):
 
 	# Sample mesh surface
 	points = sample_uniform_points_in_unit_sphere(num_samples).astype(np.float32)
-	distance = mesh_to_sdf.mesh_to_sdf(mesh, points).astype(np.float32)
-	sdf_samples = np.concatenate((points, np.expand_dims(distance, axis=1)), 1)
+	distances = mesh_to_sdf.mesh_to_sdf(mesh, points).astype(np.float32)
 
 	# Convert to torch tensor
-	sdf_samples = torch.from_numpy(sdf_samples)
+	points = torch.from_numpy(points)
+	distances = torch.from_numpy(distances)
 
-	return sdf_samples
+	return (points, distances)
 
 
 # Compute SDF samples for all 3D files in given directory
@@ -102,7 +102,7 @@ def prepare_dataset(data_dir, output_dir, args):
 	for mesh_file_path in tqdm(mesh_file_paths):
 		# Compute SDF samples
 		try:
-			sdf_samples = sample_sdf(mesh_file_path, args.num_samples)
+			(points, distances) = sample_sdf(mesh_file_path, args.num_samples)
 		# Skip meshes that raise an error
 		except BadMeshException:
 			tqdm.write(f'Skipping Bad Mesh\n: {mesh_file_path}')
@@ -110,14 +110,14 @@ def prepare_dataset(data_dir, output_dir, args):
 
 		# Augment samples
 		if args.augment_data:
-			augmented_samples = augment_samples(sdf_samples, args)
+			augmented_samples_list = data_augmentation.generate_augmented_copies(points, distances, args)
 		else:
-			augmented_samples = [sdf_samples]
+			augmented_samples_list = [(points, distances)]
 
 		# Save samples
 		i = 0
 
-		for augmented_sample in augmented_samples:
+		for (augmented_points, augmented_distances) in augmented_samples_list:
 			# Get path to input 3D model file
 			rel_path = os.path.relpath(mesh_file_path, data_dir)
 			model_path = os.path.join(output_dir, rel_path)
@@ -134,7 +134,8 @@ def prepare_dataset(data_dir, output_dir, args):
 				output_path = output_path + f' ({i})'
 
 			# Save samples to .npy file
-			np.save(output_path, augmented_sample.numpy())
+			augmented_samples = torch.cat((augmented_points, augmented_distances.unsqueeze(0).transpose(0, 1)), dim=1)
+			np.save(output_path, augmented_samples)
 			i += 1
 
 		print(f'Processing complete! Dataset saved to:\n{os.path.abspath(args.output_dir)}')
