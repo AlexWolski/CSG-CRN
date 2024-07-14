@@ -21,11 +21,13 @@ class CSG_CRN(nn.Module):
 			predict_blending=self.predict_blending, predict_roundness=self.predict_roundness)
 
 
-	def forward(self, target_input, initial_recon_input):
+	def forward(self, target_input, initial_recon_input=None):
 		# Change input shape from BxNx4 to Bx4xN for PointNet encoder
 		# Where B = Batch Size and N = Number of Points
 		target_input = target_input.permute(0, 2, 1)
-		initial_recon_input = initial_recon_input.permute(0, 2, 1)
+
+		if initial_recon_input:
+			initial_recon_input = initial_recon_input.permute(0, 2, 1)
 
 		features = self.siamese_encoder(target_input, initial_recon_input)
 		outputs = self.regressor_decoder(features)

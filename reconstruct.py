@@ -98,11 +98,13 @@ def run_model(model, input_samples, args):
 		for prim in range(args.num_prims):
 			# Randomly sample initial reconstruction surface to generate input
 			if args.sample_method[0] == 'uniform':
-				(initial_input_points, initial_input_distances) = csg_model.sample_csg_uniform(1, args.num_input_points)
+				initial_input_samples = csg_model.sample_csg_uniform(1, args.num_input_points)
 			else:
-				(initial_input_points, initial_input_distances) = csg_model.sample_csg_surface(1, args.num_input_points, args.sample_dist)
+				initial_input_samples = csg_model.sample_csg_surface(1, args.num_input_points, args.sample_dist)
 
-			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
+			if initial_input_samples is not None:
+				(initial_input_points, initial_input_distances) = initial_input_samples
+				initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
 
 			# Predict next primitive
 			outputs = model(input_samples, initial_input_samples)

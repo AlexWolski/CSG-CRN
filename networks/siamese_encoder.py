@@ -30,10 +30,15 @@ class SiameseEncoder(nn.Module):
 		self.relu = nn.ReLU()
 
 
-	def forward(self, target_input, initial_recon_input):
+	def forward(self, target_input, initial_recon_input=None):
 		# Weights are shared in encoders
 		target_features, _, _ = self.encoder(target_input)
-		initial_recon_features, _, _ = self.encoder(initial_recon_input)
+
+		# If no initial_recon_input is provided, set the output features to a zero tensor
+		if initial_recon_input is not None:
+			initial_recon_features, _, _ = self.encoder(initial_recon_input)
+		else:
+			initial_recon_features = torch.zeros(target_features.size()).to(target_input.device)
 
 		combined_features = torch.cat([target_features, initial_recon_features], dim=1)
 

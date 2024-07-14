@@ -113,6 +113,10 @@ class CSGModel():
 
 	# Sample signed distances from a set of query points
 	def sample_csg(self, query_points):
+		# Return None if there are no csg commands
+		if not self.csg_commands:
+			return None
+
 		(batch_size, num_points, _) = query_points.size()
 
 		# Set initial SDF to a set maximum value instead of float('inf')
@@ -128,6 +132,10 @@ class CSGModel():
 
 	# Sample a given number of signed distances at uniformly distributed points
 	def sample_csg_uniform(self, batch_size, num_points):
+		# Return None if there are no csg commands
+		if not self.csg_commands:
+			return None
+
 		uniform_points = Uniform(-MAX_BOUND, MAX_BOUND).sample((batch_size, num_points, 3)).to(self.device)
 		uniform_distances = self.sample_csg(uniform_points)
 
@@ -136,6 +144,10 @@ class CSGModel():
 
 	# Sample a given number of signed distances at near-surface points
 	def sample_csg_surface(self, batch_size, num_points, sample_dist):
+		# Return None if there are no csg commands
+		if not self.csg_commands:
+			return None
+
 		# Get uniform points
 		num_uniform_points = math.ceil(num_points / sample_dist) * SURFACE_SAMPLE_RATIO
 		(uniform_points, uniform_distances) = self.sample_csg_uniform(batch_size, num_uniform_points)
