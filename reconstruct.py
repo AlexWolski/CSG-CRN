@@ -1,3 +1,4 @@
+import os
 import signal
 import argparse
 import pyrender
@@ -112,6 +113,8 @@ def run_model(model, input_samples, args):
 
 
 def view_sdf(csg_model, num_points, point_size, args):
+	filename = os.path.basename(args.input_file)
+
 	if args.view_sampling[0] == 'uniform':
 		(points, sdf) = csg_model.sample_csg_uniform(1, num_points)
 	else:
@@ -126,7 +129,13 @@ def view_sdf(csg_model, num_points, point_size, args):
 	cloud = pyrender.Mesh.from_points(points, colors=colors)
 	scene = pyrender.Scene()
 	scene.add(cloud)
-	viewer = pyrender.Viewer(scene, use_raymond_lighting=True, point_size=point_size)
+	viewer = pyrender.Viewer(scene,
+		use_raymond_lighting=True,
+		point_size=point_size,
+		show_world_axis=True,
+		viewport_size=(1000,1000),
+		window_title="Reconstruct: " + filename,
+		view_center=[0,0,0])
 
 
 def pretty_print_tensor(message, tensor):

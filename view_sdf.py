@@ -52,7 +52,7 @@ def display_points(points, sdf, filename):
 		point_size=2,
 		show_world_axis=True,
 		viewport_size=(1000,1000),
-		window_title=filename,
+		window_title="View: " + filename,
 		view_center=[0,0,0])
 
 
