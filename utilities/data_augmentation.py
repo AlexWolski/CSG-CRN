@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import random
 import torch
+import math
 from enum import Enum
 from utilities.point_transform import rotate_point_cloud
 from scipy.spatial.transform import Rotation
@@ -135,6 +136,7 @@ def generate_augmented_copies(points, distances, args):
 # Augment a single SDF sample
 def augment_sample(points, distances, args):
 	augmented_points, augmented_distances = points, distances
+	noise_std = math.sqrt(args.noise_variance)
 
 	# Rotate
 	if not args.no_rotation:
@@ -149,8 +151,8 @@ def augment_sample(points, distances, args):
 
 	# Add noise to the points and distances
 	if not args.no_noise:
-		points_noise = torch.randn(points.size(), dtype=points.dtype, device=points.device) * args.noise_std
-		distances_noise = torch.randn(distances.size(), dtype=distances.dtype, device=distances.device) * args.noise_std
+		points_noise = torch.randn(points.size(), dtype=points.dtype, device=points.device) * noise_std
+		distances_noise = torch.randn(distances.size(), dtype=distances.dtype, device=distances.device) * noise_std
 		augmented_points += points_noise
 		augmented_distances += distances_noise
 

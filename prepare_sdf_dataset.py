@@ -1,7 +1,6 @@
 import os
 import glob
 import argparse
-import math
 import numpy as np
 import torch
 import trimesh
@@ -45,7 +44,6 @@ def options():
 
 	# Parse augment settings
 	augment_parser.parse_args(args=remaining_args, namespace=args)
-	args.noise_std = math.sqrt(args.noise_variance)
 
 	return args
 
