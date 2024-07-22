@@ -7,6 +7,13 @@ REGRESSOR_LAYER_SIZE = 256
 # Tune Leaky ReLU slope for predicting negative values
 LEAKY_RELU_NEGATIVE_SLOPE = 0.2
 
+# Default settings for regressor decoder
+DEFAULT_TRANSLATION_SCALE = 1
+DEFAULT_MIN_SCALE = 0.005
+DEFAULT_MAX_SCALE = 1
+DEFAULT_MIN_BLENDING = 0.001
+DEFAULT_MAX_BLENDING = 1
+
 
 # Predict probability distribution for output shape primitive
 class ShapeRegressor(nn.Module):
@@ -148,10 +155,12 @@ class RoundnessRegressor(nn.Module):
 class PrimitiveRegressor(nn.Module):
 	def __init__(self,
 		num_shapes, num_operations,
-		translation_scale=0.6,
-		min_scale=0.005, max_scale=0.5,
+		translation_scale=DEFAULT_TRANSLATION_SCALE,
+		min_scale=DEFAULT_MIN_SCALE,
+		max_scale=DEFAULT_MAX_SCALE,
 		predict_blending=True,
-		min_blending=0.001, max_blending=1,
+		min_blending=DEFAULT_MIN_BLENDING,
+		max_blending=DEFAULT_MAX_BLENDING,
 		predict_roundness=True):
 
 		super(PrimitiveRegressor, self).__init__()
