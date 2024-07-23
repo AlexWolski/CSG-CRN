@@ -375,5 +375,9 @@ if __name__ == '__main__':
 	try:
 		main()
 	except KeyboardInterrupt:
+		print('\nProgram interrupted by keyboard input')
+	except Exception as e:
+		print('\nException occured:\n{}'.format(e))
+	finally:
 		print('\nClearing GPU cache and quitting')
 		torch.cuda.empty_cache()
