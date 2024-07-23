@@ -30,7 +30,7 @@ class CSG_CRN(nn.Module):
 			initial_recon_input = initial_recon_input.permute(0, 2, 1)
 
 		features = self.siamese_encoder(target_input, initial_recon_input)
-		outputs = self.regressor_decoder(features)
+		outputs = self.regressor_decoder(features, initial_recon_input is not None)
 
 		return outputs
 
