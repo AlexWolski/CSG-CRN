@@ -18,7 +18,13 @@ class RotationAxis(Enum):
 	# Make constructor case-insensitive
 	@classmethod
 	def _missing_(self, value):
-		return self(value.upper())
+		validValues = [str(x) for x in list(RotationAxis)]
+		valueUpper = value.upper()
+
+		if valueUpper not in validValues:
+			raise Exception(f"Cannot construct RotationAxis enum with invalid value: '{valueUpper}'\nValid values are: {validValues}")
+
+		return self(valueUpper)
 
 	def __str__(self):
 		return self.value
@@ -40,7 +46,13 @@ class ScaleAxis(Enum):
 	# Make constructor case-insensitive
 	@classmethod
 	def _missing_(self, value):
-		return self(value.upper())
+		validValues = [str(x) for x in list(ScaleAxis)]
+		valueUpper = value.upper()
+
+		if valueUpper not in validValues:
+			raise Exception(f"Cannot construct ScaleAxis enum with invalid value: '{valueUpper}'\nValid values are: {validValues}")
+
+		return self(valueUpper)
 
 	def __str__(self):
 		return self.value
