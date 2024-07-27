@@ -296,9 +296,11 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 		val_loss = validate(model, loss_func, val_loader, args, device)
 		scheduler.step(val_loss)
 
-		print('Training Loss:  ', train_loss)
-		print('Validation Loss:', val_loss)
-		print('Learning Rate:  ', optimizer.param_groups[0]['lr'])
+		print(f"Training Loss:   {train_loss}")
+		print(f"Validation Loss: {val_loss}")
+		print(f"Best Val Loss:   {min_val_loss}")
+		print(f"Learning Rate:   {optimizer.param_groups[0]['lr']}")
+		print(f"Early Stop:      {early_stop_counter}/{args.early_stop_patience}\n")
 
 		# Update learning rate
 		args.init_lr = optimizer.param_groups[0]['lr']
@@ -326,6 +328,7 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 
 			print(f'Checkpoint saved to:')
 			print(checkpoint_path)
+			print()
 
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)
