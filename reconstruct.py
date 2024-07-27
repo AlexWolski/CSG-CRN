@@ -8,6 +8,7 @@ import torch
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
 from losses.reconstruction_loss import ReconstructionLoss
+from view_sdf import display_points
 
 
 # Parse commandline arguments
@@ -15,29 +16,19 @@ def options():
 	parser = argparse.ArgumentParser()
 
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file')
-	parser.add_argument('--input_file', type=str, required=True, help='File containing sample points and SDF values of input shape')
+	parser.add_argument('--input_file', type=str, required=True, help='Numpy file containing sample points and SDF values of input shape')
 	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate')
 	parser.add_argument('--view_sampling', default='near-surface', choices=['uniform', 'near-surface'], nargs=1, help='Visualize uniform SDF samples or samples near recosntruction surface')
 	parser.add_argument('--num_view_points', type=int, default=100000, help='Number of points to visualize the output')
 	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape')
-	parser.add_argument('--device', type=str, default='', help='Select preferred training device')
 
 	args = parser.parse_args()
 	return args
 
 
 # Determine device to train on
-def get_device(device):
-	if device:
-		device = torch.device(device)
-
-	elif torch.cuda.is_available():
-		device = torch.device('cuda')
-
-	else:
-		device = torch.device('cpu')
-
-	return device
+def get_device():
+	return torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu');
 
 
 def load_model(args):
@@ -117,33 +108,17 @@ def run_model(model, input_samples, args):
 
 
 def view_sdf(csg_model, num_points, point_size, args):
-	filename = os.path.basename(args.input_file)
+	window_title = "Reconstruct: " + os.path.basename(args.input_file)
 
 	if args.view_sampling[0] == 'uniform':
 		(points, sdf) = csg_model.sample_csg_uniform(1, num_points)
 	else:
 		(points, sdf) = csg_model.sample_csg_surface(1, num_points, args.sample_dist)
 
-	if not args.show_exterior_points:
-		points = points[sdf <= 0, :]
-		sdf = sdf[sdf <= 0]
-
 	points = points.to(torch.device('cpu'))
 	sdf = sdf.to(torch.device('cpu'))
 
-	colors = np.zeros(points.shape)
-	colors[sdf < 0, 2] = 1
-	colors[sdf > 0, 0] = 1
-	cloud = pyrender.Mesh.from_points(points, colors=colors)
-	scene = pyrender.Scene()
-	scene.add(cloud)
-	viewer = pyrender.Viewer(scene,
-		use_raymond_lighting=True,
-		point_size=point_size,
-		show_world_axis=True,
-		viewport_size=(1000,1000),
-		window_title="Reconstruct: " + filename,
-		view_center=[0,0,0])
+	display_points(points, sdf, window_title, point_size, args.show_exterior_points)
 
 
 def pretty_print_tensor(message, tensor):
@@ -192,7 +167,7 @@ def main():
 	print('')
 
 	# Run model
-	args.device = get_device(args.device)
+	args.device = get_device()
 	model = load_model(args)
 	input_samples = load_input_samples(args)
 	csg_model = run_model(model, input_samples, args)
