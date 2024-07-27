@@ -18,6 +18,7 @@ def options():
 	parser.add_argument('--input_file', type=str, required=True, help='File containing sample points and SDF values of input shape')
 	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate')
 	parser.add_argument('--view_sampling', default='near-surface', choices=['uniform', 'near-surface'], nargs=1, help='Visualize uniform SDF samples or samples near recosntruction surface')
+	parser.add_argument('--num_view_points', type=int, default=100000, help='Number of points to visualize the output')
 	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape')
 	parser.add_argument('--device', type=str, default='', help='Select preferred training device')
 
@@ -203,7 +204,7 @@ def main():
 	print_recon_loss(input_samples, csg_model, args)
 
 	# View reconstruction
-	view_sdf(csg_model, 50000, 2, args)
+	view_sdf(csg_model, args.num_view_points, 2, args)
 
 
 if __name__ == '__main__':

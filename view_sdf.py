@@ -12,7 +12,7 @@ def options():
 	parser = argparse.ArgumentParser()
 
 	parser.add_argument('--npy_file', required=True, type=str, help='Numpy file containing SDF samples')
-	parser.add_argument('--num_points', type=int, default=-1, help='Number of points to display. Set to -1 to display all points')
+	parser.add_argument('--num_view_points', type=int, default=-1, help='Number of points to display. Set to -1 to display all points')
 	parser.add_argument('--exterior_points', default=False, action='store_true', help='View points outside of the object')
 
 	args = parser.parse_args()
@@ -30,8 +30,8 @@ def load_samples(args):
 		interior_sample_rows = np.where(samples[:,3] <= 0)
 		samples = samples[interior_sample_rows]
 
-	if args.num_points > 0:
-		samples = samples[:args.num_points,:]
+	if args.num_view_points > 0:
+		samples = samples[:args.num_view_points,:]
 
 	points = samples[:,:3]
 	sdf = samples[:,3]
