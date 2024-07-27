@@ -18,6 +18,7 @@ def options():
 	parser.add_argument('--input_file', type=str, required=True, help='File containing sample points and SDF values of input shape')
 	parser.add_argument('--num_prims', type=int, required=True, help='Number of primitives to generate')
 	parser.add_argument('--view_sampling', default='near-surface', choices=['uniform', 'near-surface'], nargs=1, help='Visualize uniform SDF samples or samples near recosntruction surface')
+	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape')
 	parser.add_argument('--device', type=str, default='', help='Select preferred training device')
 
 	args = parser.parse_args()
@@ -122,8 +123,12 @@ def view_sdf(csg_model, num_points, point_size, args):
 	else:
 		(points, sdf) = csg_model.sample_csg_surface(1, num_points, args.sample_dist)
 
-	points = points[0].to(torch.device('cpu'))
-	sdf = sdf[0].to(torch.device('cpu'))
+	if not args.show_exterior_points:
+		points = points[sdf <= 0, :]
+		sdf = sdf[sdf <= 0]
+
+	points = points.to(torch.device('cpu'))
+	sdf = sdf.to(torch.device('cpu'))
 
 	colors = np.zeros(points.shape)
 	colors[sdf < 0, 2] = 1
