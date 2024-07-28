@@ -20,7 +20,7 @@ from losses.loss import Loss
 
 
 # Percentage of data to use for training, validation, and testing
-DATA_SPLIT = [0.85, 0.05, 0.1]
+DATA_SPLIT = [0.8, 0.1, 0.1]
 # Weights for regressor functions
 PRIM_LOSS_WEIGHT = 0.01
 SHAPE_LOSS_WEIGHT = 0.01
