@@ -1,3 +1,5 @@
+# Modified from pointnet.pytorch github repository
+# https://github.com/fxia22/pointnet.pytorch
 from __future__ import print_function
 import torch
 import torch.nn as nn
