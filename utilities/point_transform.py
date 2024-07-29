@@ -60,6 +60,21 @@ def translation_to_mat4_batch(translations):
 	return translation_matrix
 
 
+# Converts a Bx3 scale tensor to a Bx4x4 scale matrix tensor
+# Where B = Batch size
+def scale_to_mat4_batch(scales):
+	(batch_size, _) = scales.size()
+
+	# Add a new column of ones to form a Bx4 tensor
+	new_col = torch.ones((batch_size, 1), dtype=torch.float).to(scales.device)
+	scales = torch.cat((scales, new_col), dim=1)
+
+	# Copy the scale tensor to the diagonal of a Bx4x4 tensor 
+	scale_matrix = torch.diag_embed(scales)
+
+	return scale_matrix
+
+
 # Convert a point cloud from a BxNx3 cartesian coordinate system to a BxNx4 homogeneous coordinate system
 def to_homogeneous_batch(point_clouds):
 	(batch_size, rows, cols) = point_clouds.size()
@@ -113,11 +128,27 @@ def rotate_point_cloud(point_cloud, rotation):
 	return rotated_points.squeeze(0)
 
 
+# Scales a BxNx3 point cloud tensor by a Bx3 rotation tensor
+# Where B = Batch size and N = Number of points
+def scale_point_cloud_batch(point_clouds, scales):
+	point_clouds_homo = to_homogeneous_batch(point_clouds)
+	scale_matrices = scale_to_mat4_batch(scales)
+	scaled_points = scale_matrices.matmul(point_clouds_homo)
+	scaled_points = to_cartesian_batch(scaled_points)
+	return scaled_points
+
+
+# Scales an Nx3 point cloud matrix by a scale vector
+def scale_point_cloud(point_cloud, scale):
+	scaled_points = scale_point_cloud_batch(point_cloud.unsqueeze(0), scale.unsqueeze(0))
+	return scaled_points.squeeze(0)
+
+
 # Transforms a BxNx3 point cloud tensor to a given space
 # Where B = Batch size and N = Number of points
 # Target space is defined by a Bx3 translation tensor and a Bx4 quaternion tensor
 # Rotations are quaternions of form [w, x, y, z]
-def transform_point_cloud_batch(point_clouds, translations, rotations):
+def transform_point_cloud_batch(point_clouds, translations, rotations, scales):
 	transformed_points = rotate_point_cloud_batch(point_clouds, rotations)
 	transformed_points = translate_point_cloud_batch(transformed_points, translations)
 	return transformed_points
@@ -125,8 +156,8 @@ def transform_point_cloud_batch(point_clouds, translations, rotations):
 
 # Transforms a Nx3 point cloud tensor to a given space
 # Rotations are quaternions of form [w, x, y, z]
-def transform_point_cloud(point_cloud, translation, rotation):
-	transformed_points = rotate_point_cloud(point_cloud, rotation)
+def transform_point_cloud(point_cloud, translation, rotation, scales):
+	transformed_points = rotate_point_cloud(point_clouds, rotation)
 	transformed_points = translate_point_cloud(transformed_points, translation)
 	return transformed_points
 
@@ -153,6 +184,10 @@ def test():
 		[0.7071068, 0.7071068, 0, 0],
         [0.7325378, 0.4619398, 0.1913417, 0.4619398]])
 
+	batch_scales = torch.FloatTensor([
+		[0.5, 0.5, 0.5],
+		[2, 2, 2]])
+
 	expected_result = torch.FloatTensor([
 		[[1.0, 0.0, 2.0],
          [0.0, 0.0, 3.0],
@@ -162,7 +197,7 @@ def test():
          [2, 3, 3],
          [2.707107, 2.5, 3.5]]])
 
-	actual_result = transform_point_cloud_batch(batch_points, batch_translations, batch_rotations)
+	actual_result = transform_point_cloud_batch(batch_points, batch_translations, batch_rotations, batch_scales)
 
 	print('Points:')
 	print(batch_points)
@@ -174,7 +209,7 @@ def test():
 	print(batch_rotations)
 
 	print('Transformed Batch Points:')
-	print(transform_point_cloud_batch(batch_points, batch_translations, batch_rotations))
+	print(actual_result)
 
 	print('Expected Result:')
 	print(expected_result)
