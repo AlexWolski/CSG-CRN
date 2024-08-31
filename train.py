@@ -164,9 +164,12 @@ def load_data_sets(args, data_split):
 			err_msg = f'{dataset[0]} dataset is empty! Add more data samples'
 			raise Exception(err_msg)
 
+		num_samples = len(dataset[1].indices)
+		num_augment_samples = num_samples * args.augment_copies
+
 		# Check if batch size is larger than dataset size
-		if (not args.keep_last_batch) and (len(dataset[1].indices) < args.batch_size):
-			err_msg = f'{dataset[0]} dataset ({len(dataset[1].indices)}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
+		if not args.keep_last_batch and num_augment_samples < args.batch_size:
+			err_msg = f'{dataset[0]} dataset ({num_augment_samples}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
 			raise Exception(err_msg)
 
 	# Create near-surface sample files
@@ -185,8 +188,9 @@ def load_data_sets(args, data_split):
 
 	train_dataset = PointDataset(train_split, args)
 	val_dataset = PointDataset(val_split, args)
+	test_dataset = PointDataset(test_split, args)
 
-	return (train_dataset, val_dataset)
+	return (train_dataset, val_dataset, test_dataset)
 
 
 # Load CSG-CRN network model
@@ -349,9 +353,10 @@ def main():
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
-	(train_dataset, val_dataset) = load_data_sets(args, DATA_SPLIT)
+	(train_dataset, val_dataset, test_dataset) = load_data_sets(args, DATA_SPLIT)
 	train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
 	val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
+	test_dataset = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
 
 	# Save settings to file
 	settings_path = os.path.join(args.output_dir, 'settings.yml')

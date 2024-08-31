@@ -11,11 +11,12 @@ class PointDataset(Dataset):
 		self.args = args
 
 	def __len__(self):
-		return len(self.file_rel_paths)
+		return len(self.file_rel_paths) * self.args.augment_copies
 
 	def __getitem__(self, idx):
 		# Load all points and distances from sdf sample file
-		file_rel_path = self.file_rel_paths[idx]
+		index = idx % self.args.augment_copies
+		file_rel_path = self.file_rel_paths[index]
 		sample_path = os.path.join(self.args.data_dir, file_rel_path)
 		sdf_sample = np.load(sample_path).astype(np.float32)
 		sdf_sample = torch.from_numpy(sdf_sample)
