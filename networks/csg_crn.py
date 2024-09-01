@@ -26,7 +26,7 @@ class CSG_CRN(nn.Module):
 		# Where B = Batch Size and N = Number of Points
 		target_input = target_input.permute(0, 2, 1)
 
-		if initial_recon_input:
+		if initial_recon_input is not None:
 			initial_recon_input = initial_recon_input.permute(0, 2, 1)
 
 		features = self.siamese_encoder(target_input, initial_recon_input)
