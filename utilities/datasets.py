@@ -8,14 +8,16 @@ from utilities.data_augmentation import augment_sample
 class PointDataset(Dataset):
 	def __init__(self, file_rel_paths, args):
 		self.file_rel_paths = file_rel_paths
+		self.raw_copies = len(file_rel_paths)
+		self.augmented_copies = len(file_rel_paths) * args.augment_copies
 		self.args = args
 
 	def __len__(self):
-		return len(self.file_rel_paths) * self.args.augment_copies
+		return self.augmented_copies
 
 	def __getitem__(self, idx):
 		# Load all points and distances from sdf sample file
-		index = idx % self.args.augment_copies
+		index = idx % self.raw_copies
 		file_rel_path = self.file_rel_paths[index]
 		sample_path = os.path.join(self.args.data_dir, file_rel_path)
 		sdf_sample = np.load(sample_path).astype(np.float32)
