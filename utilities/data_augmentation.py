@@ -22,7 +22,7 @@ class RotationAxis(Enum):
 		valueUpper = value.upper()
 
 		if valueUpper not in validValues:
-			raise Exception(f"Cannot construct RotationAxis enum with invalid value: '{valueUpper}'\nValid values are: {validValues}")
+			raise ValueError()
 
 		return self(valueUpper)
 

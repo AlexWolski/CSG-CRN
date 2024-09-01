@@ -2,6 +2,7 @@ import os
 import argparse
 import yaml
 import torch
+import traceback
 import signal
 import sys
 from tqdm import tqdm
@@ -384,8 +385,6 @@ if __name__ == '__main__':
 		main()
 	except KeyboardInterrupt:
 		print('\nProgram interrupted by keyboard input')
-	except Exception as e:
-		print('\nException occured:\n{}'.format(e))
 	finally:
 		print('\nClearing GPU cache and quitting')
 		torch.cuda.empty_cache()
