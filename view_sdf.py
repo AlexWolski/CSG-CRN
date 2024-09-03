@@ -5,34 +5,25 @@ import trimesh
 import pyrender
 import numpy as np
 import tkinter
-from tkinter.constants import LEFT
+from pathlib import Path
+
 
 LEFT_KEY = 65361
 RIGHT_KEY = 65363
 
+
 class SdfViewer(pyrender.Viewer):
 	def __init__(self, input_file, num_view_points, point_size, show_exterior_points):
-		self.input_file = input_file
 		self.num_view_points = num_view_points
-		self.point_size = point_size
-		self.input_file = input_file
+		self.show_exterior_points = show_exterior_points
+		self.mesh_node = pyrender.Node()
 
-		(points, sdf) = self.load_samples(input_file, num_view_points)
-		print(f'Point samples: {points.shape[0]}')
-		window_title = "View: " + os.path.basename(input_file)
+		self.set_file(input_file)
+		self.load_file_names(input_file)
 
-		if not show_exterior_points:
-			points = points[sdf <= 0, :]
-			sdf = sdf[sdf <= 0]
-
-		colors = np.zeros(points.shape)
-		colors[sdf < 0, 2] = 1
-		colors[sdf > 0, 0] = 1
-		cloud = pyrender.Mesh.from_points(points, colors=colors)
 		scene = pyrender.Scene()
-		self.mesh = cloud
-		self.mesh_node = pyrender.Node(mesh=cloud)
 		scene.add_node(self.mesh_node)
+		window_title = "View: " + os.path.basename(input_file)
 
 		super(SdfViewer, self).__init__(
 			scene,
@@ -44,11 +35,29 @@ class SdfViewer(pyrender.Viewer):
 			view_center=[0,0,0])
 
 
-	def load_samples(self, input_file, num_view_points):
+	def set_file(self, input_file):
+		self.input_file = input_file
+
+		(points, sdf) = self.load_samples(input_file)
+		print(f'Point samples: {points.shape[0]}')
+
+		if not self.show_exterior_points:
+			points = points[sdf <= 0, :]
+			sdf = sdf[sdf <= 0]
+
+		colors = np.zeros(points.shape)
+		colors[sdf < 0, 2] = 1
+		colors[sdf > 0, 0] = 1
+		cloud = pyrender.Mesh.from_points(points, colors=colors)
+		self.mesh = cloud
+		self.mesh_node.mesh = cloud
+
+
+	def load_samples(self, input_file):
 		samples = np.load(input_file).astype(np.float32)
 
-		if num_view_points > 0:
-			samples = samples[:num_view_points,:]
+		if self.num_view_points > 0:
+			samples = samples[:self.num_view_points,:]
 
 		points = samples[:,:3]
 		sdf = samples[:,3]
@@ -56,13 +65,52 @@ class SdfViewer(pyrender.Viewer):
 		return (points, sdf)
 
 
+	def load_file_names(self, input_file):
+		self.file_list = []
+
+		input_file_path = Path(input_file)
+		input_file_name = input_file_path.name
+		self.parent_dir = input_file_path.parent.absolute()
+		index = 0
+
+		for file in os.listdir(self.parent_dir):
+			if file.endswith(".npy"):
+				if file == input_file_name:
+					self.file_index = index
+
+				self.file_list.append(file)
+				index += 1
+
+
+	def load_next_file(self):
+		self.file_index += 1
+
+		if self.file_index > len(self.file_list):
+			self.file_index = 0;
+
+		file_name = self.file_list[self.file_index]
+		file_path = self.parent_dir.joinpath(file_name)
+
+		self.set_file(file_path)
+
+
+	def load_prev_file(self):
+		self.file_index -= 1
+
+		if self.file_index < 0:
+			self.file_index = len(self.file_list) - 1;
+
+		file_name = self.file_list[self.file_index]
+		file_path = self.parent_dir.joinpath(file_name)
+
+		self.set_file(file_path)
+
+
 	def on_key_press(self, key, modifiers):
 		if key == LEFT_KEY:
-			print('left Key Pressed')
-			self.mesh_node.mesh = pyrender.Mesh.from_points(np.array([1, 2, 3]))
+			self.load_next_file()
 		if key == RIGHT_KEY:
-			print('right Key Pressed')
-			self.mesh_node.mesh = self.mesh
+			self.load_prev_file()
 
 		super(SdfViewer, self).on_key_press(key, modifiers)
 
