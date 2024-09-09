@@ -112,7 +112,7 @@ def translate_point_cloud(point_cloud, translation):
 	return transformed_points.squeeze(0)
 
 
-# Rotates a BxNx3 point cloud tensor by a Bx4 rotation tensor
+# Rotates a BxNx3 point cloud tensor by a Bx4 rotation tensor of from [[w, x, y, z]]
 # Where B = Batch size and N = Number of points
 def rotate_point_cloud_batch(point_clouds, rotations):
 	point_clouds_homo = to_homogeneous_batch(point_clouds)
@@ -122,7 +122,7 @@ def rotate_point_cloud_batch(point_clouds, rotations):
 	return rotated_points
 
 
-# Rotates an Nx3 point cloud matrix by a rotation vector
+# Rotates an Nx3 point cloud matrix by a quaternion vector of form [w, x, y, z]
 def rotate_point_cloud(point_cloud, rotation):
 	rotated_points = rotate_point_cloud_batch(point_cloud.unsqueeze(0), rotation.unsqueeze(0))
 	return rotated_points.squeeze(0)
@@ -169,20 +169,20 @@ def test():
 
 	batch_points = torch.FloatTensor([
 		[[1.0, 0.0, 0.0],
-         [0.0, 1.0, 0.0],
-         [0.0, 0.0, 1.0]],
+		 [0.0, 1.0, 0.0],
+		 [0.0, 0.0, 1.0]],
 
-        [[1.0, 0.0, 0.0],
-         [1.0, 1.0, 0.0],
-         [1.0, 1.0, 1.0]]])
+		[[1.0, 0.0, 0.0],
+		 [1.0, 1.0, 0.0],
+		 [1.0, 1.0, 1.0]]])
 
 	batch_translations = torch.FloatTensor([
 		[0, 0, 2],
-        [2, 2, 2]])
+		[2, 2, 2]])
 
 	batch_rotations = torch.FloatTensor([
 		[0.7071068, 0.7071068, 0, 0],
-        [0.7325378, 0.4619398, 0.1913417, 0.4619398]])
+		[0.7325378, 0.4619398, 0.1913417, 0.4619398]])
 
 	batch_scales = torch.FloatTensor([
 		[0.5, 0.5, 0.5],
@@ -190,12 +190,12 @@ def test():
 
 	expected_result = torch.FloatTensor([
 		[[1.0, 0.0, 2.0],
-         [0.0, 0.0, 3.0],
-         [0.0, -1.0, 2.0]],
+		 [0.0, 0.0, 3.0],
+		 [0.0, -1.0, 2.0]],
 
-        [[2.5, 2.853553, 2.146447],
-         [2, 3, 3],
-         [2.707107, 2.5, 3.5]]])
+		[[2.5, 2.853553, 2.146447],
+		 [2, 3, 3],
+		 [2.707107, 2.5, 3.5]]])
 
 	actual_result = transform_point_cloud_batch(batch_points, batch_translations, batch_rotations, batch_scales)
 
@@ -219,5 +219,39 @@ def test():
 	else:
 		print('Matrices do not match')
 
+
+	points = torch.FloatTensor([
+		[1.0, 0.0, 0.0],
+		[0.0, 1.0, 0.0],
+		[0.0, 0.0, 1.0]])
+
+	rotation = torch.FloatTensor(
+		[0, 0, 0, 1])
+
+	expected_result = torch.FloatTensor([
+		[-1.0, 0.0, 0.0],
+		[0.0, -1.0, 0.0],
+		[0.0, 0.0, 1.0]])
+
+	actual_result = rotate_point_cloud(points, rotation)
+
+	print('\n')
+	print('Points:')
+	print(points)
+
+	print('Rotation:')
+	print(rotation)
+	
+	print('Transformed Batch Points:')
+	print(actual_result)
+	
+	print('Expected Result:')
+	print(expected_result)
+
+	if torch.allclose(expected_result, actual_result, rtol=1e-03, atol=1e-03):
+		print('Matrices match')
+	else:
+		print('Matrices do not match')
+
 if __name__ == "__main__":
-    test()
+	test()
