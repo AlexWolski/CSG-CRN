@@ -84,9 +84,9 @@ def get_augment_parser(group_name='AUGMENT SETTINGS'):
 	return parser
 
 
-# Convert a SciPy Rotation object to a quaternion PyTorch tensor
+# Convert a SciPy Rotation object to a quaternion PyTorch tensor of format [w, x, y, z]
 def rotation_to_quat_tensor(rotation):
-	return torch.from_numpy(rotation.as_quat().astype(np.float32))
+	return torch.from_numpy(rotation.as_quat(scalar_first=True).astype(np.float32))
 
 
 # Generate a random rotation quaternion
