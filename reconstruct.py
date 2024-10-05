@@ -166,7 +166,7 @@ def main():
 
 	# View reconstruction
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
-	SdfModelViewer(csg_model, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, args.show_exterior_points)
+	SdfModelViewer(csg_model, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, args.show_exterior_points, "Reconstructed SDF")
 
 
 if __name__ == '__main__':

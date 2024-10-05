@@ -61,9 +61,7 @@ class _SdfViewer(pyrender.Viewer):
 
 
 class SdfFileViewer(_SdfViewer):
-	def __init__(self, input_file, num_view_points, point_size, show_exterior_points):
-		window_title = "View: " + os.path.basename(input_file)
-
+	def __init__(self, input_file, num_view_points, point_size, show_exterior_points, window_title):
 		self.num_view_points = num_view_points
 		self.load_file_names(input_file)
 		(points, sdf) = self.load_file(input_file)
@@ -139,9 +137,7 @@ class SdfFileViewer(_SdfViewer):
 
 
 class SdfModelViewer(_SdfViewer):
-	def __init__(self, csg_model, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points):
-		window_title = "Reconstruct: "
-
+	def __init__(self, csg_model, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points, window_title):
 		self.csg_model = csg_model
 		self.num_view_points = num_view_points
 		self.sample_dist = sample_dist
@@ -183,7 +179,7 @@ def options():
 def main():
 	args = options()
 	print('')
-	viewer = SdfFileViewer(args.input_file, args.num_view_points, 2, args.show_exterior_points);
+	viewer = SdfFileViewer(args.input_file, args.num_view_points, 2, args.show_exterior_points, "View SDF");
 
 
 if __name__ == '__main__':
