@@ -1,6 +1,7 @@
 import os
 import argparse
 import numpy as np
+import torch
 import trimesh
 import pyrender
 import numpy as np
@@ -39,11 +40,11 @@ class _SdfViewer(pyrender.Viewer):
 		super(_SdfViewer, self).on_key_press(key, modifiers)
 
 
-	def load_prev():
+	def load_prev(self):
 		raise NotImplementedError("Implement method in inheriting class")
 
 
-	def load_next():
+	def load_next(self):
 		raise NotImplementedError("Implement method in inheriting class")
 
 
@@ -135,6 +136,36 @@ class SdfFileViewer(_SdfViewer):
 		file_path = self.parent_dir.joinpath(file_name)
 
 		self.set_points(*self.load_file(file_path))
+
+
+class SdfModelViewer(_SdfViewer):
+	def __init__(self, csg_model, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points):
+		window_title = "Reconstruct: "
+
+		self.csg_model = csg_model
+		self.num_view_points = num_view_points
+		self.sample_dist = sample_dist
+		self.view_sampling = view_sampling
+		self.num_view_points = num_view_points
+		(points, sdf) = self.sampleCsg()
+
+		super(SdfModelViewer, self).__init__(
+			points,
+			sdf,
+			window_title,
+			point_size,
+			show_exterior_points)
+
+
+	def sampleCsg(self):
+		if self.view_sampling == 'uniform':
+			(points, sdf) = self.csg_model.sample_csg_uniform(1, self.num_view_points)
+		else:
+			(points, sdf) = self.csg_model.sample_csg_surface(1, self.num_view_points, self.sample_dist)
+
+		points = points.to(torch.device('cpu')).squeeze(0)
+		sdf = sdf.to(torch.device('cpu')).squeeze(0)
+		return (points, sdf)
 
 
 # Parse commandline arguments

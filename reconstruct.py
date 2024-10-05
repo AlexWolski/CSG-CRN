@@ -8,7 +8,7 @@ import torch
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
 from losses.reconstruction_loss import ReconstructionLoss
-from view_sdf import display_points
+from view_sdf import SdfModelViewer
 
 
 # Parse commandline arguments
@@ -107,20 +107,6 @@ def run_model(model, input_samples, args):
 	return csg_model
 
 
-def view_sdf(csg_model, num_points, point_size, args):
-	window_title = "Reconstruct: " + os.path.basename(args.input_file)
-
-	if args.view_sampling[0] == 'uniform':
-		(points, sdf) = csg_model.sample_csg_uniform(1, num_points)
-	else:
-		(points, sdf) = csg_model.sample_csg_surface(1, num_points, args.sample_dist)
-
-	points = points.to(torch.device('cpu'))
-	sdf = sdf.to(torch.device('cpu'))
-
-	display_points(points, sdf, window_title, point_size, args.show_exterior_points)
-
-
 def pretty_print_tensor(message, tensor):
 	print(message, end='')
 
@@ -179,7 +165,8 @@ def main():
 	print_recon_loss(input_samples, csg_model, args)
 
 	# View reconstruction
-	view_sdf(csg_model, args.num_view_points, 2, args)
+	window_title = "Reconstruct: " + os.path.basename(args.input_file)
+	SdfModelViewer(csg_model, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, args.show_exterior_points)
 
 
 if __name__ == '__main__':
