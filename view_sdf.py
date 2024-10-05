@@ -1,4 +1,3 @@
-import os
 import argparse
 import numpy as np
 import torch
@@ -6,7 +5,7 @@ import trimesh
 import pyrender
 import numpy as np
 import tkinter
-from pathlib import Path
+from utilities.file_loader import FileLoader
 
 
 class _SdfViewer(pyrender.Viewer):
@@ -33,18 +32,18 @@ class _SdfViewer(pyrender.Viewer):
 
 	def on_key_press(self, key, modifiers):
 		if key == self.LEFT_KEY:
-			self.load_prev()
+			self.view_prev()
 		if key == self.RIGHT_KEY:
-			self.load_next()
+			self.view_next()
 
 		super(_SdfViewer, self).on_key_press(key, modifiers)
 
 
-	def load_prev(self):
+	def view_prev(self):
 		raise NotImplementedError("Implement method in inheriting class")
 
 
-	def load_next(self):
+	def view_next(self):
 		raise NotImplementedError("Implement method in inheriting class")
 
 
@@ -63,7 +62,7 @@ class _SdfViewer(pyrender.Viewer):
 class SdfFileViewer(_SdfViewer):
 	def __init__(self, input_file, num_view_points, point_size, show_exterior_points, window_title):
 		self.num_view_points = num_view_points
-		self.load_file_names(input_file)
+		self.file_loader = FileLoader(input_file)
 		(points, sdf) = self.load_file(input_file)
 
 		super(SdfFileViewer, self).__init__(
@@ -95,44 +94,13 @@ class SdfFileViewer(_SdfViewer):
 		return (points, sdf)
 
 
-	def load_file_names(self, input_file):
-		self.file_list = []
-
-		input_file_path = Path(input_file)
-		input_file_name = input_file_path.name
-		self.parent_dir = input_file_path.parent.absolute()
-		index = 0
-
-		for file in os.listdir(self.parent_dir):
-			if file.endswith(".npy"):
-				if file == input_file_name:
-					self.file_index = index
-
-				self.file_list.append(file)
-				index += 1
-
-
-	def load_prev(self):
-		self.file_index -= 1
-
-		if self.file_index < 0:
-			self.file_index = len(self.file_list) - 1;
-
-		file_name = self.file_list[self.file_index]
-		file_path = self.parent_dir.joinpath(file_name)
-
+	def view_prev(self):
+		file_path = self.file_loader.prev_file()
 		self.set_points(*self.load_file(file_path))
 
 
-	def load_next(self):
-		self.file_index += 1
-
-		if self.file_index >= len(self.file_list):
-			self.file_index = 0;
-
-		file_name = self.file_list[self.file_index]
-		file_path = self.parent_dir.joinpath(file_name)
-
+	def view_next(self):
+		file_path = self.file_loader.next_file()
 		self.set_points(*self.load_file(file_path))
 
 
