@@ -8,24 +8,19 @@ import tkinter
 from pathlib import Path
 
 
-LEFT_KEY = 65361
-RIGHT_KEY = 65363
+class _SdfViewer(pyrender.Viewer):
+	LEFT_KEY = 65361
+	RIGHT_KEY = 65363
 
-
-class SdfViewer(pyrender.Viewer):
-	def __init__(self, input_file, num_view_points, point_size, show_exterior_points):
-		self.num_view_points = num_view_points
+	def __init__(self, points, sdf, window_title, point_size, show_exterior_points):
 		self.show_exterior_points = show_exterior_points
 		self.mesh_node = pyrender.Node()
-
-		self.set_file(input_file)
-		self.load_file_names(input_file)
+		self.set_points(points, sdf)
 
 		scene = pyrender.Scene()
 		scene.add_node(self.mesh_node)
-		window_title = "View: " + os.path.basename(input_file)
 
-		super(SdfViewer, self).__init__(
+		super(_SdfViewer, self).__init__(
 			scene,
 			use_raymond_lighting=True,
 			point_size=point_size,
@@ -35,12 +30,24 @@ class SdfViewer(pyrender.Viewer):
 			view_center=[0,0,0])
 
 
-	def set_file(self, input_file):
-		self.input_file = input_file
+	def on_key_press(self, key, modifiers):
+		if key == self.LEFT_KEY:
+			self.load_prev()
+		if key == self.RIGHT_KEY:
+			self.load_next()
 
-		(points, sdf) = self.load_samples(input_file)
-		print(f'Point samples: {points.shape[0]}')
+		super(_SdfViewer, self).on_key_press(key, modifiers)
 
+
+	def load_prev():
+		raise NotImplementedError("Implement method in inheriting class")
+
+
+	def load_next():
+		raise NotImplementedError("Implement method in inheriting class")
+
+
+	def set_points(self, points, sdf):
 		if not self.show_exterior_points:
 			points = points[sdf <= 0, :]
 			sdf = sdf[sdf <= 0]
@@ -50,6 +57,31 @@ class SdfViewer(pyrender.Viewer):
 		colors[sdf > 0, 0] = 1
 		cloud = pyrender.Mesh.from_points(points, colors=colors)
 		self.mesh_node.mesh = cloud
+
+
+class SdfFileViewer(_SdfViewer):
+	def __init__(self, input_file, num_view_points, point_size, show_exterior_points):
+		window_title = "View: " + os.path.basename(input_file)
+
+		self.num_view_points = num_view_points
+		self.load_file_names(input_file)
+		(points, sdf) = self.load_file(input_file)
+
+		super(SdfFileViewer, self).__init__(
+			points,
+			sdf,
+			window_title,
+			point_size,
+			show_exterior_points)
+
+
+	def load_file(self, input_file):
+		self.input_file = input_file
+
+		(points, sdf) = self.load_samples(input_file)
+		print(f'Point samples: {points.shape[0]}')
+
+		return (points, sdf);
 
 
 	def load_samples(self, input_file):
@@ -81,19 +113,7 @@ class SdfViewer(pyrender.Viewer):
 				index += 1
 
 
-	def load_next_file(self):
-		self.file_index += 1
-
-		if self.file_index >= len(self.file_list):
-			self.file_index = 0;
-
-		file_name = self.file_list[self.file_index]
-		file_path = self.parent_dir.joinpath(file_name)
-
-		self.set_file(file_path)
-
-
-	def load_prev_file(self):
+	def load_prev(self):
 		self.file_index -= 1
 
 		if self.file_index < 0:
@@ -102,16 +122,19 @@ class SdfViewer(pyrender.Viewer):
 		file_name = self.file_list[self.file_index]
 		file_path = self.parent_dir.joinpath(file_name)
 
-		self.set_file(file_path)
+		self.set_points(*self.load_file(file_path))
 
 
-	def on_key_press(self, key, modifiers):
-		if key == LEFT_KEY:
-			self.load_prev_file()
-		if key == RIGHT_KEY:
-			self.load_next_file()
+	def load_next(self):
+		self.file_index += 1
 
-		super(SdfViewer, self).on_key_press(key, modifiers)
+		if self.file_index >= len(self.file_list):
+			self.file_index = 0;
+
+		file_name = self.file_list[self.file_index]
+		file_path = self.parent_dir.joinpath(file_name)
+
+		self.set_points(*self.load_file(file_path))
 
 
 # Parse commandline arguments
@@ -129,7 +152,7 @@ def options():
 def main():
 	args = options()
 	print('')
-	viewer = SdfViewer(args.input_file, args.num_view_points, 2, args.show_exterior_points);
+	viewer = SdfFileViewer(args.input_file, args.num_view_points, 2, args.show_exterior_points);
 
 
 if __name__ == '__main__':
