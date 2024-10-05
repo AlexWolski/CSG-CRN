@@ -49,7 +49,6 @@ class SdfViewer(pyrender.Viewer):
 		colors[sdf < 0, 2] = 1
 		colors[sdf > 0, 0] = 1
 		cloud = pyrender.Mesh.from_points(points, colors=colors)
-		self.mesh = cloud
 		self.mesh_node.mesh = cloud
 
 
@@ -85,7 +84,7 @@ class SdfViewer(pyrender.Viewer):
 	def load_next_file(self):
 		self.file_index += 1
 
-		if self.file_index > len(self.file_list):
+		if self.file_index >= len(self.file_list):
 			self.file_index = 0;
 
 		file_name = self.file_list[self.file_index]
@@ -108,9 +107,9 @@ class SdfViewer(pyrender.Viewer):
 
 	def on_key_press(self, key, modifiers):
 		if key == LEFT_KEY:
-			self.load_next_file()
-		if key == RIGHT_KEY:
 			self.load_prev_file()
+		if key == RIGHT_KEY:
+			self.load_next_file()
 
 		super(SdfViewer, self).on_key_press(key, modifiers)
 
