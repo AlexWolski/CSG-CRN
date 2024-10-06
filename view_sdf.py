@@ -6,6 +6,7 @@ import pyrender
 import numpy as np
 import tkinter
 from utilities.file_loader import FileLoader
+from utilities.csg_model import add_sdf
 
 
 class _SdfViewer(pyrender.Viewer):
@@ -59,6 +60,18 @@ class _SdfViewer(pyrender.Viewer):
 		self.mesh_node.mesh = cloud
 
 
+	def load_samples(input_file, num_view_points):
+		samples = np.load(input_file).astype(np.float32)
+
+		if num_view_points > 0:
+			samples = samples[:num_view_points,:]
+
+		points = samples[:,:3]
+		sdf = samples[:,3]
+
+		return (points, sdf)
+
+
 class SdfFileViewer(_SdfViewer):
 	def __init__(self, input_file, num_view_points, point_size, show_exterior_points, window_title):
 		self.num_view_points = num_view_points
@@ -76,22 +89,10 @@ class SdfFileViewer(_SdfViewer):
 	def load_file(self, input_file):
 		self.input_file = input_file
 
-		(points, sdf) = self.load_samples(input_file)
+		(points, sdf) = _SdfViewer.load_samples(input_file, self.num_view_points)
 		print(f'Point samples: {points.shape[0]}')
 
 		return (points, sdf);
-
-
-	def load_samples(self, input_file):
-		samples = np.load(input_file).astype(np.float32)
-
-		if self.num_view_points > 0:
-			samples = samples[:self.num_view_points,:]
-
-		points = samples[:,:3]
-		sdf = samples[:,3]
-
-		return (points, sdf)
 
 
 	def view_prev(self):
@@ -105,14 +106,16 @@ class SdfFileViewer(_SdfViewer):
 
 
 class SdfModelViewer(_SdfViewer):
-	def __init__(self, csg_model, input_file, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points, window_title,  get_csg_model=None):
+	def __init__(self, csg_model, input_file, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points, show_diff, window_title, get_csg_model=None):
+		self.csg_model = csg_model
 		self.num_view_points = num_view_points
 		self.sample_dist = sample_dist
 		self.view_sampling = view_sampling
 		self.num_view_points = num_view_points
+		self.show_diff = show_diff
 		self.get_csg_model = get_csg_model
 		self.file_loader = FileLoader(input_file)
-		(points, sdf) = self.sampleCsg(csg_model)
+		(points, sdf) = _SdfViewer.load_samples(input_file, self.num_view_points)
 
 		super(SdfModelViewer, self).__init__(
 			points,
@@ -122,31 +125,52 @@ class SdfModelViewer(_SdfViewer):
 			show_exterior_points)
 
 
-	def sampleCsg(self, csg_model):
-		if self.view_sampling == 'uniform':
-			(points, sdf) = csg_model.sample_csg_uniform(1, self.num_view_points)
-		else:
-			(points, sdf) = csg_model.sample_csg_surface(1, self.num_view_points, self.sample_dist)
+	def set_points(self, points, sample_sdf):
+		# Convert numpy arrays to torch tensors
+		sample_sdf = torch.from_numpy(sample_sdf).to(self.csg_model.device)
 
-		points = points.to(torch.device('cpu')).squeeze(0)
-		sdf = sdf.to(torch.device('cpu')).squeeze(0)
-		return (points, sdf)
+		# Get distances from sample points to csg model
+		torch_points = torch.from_numpy(points).to(self.csg_model.device)
+		csg_sdf = self.csg_model.sample_csg(torch_points.unsqueeze(0)).squeeze(0)
+
+		# Union of original shape and reconstruction
+		combined_sdf = add_sdf(sample_sdf, csg_sdf, None).squeeze(0)
+
+		# Convert to numpy again
+		sample_sdf = sample_sdf.cpu().numpy()
+		csg_sdf = csg_sdf.cpu().numpy()
+		combined_sdf = combined_sdf.cpu().numpy()
+
+		# Remove exterior points
+		points = points[combined_sdf <= 0, :]
+		sample_sdf = sample_sdf[combined_sdf <= 0]
+		csg_sdf = csg_sdf[combined_sdf <= 0]
+
+		# Original shape is red, reconstruction is blue, and the intersection is purple
+		colors = np.zeros(points.shape)
+		colors[sample_sdf < 0, 0] = 1
+		colors[csg_sdf < 0, 2] = 1
+
+		cloud = pyrender.Mesh.from_points(points, colors=colors)
+		self.mesh_node.mesh = cloud
 
 
 	def view_prev(self):
 		if self.get_csg_model == None:
 			return
 
-		csg_model = self.get_csg_model(self.file_loader.prev_file())
-		self.set_points(*self.sampleCsg(csg_model))
+		input_file = self.file_loader.prev_file()
+		self.csg_model = self.get_csg_model(input_file)
+		self.set_points(*_SdfViewer.load_samples(input_file, self.num_view_points))
 
 
 	def view_next(self):
 		if self.get_csg_model == None:
 			return
 
-		csg_model = self.get_csg_model(self.file_loader.next_file())
-		self.set_points(*self.sampleCsg(csg_model))
+		input_file = self.file_loader.next_file()
+		self.csg_model = self.get_csg_model(input_file)
+		self.set_points(*_SdfViewer.load_samples(input_file, self.num_view_points))
 
 
 # Parse commandline arguments

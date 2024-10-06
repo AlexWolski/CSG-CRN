@@ -173,7 +173,7 @@ def main():
 	# View reconstruction
 	get_csg_model = lambda input_file: construct_csg_model(model, input_file, args)
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
-	SdfModelViewer(csg_model, args.input_file, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, args.show_exterior_points, "Reconstructed SDF", get_csg_model)
+	SdfModelViewer(csg_model, args.input_file, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, False, True, "Reconstructed SDF", get_csg_model)
 
 
 if __name__ == '__main__':
