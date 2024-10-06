@@ -171,11 +171,9 @@ def main():
 	csg_model = construct_csg_model(model, args.input_file, args)
 
 	# View reconstruction
-	file_loader = FileLoader(args.input_file)
-	get_prev_csg_model = lambda: construct_csg_model(model, file_loader.prev_file(), args)
-	get_next_csg_model = lambda: construct_csg_model(model, file_loader.next_file(), args)
+	get_csg_model = lambda input_file: construct_csg_model(model, input_file, args)
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
-	SdfModelViewer(csg_model, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, args.show_exterior_points, "Reconstructed SDF", get_prev_csg_model, get_next_csg_model)
+	SdfModelViewer(csg_model, args.input_file, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, args.show_exterior_points, "Reconstructed SDF", get_csg_model)
 
 
 if __name__ == '__main__':

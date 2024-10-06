@@ -105,13 +105,13 @@ class SdfFileViewer(_SdfViewer):
 
 
 class SdfModelViewer(_SdfViewer):
-	def __init__(self, csg_model, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points, window_title,  get_prev_csg_model=None, get_next_csg_model=None):
+	def __init__(self, csg_model, input_file, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points, window_title,  get_csg_model=None):
 		self.num_view_points = num_view_points
 		self.sample_dist = sample_dist
 		self.view_sampling = view_sampling
 		self.num_view_points = num_view_points
-		self.get_prev_csg_model = get_prev_csg_model
-		self.get_next_csg_model = get_next_csg_model
+		self.get_csg_model = get_csg_model
+		self.file_loader = FileLoader(input_file)
 		(points, sdf) = self.sampleCsg(csg_model)
 
 		super(SdfModelViewer, self).__init__(
@@ -134,18 +134,18 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def view_prev(self):
-		if self.get_prev_csg_model == None:
+		if self.get_csg_model == None:
 			return
 
-		csg_model = self.get_prev_csg_model()
+		csg_model = self.get_csg_model(self.file_loader.prev_file())
 		self.set_points(*self.sampleCsg(csg_model))
 
 
 	def view_next(self):
-		if self.get_next_csg_model == None:
+		if self.get_csg_model == None:
 			return
 
-		csg_model = self.get_next_csg_model()
+		csg_model = self.get_csg_model(self.file_loader.next_file())
 		self.set_points(*self.sampleCsg(csg_model))
 
 
