@@ -4,7 +4,7 @@ import random
 import torch
 import math
 from enum import Enum
-from utilities.point_transform import rotate_point_cloud
+from utilities.point_transform import rotate_point_cloud, scale_point_cloud
 from scipy.spatial.transform import Rotation
 
 
@@ -116,7 +116,7 @@ def random_scale(args):
 	# Generate a random value for each axis
 	if scale_axis == ScaleAxis('ALL'):
 		scale_vec = [random.uniform(args.min_scale, args.max_scale) for i in range(3)]
-		return scale_vec
+		return torch.FloatTensor(scale_vec)
 
 	# Select an axis to scale
 	if scale_axis == ScaleAxis('RANDOM'):
@@ -127,7 +127,7 @@ def random_scale(args):
 	scale_vec = [random.uniform(args.min_scale, args.max_scale)
 				if scale_axis == axes[i] else 1.0 for i in range(3)]
 
-	return scale_vec
+	return torch.FloatTensor(scale_vec)
 
 
 # Generate a list of augmented copies
@@ -158,8 +158,7 @@ def augment_sample(points, distances, args):
 	# Scale
 	if not args.no_scale:
 		scale_vec = random_scale(args)
-		# TODO: Implement scaling
-		# augmented_points = scale_point_cloud(augmented_points, scale_vec)
+		augmented_points = scale_point_cloud(augmented_points, scale_vec)
 
 	# Add noise to the points and distances
 	if not args.no_noise:
