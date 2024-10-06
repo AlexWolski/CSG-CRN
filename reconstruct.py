@@ -9,6 +9,7 @@ from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
+from utilities.file_loader import FileLoader
 
 
 # Parse commandline arguments
@@ -56,9 +57,9 @@ def load_model(args):
 
 
 # Randomly sample input points
-def load_input_samples(args):
+def load_input_samples(input_file, args):
 	# Load all points from file
-	points = np.load(args.input_file).astype(np.float32)
+	points = np.load(input_file).astype(np.float32)
 
 	# Select near-surface points if needed
 	if args.sample_method[0] == 'near-surface':
@@ -148,6 +149,18 @@ def print_recon_loss(input_samples, csg_model, args):
 	print(recon_loss.forward(input_sdf, csg_sdf))
 
 
+def construct_csg_model(model, input_file, args):
+	input_samples = load_input_samples(input_file, args)
+	csg_model = run_model(model, input_samples, args)
+
+	# Pretty print csg commands
+	print_csg_commands(csg_model)
+	# Print reconstruction loss
+	print_recon_loss(input_samples, csg_model, args)
+
+	return csg_model
+
+
 def main():
 	args = options()
 	print('')
@@ -155,18 +168,14 @@ def main():
 	# Run model
 	args.device = get_device()
 	model = load_model(args)
-	input_samples = load_input_samples(args)
-	csg_model = run_model(model, input_samples, args)
-
-	# Pretty print csg commands
-	print_csg_commands(csg_model)
-
-	# Print reconstruction loss
-	print_recon_loss(input_samples, csg_model, args)
+	csg_model = construct_csg_model(model, args.input_file, args)
 
 	# View reconstruction
+	file_loader = FileLoader(args.input_file)
+	get_prev_csg_model = lambda: construct_csg_model(model, file_loader.prev_file(), args)
+	get_next_csg_model = lambda: construct_csg_model(model, file_loader.next_file(), args)
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
-	SdfModelViewer(csg_model, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, args.show_exterior_points, "Reconstructed SDF")
+	SdfModelViewer(csg_model, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, args.show_exterior_points, "Reconstructed SDF", get_prev_csg_model, get_next_csg_model)
 
 
 if __name__ == '__main__':

@@ -105,13 +105,14 @@ class SdfFileViewer(_SdfViewer):
 
 
 class SdfModelViewer(_SdfViewer):
-	def __init__(self, csg_model, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points, window_title):
-		self.csg_model = csg_model
+	def __init__(self, csg_model, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points, window_title,  get_prev_csg_model=None, get_next_csg_model=None):
 		self.num_view_points = num_view_points
 		self.sample_dist = sample_dist
 		self.view_sampling = view_sampling
 		self.num_view_points = num_view_points
-		(points, sdf) = self.sampleCsg()
+		self.get_prev_csg_model = get_prev_csg_model
+		self.get_next_csg_model = get_next_csg_model
+		(points, sdf) = self.sampleCsg(csg_model)
 
 		super(SdfModelViewer, self).__init__(
 			points,
@@ -121,15 +122,31 @@ class SdfModelViewer(_SdfViewer):
 			show_exterior_points)
 
 
-	def sampleCsg(self):
+	def sampleCsg(self, csg_model):
 		if self.view_sampling == 'uniform':
-			(points, sdf) = self.csg_model.sample_csg_uniform(1, self.num_view_points)
+			(points, sdf) = csg_model.sample_csg_uniform(1, self.num_view_points)
 		else:
-			(points, sdf) = self.csg_model.sample_csg_surface(1, self.num_view_points, self.sample_dist)
+			(points, sdf) = csg_model.sample_csg_surface(1, self.num_view_points, self.sample_dist)
 
 		points = points.to(torch.device('cpu')).squeeze(0)
 		sdf = sdf.to(torch.device('cpu')).squeeze(0)
 		return (points, sdf)
+
+
+	def view_prev(self):
+		if self.get_prev_csg_model == None:
+			return
+
+		csg_model = self.get_prev_csg_model()
+		self.set_points(*self.sampleCsg(csg_model))
+
+
+	def view_next(self):
+		if self.get_next_csg_model == None:
+			return
+
+		csg_model = self.get_next_csg_model()
+		self.set_points(*self.sampleCsg(csg_model))
 
 
 # Parse commandline arguments
