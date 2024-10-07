@@ -128,6 +128,7 @@ def get_model_parser():
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_patience', type=int, default=10, help='Number of training epochs without improvement before the learning rate is adjusted')
+	training_group.add_argument('--lr_threshold', type=float, default=0.05, help='Percentage of improvement required to reset the learning rate patience')
 	training_group.add_argument('--early_stop_patience', type=int, default=20, help='Number of training epochs without improvement before training terminates')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
@@ -303,8 +304,9 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 
 		print(f"Training Loss:   {train_loss}")
 		print(f"Validation Loss: {val_loss}")
-		print(f"Best Val Loss:   {min_val_loss}")
+		print(f"Best Val Loss:   {scheduler.best}")
 		print(f"Learning Rate:   {optimizer.param_groups[0]['lr']}")
+		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
 		print(f"Early Stop:      {early_stop_counter}/{args.early_stop_patience}\n")
 
 		# Update learning rate
@@ -350,7 +352,7 @@ def main():
 	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args, device)
 	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
 	optimizer = Adam(model.parameters(), lr=args.init_lr)
-	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.lr_patience)
+	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
