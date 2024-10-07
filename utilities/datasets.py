@@ -6,9 +6,10 @@ from utilities.data_augmentation import augment_sample
 
 
 class PointDataset(Dataset):
-	def __init__(self, file_rel_paths, args):
+	def __init__(self, file_rel_paths, device, args):
 		self.file_rel_paths = file_rel_paths
 		self.raw_copies = len(file_rel_paths)
+		self.device = device
 		self.augmented_copies = len(file_rel_paths) * args.augment_copies
 		self.args = args
 
@@ -22,6 +23,9 @@ class PointDataset(Dataset):
 		sample_path = os.path.join(self.args.data_dir, file_rel_path)
 		sdf_sample = np.load(sample_path).astype(np.float32)
 		sdf_sample = torch.from_numpy(sdf_sample)
+
+		# Send all data to training device
+		sdf_sample = sdf_sample.to(self.device)
 
 		# Randomly select the needed number of input and loss samples from the file
 		total_points = self.args.num_input_points + self.args.num_loss_points

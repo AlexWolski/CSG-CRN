@@ -152,19 +152,19 @@ def augment_sample(points, distances, args):
 
 	# Rotate
 	if not args.no_rotation:
-		rotation_quat = random_rotation(args)
+		rotation_quat = random_rotation(args).to(augmented_points.device)
 		augmented_points = rotate_point_cloud(augmented_points, rotation_quat)
 
 	# Scale
 	if not args.no_scale:
-		scale_vec = random_scale(args)
+		scale_vec = random_scale(args).to(augmented_points.device)
 		augmented_points = scale_point_cloud(augmented_points, scale_vec)
 
 	# Add noise to the points and distances
 	if not args.no_noise:
 		points_noise = torch.randn(points.size(), dtype=points.dtype, device=points.device) * noise_std
 		distances_noise = torch.randn(distances.size(), dtype=distances.dtype, device=distances.device) * noise_std
-		augmented_points += points_noise
-		augmented_distances += distances_noise
+		augmented_points += points_noise.to(augmented_points.device)
+		augmented_distances += distances_noise.to(augmented_distances.device)
 
 	return (augmented_points, augmented_distances)

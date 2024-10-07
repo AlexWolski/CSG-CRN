@@ -153,7 +153,7 @@ def get_device(device):
 
 
 # Prepare data files and load training dataset
-def load_data_sets(args, data_split):
+def load_data_sets(args, data_split, device):
 	# Load sample files
 	file_rel_paths = get_data_files(args.data_dir)
 	print('Found %i data files' % len(file_rel_paths))
@@ -190,9 +190,9 @@ def load_data_sets(args, data_split):
 	print(f'Validation set:\t{len(val_split.indices)} samples')
 	print(f'Testing set:\t{len(test_split.indices)} samples')
 
-	train_dataset = PointDataset(train_split, args)
-	val_dataset = PointDataset(val_split, args)
-	test_dataset = PointDataset(test_split, args)
+	train_dataset = PointDataset(train_split, device, args)
+	val_dataset = PointDataset(val_split, device, args)
+	test_dataset = PointDataset(test_split, device, args)
 
 	return (train_dataset, val_dataset, test_dataset)
 
@@ -220,11 +220,6 @@ def model_forward(model, loss_func, target_input_samples, target_all_samples, ar
 
 	# Initialize SDF CSG model
 	csg_model = CSGModel(device)
-
-	# Send all data to training device
-	target_all_points = target_all_points.to(device)
-	target_all_distances = target_all_distances.to(device)
-	target_input_samples = target_input_samples.to(device)
 
 	# Sample initial reconstruction for loss function
 	initial_loss_distances = csg_model.sample_csg(target_all_points)
@@ -346,10 +341,10 @@ def main():
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
-	(train_dataset, val_dataset, test_dataset) = load_data_sets(args, DATA_SPLIT)
-	train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
-	val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
-	test_dataset = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last= not args.keep_last_batch)
+	(train_dataset, val_dataset, test_dataset) = load_data_sets(args, DATA_SPLIT, device)
+	train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last= not args.keep_last_batch)
+	val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, drop_last= not args.keep_last_batch)
+	test_dataset = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, drop_last= not args.keep_last_batch)
 
 	# Save settings to file
 	settings_path = os.path.join(args.output_dir, 'settings.yml')
