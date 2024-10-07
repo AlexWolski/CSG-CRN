@@ -23,26 +23,23 @@ class PointDataset(Dataset):
 		sdf_sample = np.load(sample_path).astype(np.float32)
 		sdf_sample = torch.from_numpy(sdf_sample)
 
-		# Augment sample
+		# Randomly select the needed number of input and loss samples from the file
+		total_points = self.args.num_input_points + self.args.num_loss_points
+		replace = (sdf_sample.shape[0] < total_points)
+		select_rows = np.random.choice(sdf_sample.shape[0], total_points, replace=replace)
+		select_samples = sdf_sample[select_rows]
+
+		# Augment samples
 		if self.args.augment_data:
-			points = sdf_sample[:,:3]
-			distances = sdf_sample[:,3]
+			points = select_samples[:,:3]
+			distances = select_samples[:,3]
 			distances = distances.unsqueeze(0).transpose(0, 1)
 
 			augmented_points, augmented_distances = augment_sample(points, distances, self.args)
+			select_samples = torch.cat((augmented_points, augmented_distances), dim=1)
 
-			sdf_sample = torch.cat((augmented_points, augmented_distances), dim=1)
-
-		# Randomly select indices for needed number of input surface samples
-		replace = (sdf_sample.shape[0] < self.args.num_input_points)
-		select_input_rows = np.random.choice(sdf_sample.shape[0], self.args.num_input_points, replace=replace)
-
-		# Randomly select indices for needed number of loss surface samples
-		replace = (sdf_sample.shape[0] < self.args.num_loss_points)
-		select_loss_rows = np.random.choice(sdf_sample.shape[0], self.args.num_loss_points, replace=replace)
-
-		# Index the sdf tensor to get input and loss tensors
-		select_input_samples = sdf_sample[select_input_rows]
-		select_loss_samples = sdf_sample[select_loss_rows]
+		# Separate input and loss samples
+		select_input_samples = select_samples[:self.args.num_input_points]
+		select_loss_samples = select_samples[self.args.num_input_points:]
 
 		return (select_input_samples, select_loss_samples)
