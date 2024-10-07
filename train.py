@@ -14,6 +14,7 @@ from torch.optim import Adam, lr_scheduler
 from utilities.data_processing import *
 from utilities.datasets import PointDataset
 from utilities.data_augmentation import get_augment_parser
+from utilities.early_stopping import EarlyStopping
 
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
@@ -128,8 +129,9 @@ def get_model_parser():
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_patience', type=int, default=10, help='Number of training epochs without improvement before the learning rate is adjusted')
-	training_group.add_argument('--lr_threshold', type=float, default=0.05, help='Percentage of improvement required to reset the learning rate patience')
+	training_group.add_argument('--lr_threshold', type=float, default=0.05, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--early_stop_patience', type=int, default=20, help='Number of training epochs without improvement before training terminates')
+	training_group.add_argument('--early_stop_threshold', type=float, default=0.05, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
 
@@ -291,8 +293,10 @@ def validate(model, loss_func, val_loader, args, device):
 def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args, device):
 	model.train(True)
 
-	early_stop_counter = 0
-	min_val_loss = float('inf')
+	# Initialize early stopper
+	trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
+	save_best_model = lambda _: torch.save({'model': model.state_dict(), 'args': args}, trained_model_path)
+	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
 	# Train until model stops improving or a maximum number of epochs is reached
 	for epoch in range(args.max_epochs):
@@ -301,41 +305,27 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 		train_loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, device, desc)
 		val_loss = validate(model, loss_func, val_loader, args, device)
 		scheduler.step(val_loss)
+		early_stopping(val_loss, model)
 
 		print(f"Training Loss:   {train_loss}")
 		print(f"Validation Loss: {val_loss}")
 		print(f"Best Val Loss:   {scheduler.best}")
 		print(f"Learning Rate:   {optimizer.param_groups[0]['lr']}")
 		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
-		print(f"Early Stop:      {early_stop_counter}/{args.early_stop_patience}\n")
+		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
 
 		# Update learning rate
 		args.init_lr = optimizer.param_groups[0]['lr']
 
-		# Check for loss improvement
-		if val_loss < min_val_loss:
-			min_val_loss = val_loss
-			early_stop_counter = 0
-
-			# Save current best model
-			trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
-			torch.save({'model': model.state_dict(), 'args': args}, trained_model_path)
-		else:
-			early_stop_counter += 1
-			
 		# Check for early stopping
-		if early_stop_counter > args.early_stop_patience:
+		if early_stopping.early_stop:
 			print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
 			break
 
 		# Save checkpoint parameters
 		if (epoch+1) % args.checkpoint_freq == 0:
 			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch+1}.pt')
-			torch.save({'model': model.state_dict(), 'args': args}, checkpoint_path)
-
-			print(f'Checkpoint saved to:')
-			print(checkpoint_path)
-			print()
+			print(f'Checkpoint saved to: {checkpoint_path}\n')
 
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)
