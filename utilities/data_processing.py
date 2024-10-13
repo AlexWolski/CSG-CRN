@@ -1,6 +1,7 @@
 import os
 import glob
 import numpy as np
+from tqdm import tqdm
 
 
 # Create output directory for trained model and temporary files
@@ -58,7 +59,7 @@ def save_list(file_path, list):
 def uniform_to_surface_data(args, uniform_rel_paths):
 	surface_sample_dir = os.path.join(args.output_dir, 'near_surface_samples')
 
-	for uniform_rel_path in uniform_rel_paths:
+	for uniform_rel_path in tqdm(uniform_rel_paths):
 		# Select points for which the distance to the surface is within the threshold
 		uniform_path = os.path.join(args.data_dir, uniform_rel_path)
 		uniform_samples = np.load(uniform_path)

@@ -178,8 +178,9 @@ def load_data_sets(args, data_split, device):
 
 	# Create near-surface sample files
 	if args.sample_method[0] == 'near-surface':
-		print('Selecting near-surface points...')
+		print('Pre-processing data samples:')
 		args.data_dir = uniform_to_surface_data(args, file_rel_paths)
+		print()
 
 	# Save dataset lists
 	save_list(os.path.join(args.output_dir, 'train.txt'), train_split)
