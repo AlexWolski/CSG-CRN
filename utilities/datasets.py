@@ -19,6 +19,7 @@ class PointDataset(Dataset):
 	def __getitem__(self, idx):
 		# Load all points and distances from sdf sample file
 		index = idx % self.raw_copies
+		total_points = self.args.num_input_points + self.args.num_loss_points
 		file_rel_path = self.file_rel_paths[index]
 		sample_path = os.path.join(self.args.data_dir, file_rel_path)
 		sdf_sample = np.load(sample_path).astype(np.float32)
@@ -28,10 +29,13 @@ class PointDataset(Dataset):
 		sdf_sample = sdf_sample.to(self.device)
 
 		# Randomly select the needed number of input and loss samples from the file
-		total_points = self.args.num_input_points + self.args.num_loss_points
-		replace = (sdf_sample.shape[0] < total_points)
-		select_rows = np.random.choice(sdf_sample.shape[0], total_points, replace=replace)
-		select_samples = sdf_sample[select_rows]
+		if sdf_sample.shape[0] != total_points():
+			replace = (sdf_sample.shape[0] < total_points)
+			select_rows = np.random.choice(sdf_sample.shape[0], total_points, replace=replace)
+			select_samples = sdf_sample[select_rows]
+
+		# Shuffle the data samples
+		select_samples = select_samples[torch.randperm(total_points)]
 
 		# Augment samples
 		if self.args.augment_data:
