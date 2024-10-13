@@ -128,6 +128,7 @@ def get_model_parser():
 	training_group.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
+	training_group.add_argument('--lr_factor', type=float, default=0.1, help='Learning rate reduction factor')
 	training_group.add_argument('--lr_patience', type=int, default=10, help='Number of training epochs without improvement before the learning rate is adjusted')
 	training_group.add_argument('--lr_threshold', type=float, default=0.05, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--early_stop_patience', type=int, default=20, help='Number of training epochs without improvement before training terminates')
@@ -337,7 +338,7 @@ def main():
 	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args, device)
 	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
 	optimizer = Adam(model.parameters(), lr=args.init_lr)
-	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
+	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
