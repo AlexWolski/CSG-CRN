@@ -28,26 +28,20 @@ class PointDataset(Dataset):
 		# Send all data to training device
 		sdf_sample = sdf_sample.to(self.device)
 
-		# Randomly select the needed number of input and loss samples from the file
-		if sdf_sample.shape[0] != total_points():
-			replace = (sdf_sample.shape[0] < total_points)
-			select_rows = np.random.choice(sdf_sample.shape[0], total_points, replace=replace)
-			select_samples = sdf_sample[select_rows]
-
 		# Shuffle the data samples
-		select_samples = select_samples[torch.randperm(total_points)]
+		sdf_sample = sdf_sample[torch.randperm(total_points)]
 
 		# Augment samples
 		if self.args.augment_data:
-			points = select_samples[:,:3]
-			distances = select_samples[:,3]
+			points = sdf_sample[:,:3]
+			distances = sdf_sample[:,3]
 			distances = distances.unsqueeze(0).transpose(0, 1)
 
 			augmented_points, augmented_distances = augment_sample(points, distances, self.args)
-			select_samples = torch.cat((augmented_points, augmented_distances), dim=1)
+			sdf_sample = torch.cat((augmented_points, augmented_distances), dim=1)
 
 		# Separate input and loss samples
-		select_input_samples = select_samples[:self.args.num_input_points]
-		select_loss_samples = select_samples[self.args.num_input_points:]
+		select_input_samples = sdf_sample[:self.args.num_input_points]
+		select_loss_samples = sdf_sample[self.args.num_input_points:]
 
 		return (select_input_samples, select_loss_samples)

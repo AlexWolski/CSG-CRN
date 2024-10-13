@@ -176,11 +176,10 @@ def load_data_sets(args, data_split, device):
 			err_msg = f'{dataset[0]} dataset ({num_augment_samples}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
 			raise Exception(err_msg)
 
-	# Create near-surface sample files
-	if args.sample_method[0] == 'near-surface':
-		print('Pre-processing data samples:')
-		args.data_dir = uniform_to_surface_data(args, file_rel_paths)
-		print()
+	# Select near-surface samples and consolidate sample length
+	print('Pre-processing data samples:')
+	(skipped_samples, args.data_dir) = pre_process_data(args, file_rel_paths)
+	print(f'Skipped {skipped_samples} samples that had too few points\n')
 
 	# Save dataset lists
 	save_list(os.path.join(args.output_dir, 'train.txt'), train_split)

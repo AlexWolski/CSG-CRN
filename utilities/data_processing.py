@@ -55,20 +55,40 @@ def save_list(file_path, list):
 			f.write(f"{item}\n")
 
 
-# Find and save all near-surface point samples
-def uniform_to_surface_data(args, uniform_rel_paths):
-	surface_sample_dir = os.path.join(args.output_dir, 'near_surface_samples')
+# Select points within a threshold distance of the surface
+def select_surface_points(samples, sample_dist):
+	surface_sample_rows = np.where(abs(samples[:,3]) <= sample_dist)
+	return samples[surface_sample_rows]
 
-	for uniform_rel_path in tqdm(uniform_rel_paths):
-		# Select points for which the distance to the surface is within the threshold
-		uniform_path = os.path.join(args.data_dir, uniform_rel_path)
-		uniform_samples = np.load(uniform_path)
-		surface_sample_rows = np.where(abs(uniform_samples[:,3]) <= args.sample_dist)
-		surface_samples = uniform_samples[surface_sample_rows]
 
-		# Save selected near-surface points
-		surface_path = os.path.join(surface_sample_dir, uniform_rel_path)
-		os.makedirs(os.path.dirname(surface_path), exist_ok=True)
-		np.save(surface_path, surface_samples)
+# Select near-surface point samples and consolidate sample length
+def pre_process_data(args, processed_rel_paths):
+	pre_processed_dir = os.path.join(args.output_dir, 'pre_processed_samples')
+	total_points = args.num_input_points + args.num_loss_points
+	skipped_samples = 0
 
-	return surface_sample_dir
+	# Pre-process all data files
+	for processed_rel_path in tqdm(processed_rel_paths):
+		processed_path = os.path.join(args.data_dir, processed_rel_path)
+		data_samples = np.load(processed_path)
+
+		# Select near-surface points
+		if args.sample_method[0] == 'near-surface':
+			data_samples = select_surface_points(data_samples, args.sample_dist)
+
+		# Skip samples that don't contain enough points
+		if data_samples.shape[0] < total_points:
+			skipped_samples += 1
+			continue
+
+		# Randomly select the required number of points
+		if data_samples.shape[0] > total_points:
+			select_rows = np.random.choice(data_samples.shape[0], total_points, replace=False)
+			data_samples = data_samples[select_rows]
+
+		# Save processed data
+		processed_path = os.path.join(pre_processed_dir, processed_rel_path)
+		os.makedirs(os.path.dirname(processed_path), exist_ok=True)
+		np.save(processed_path, data_samples)
+
+	return (skipped_samples, pre_processed_dir)
