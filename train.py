@@ -213,10 +213,10 @@ def load_model(num_shapes, num_operations, args, device):
 	return model
 
 # Run a forwards pass of the network model
-def model_forward(model, loss_func, target_input_samples, target_all_samples, args, device):
+def model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device):
 	# Load data
-	target_all_points = target_all_samples[..., :3]
-	target_all_distances = target_all_samples[..., 3]
+	target_all_points = target_loss_samples[..., :3]
+	target_loss_distances = target_loss_samples[..., 3]
 	(batch_size, num_input_points, _) = target_input_samples.size()
 
 	# Initialize SDF CSG model
@@ -250,7 +250,7 @@ def model_forward(model, loss_func, target_input_samples, target_all_samples, ar
 	operation_weights = torch.cat([x['operation weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
 
 	# Compute loss
-	loss = loss_func(target_all_distances, refined_loss_distances, shapes_weights, operation_weights)
+	loss = loss_func(target_loss_distances, refined_loss_distances, shapes_weights, operation_weights)
 
 	return loss
 
@@ -259,9 +259,9 @@ def model_forward(model, loss_func, target_input_samples, target_all_samples, ar
 def train_one_epoch(model, loss_func, optimizer, train_loader, args, device, desc=''):
 	total_train_loss = 0
 
-	for (target_input_samples, target_all_samples) in tqdm(train_loader, desc=desc):
+	for (target_input_samples, target_loss_samples) in tqdm(train_loader, desc=desc):
 		# Forward pass
-		batch_loss = model_forward(model, loss_func, target_input_samples, target_all_samples, args, device)
+		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device)
 		total_train_loss += batch_loss.item()
 
 		# Back propagate
@@ -277,8 +277,8 @@ def validate(model, loss_func, val_loader, args, device):
 	total_val_loss = 0
 
 	with torch.no_grad():
-		for (target_input_samples, target_all_samples) in val_loader:
-			batch_loss = model_forward(model, loss_func, target_input_samples, target_all_samples, args, device)
+		for (target_input_samples, target_loss_samples) in val_loader:
+			batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device)
 			total_val_loss += batch_loss.item()
 
 	total_val_loss /= val_loader.__len__()
