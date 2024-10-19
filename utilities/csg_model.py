@@ -139,7 +139,7 @@ class CSGModel():
 		uniform_points = Uniform(-MAX_BOUND, MAX_BOUND).sample((batch_size, num_points, 3)).to(self.device)
 		uniform_distances = self.sample_csg(uniform_points)
 
-		return (uniform_points, uniform_distances)
+		return (uniform_points.detach(), uniform_distances.detach())
 
 
 	# Sample a given number of signed distances at near-surface points
@@ -188,7 +188,7 @@ class CSGModel():
 		uniform_points = uniform_points.view(batch_size, num_points, 3)
 		uniform_distances = uniform_distances.view(batch_size, num_points)
 
-		return (uniform_points, uniform_distances)
+		return (uniform_points.detach(), uniform_distances.detach())
 
 
 # Test SDFs
