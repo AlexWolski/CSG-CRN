@@ -2,7 +2,7 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from utilities.data_augmentation import augment_sample
+from utilities.data_augmentation import augment_sample_batch
 
 
 class PointDataset(Dataset):
@@ -27,19 +27,19 @@ class PointDataset(Dataset):
 			sample_path = os.path.join(self.args.data_dir, file_rel_path)
 			sdf_sample = np.load(sample_path).astype(np.float32)
 			sdf_sample = torch.from_numpy(sdf_sample).to(self.device)
-
-			# Augment samples
-			if self.args.augment_data:
-				points = sdf_sample[:,:3]
-				distances = sdf_sample[:,3]
-				distances = distances.unsqueeze(0).transpose(0, 1)
-
-				augmented_points, augmented_distances = augment_sample(points, distances, self.args)
-				sdf_sample = torch.cat((augmented_points, augmented_distances), dim=1)
-
 			sdf_samples_list.append(sdf_sample)
 
+		# Combine loaded samples into batch
 		batch_sdf_samples = torch.stack(sdf_samples_list, dim=0)
+
+		# Augment samples
+		if self.args.augment_data:
+			batch_sdf_points = batch_sdf_samples[:,:,:3]
+			batch_sdf_distances = batch_sdf_samples[:,:,3]
+			batch_sdf_distances = batch_sdf_distances.unsqueeze(2)
+
+			augmented_points, augmented_distances = augment_sample_batch(batch_sdf_points, batch_sdf_distances, self.args)
+			batch_sdf_samples = torch.cat((augmented_points, augmented_distances), dim=2)
 
 		# Shuffle the data samples
 		batch_sdf_samples = batch_sdf_samples[:, torch.randperm(total_points)]

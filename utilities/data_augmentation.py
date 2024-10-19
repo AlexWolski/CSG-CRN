@@ -4,7 +4,7 @@ import random
 import torch
 import math
 from enum import Enum
-from utilities.point_transform import rotate_point_cloud, scale_point_cloud
+from utilities.point_transform import rotate_point_cloud, rotate_point_cloud_batch, scale_point_cloud, scale_point_cloud_batch
 from scipy.spatial.transform import Rotation
 
 
@@ -109,6 +109,12 @@ def random_rotation(args):
 	return random_rot
 
 
+# Generate a random rotation quaternion
+def random_rotation_batch(args):
+	rotation_list = [random_rotation(args) for i in range(args.batch_size)]
+	return torch.stack(rotation_list, dim=0)
+
+
 # Generate a random scale vector
 def random_scale(args):
 	scale_axis = args.scale_axis
@@ -128,6 +134,12 @@ def random_scale(args):
 				if scale_axis == axes[i] else 1.0 for i in range(3)]
 
 	return torch.FloatTensor(scale_vec)
+
+
+# Generate a random scale vector
+def random_scale_batch(args):
+	scale_list = [random_scale(args) for i in range(args.batch_size)]
+	return torch.stack(scale_list, dim=0)
 
 
 # Generate a list of augmented copies
@@ -164,6 +176,31 @@ def augment_sample(points, distances, args):
 	if not args.no_noise:
 		points_noise = torch.randn(points.size(), dtype=points.dtype, device=points.device) * noise_std
 		distances_noise = torch.randn(distances.size(), dtype=distances.dtype, device=distances.device) * noise_std
+		augmented_points += points_noise.to(augmented_points.device)
+		augmented_distances += distances_noise.to(augmented_distances.device)
+
+	return (augmented_points, augmented_distances)
+
+
+# Augment a single SDF sample
+def augment_sample_batch(batch_points, batch_distances, args):
+	augmented_points, augmented_distances = batch_points, batch_distances
+	noise_std = math.sqrt(args.noise_variance)
+
+	# Rotate
+	if not args.no_rotation:
+		rotation_quat = random_rotation_batch(args).to(augmented_points.device)
+		augmented_points = rotate_point_cloud_batch(augmented_points, rotation_quat)
+
+	# Scale
+	if not args.no_scale:
+		scale_vec = random_scale_batch(args).to(augmented_points.device)
+		augmented_points = scale_point_cloud_batch(augmented_points, scale_vec)
+
+	# Add noise to the points and distances
+	if not args.no_noise:
+		points_noise = torch.randn(batch_points.size(), dtype=batch_points.dtype, device=batch_points.device) * noise_std
+		distances_noise = torch.randn(batch_distances.size(), dtype=batch_distances.dtype, device=batch_distances.device) * noise_std
 		augmented_points += points_noise.to(augmented_points.device)
 		augmented_distances += distances_noise.to(augmented_distances.device)
 
