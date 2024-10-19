@@ -16,32 +16,36 @@ class PointDataset(Dataset):
 	def __len__(self):
 		return self.augmented_copies
 
-	def __getitem__(self, idx):
-		# Load all points and distances from sdf sample file
-		index = idx % self.raw_copies
-		total_points = self.args.num_input_points + self.args.num_loss_points
-		file_rel_path = self.file_rel_paths[index]
-		sample_path = os.path.join(self.args.data_dir, file_rel_path)
-		sdf_sample = np.load(sample_path).astype(np.float32)
-		sdf_sample = torch.from_numpy(sdf_sample)
+	def __getitem__(self, batch_idx):
+		sdf_samples_list = []
 
-		# Send all data to training device
-		sdf_sample = sdf_sample.to(self.device)
+		# Load all points and distances from sdf sample file
+		for idx in batch_idx:
+			index = idx % self.raw_copies
+			total_points = self.args.num_input_points + self.args.num_loss_points
+			file_rel_path = self.file_rel_paths[index]
+			sample_path = os.path.join(self.args.data_dir, file_rel_path)
+			sdf_sample = np.load(sample_path).astype(np.float32)
+			sdf_sample = torch.from_numpy(sdf_sample).to(self.device)
+
+			# Augment samples
+			if self.args.augment_data:
+				points = sdf_sample[:,:3]
+				distances = sdf_sample[:,3]
+				distances = distances.unsqueeze(0).transpose(0, 1)
+
+				augmented_points, augmented_distances = augment_sample(points, distances, self.args)
+				sdf_sample = torch.cat((augmented_points, augmented_distances), dim=1)
+
+			sdf_samples_list.append(sdf_sample)
+
+		batch_sdf_samples = torch.stack(sdf_samples_list, dim=0)
 
 		# Shuffle the data samples
-		sdf_sample = sdf_sample[torch.randperm(total_points)]
-
-		# Augment samples
-		if self.args.augment_data:
-			points = sdf_sample[:,:3]
-			distances = sdf_sample[:,3]
-			distances = distances.unsqueeze(0).transpose(0, 1)
-
-			augmented_points, augmented_distances = augment_sample(points, distances, self.args)
-			sdf_sample = torch.cat((augmented_points, augmented_distances), dim=1)
+		batch_sdf_samples = batch_sdf_samples[:, torch.randperm(total_points)]
 
 		# Separate input and loss samples
-		select_input_samples = sdf_sample[:self.args.num_input_points]
-		select_loss_samples = sdf_sample[self.args.num_input_points:]
+		batch_select_input_samples = batch_sdf_samples[:,:self.args.num_input_points]
+		batch_select_loss_samples = batch_sdf_samples[:,self.args.num_input_points:]
 
-		return (select_input_samples, select_loss_samples)
+		return (batch_select_input_samples.detach(), batch_select_loss_samples.detach())

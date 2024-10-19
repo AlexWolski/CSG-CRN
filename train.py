@@ -8,6 +8,7 @@ import sys
 from tqdm import tqdm
 
 from torch.utils.data import DataLoader
+from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.distributions.uniform import Uniform
 from torch.optim import Adam, lr_scheduler
 
@@ -212,6 +213,7 @@ def load_model(num_shapes, num_operations, args, device):
 
 	return model
 
+
 # Run a forwards pass of the network model
 def model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device):
 	# Load data
@@ -260,6 +262,9 @@ def train_one_epoch(model, loss_func, optimizer, train_loader, args, device, des
 	total_train_loss = 0
 
 	for (target_input_samples, target_loss_samples) in tqdm(train_loader, desc=desc):
+		target_input_samples = target_input_samples.squeeze(0)
+		target_loss_samples = target_loss_samples.squeeze(0)
+
 		# Forward pass
 		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device)
 		total_train_loss += batch_loss.item()
@@ -278,6 +283,9 @@ def validate(model, loss_func, val_loader, args, device):
 
 	with torch.no_grad():
 		for (target_input_samples, target_loss_samples) in val_loader:
+			target_input_samples = target_input_samples.squeeze(0)
+			target_loss_samples = target_loss_samples.squeeze(0)
+
 			batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device)
 			total_val_loss += batch_loss.item()
 
@@ -343,9 +351,14 @@ def main():
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
 	(train_dataset, val_dataset, test_dataset) = load_data_sets(args, DATA_SPLIT, device)
-	train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last= not args.keep_last_batch)
-	val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, drop_last= not args.keep_last_batch)
-	test_dataset = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, drop_last= not args.keep_last_batch)
+
+	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
+	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=False)
+	test_sampler = BatchSampler(RandomSampler(test_dataset), batch_size=args.batch_size, drop_last=False)
+
+	train_loader = DataLoader(train_dataset, sampler=train_sampler)
+	val_loader = DataLoader(val_dataset, sampler=val_sampler)
+	test_dataset = DataLoader(test_dataset, sampler=test_sampler)
 
 	# Save settings to file
 	settings_path = os.path.join(args.output_dir, 'settings.yml')
