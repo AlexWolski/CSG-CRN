@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 
 
+# Defines the layers number and count for the siamese encoder
+LAYER_SIZES = [1024, 512, 512, 256]
+
+
 # Encode two inputs with a weight-sharing siamese encoder and learn combined feature vector
 class SiameseEncoder(nn.Module):
 	def __init__(self, encoder, encoder_feature_size, no_batch_norm=False):
@@ -9,25 +13,22 @@ class SiameseEncoder(nn.Module):
 		self.encoder = encoder
 		self.encoder_feature_size = encoder_feature_size
 
+		self.relu = nn.ReLU()
+		self.fc_list = nn.ModuleList()
+		self.bn_list = nn.ModuleList()
+		self.num_layers = len(LAYER_SIZES)
+
+		# Initialize layers
 		# Contrastive encoder inspired by PCRNet
 		# https://arxiv.org/abs/1908.07906
-		self.fc1 = nn.Linear(encoder_feature_size*2, 1024)
-		self.fc2 = nn.Linear(1024, 512)
-		self.fc3 = nn.Linear(512, 512)
-		self.fc4 = nn.Linear(512, 256)
+		for i in range(self.num_layers):
+			initial_layer_size = encoder_feature_size*2
+			prev_layer_size = LAYER_SIZES[i-1] if i > 0 else initial_layer_size
+			curr_layer_size = LAYER_SIZES[i]
+			batch_norm_layer = nn.Identity() if no_batch_norm else nn.BatchNorm1d(curr_layer_size)
 
-		if no_batch_norm:
-			self.bn1 = nn.Identity()
-			self.bn2 = nn.Identity()
-			self.bn3 = nn.Identity()
-			self.bn4 = nn.Identity()
-		else:
-			self.bn1 = nn.BatchNorm1d(1024)
-			self.bn2 = nn.BatchNorm1d(512)
-			self.bn3 = nn.BatchNorm1d(512)
-			self.bn4 = nn.BatchNorm1d(256)
-
-		self.relu = nn.ReLU()
+			self.fc_list.append(nn.Linear(prev_layer_size, curr_layer_size))
+			self.bn_list.append(batch_norm_layer)
 
 
 	def forward(self, target_input, initial_recon_input=None):
@@ -40,14 +41,14 @@ class SiameseEncoder(nn.Module):
 		else:
 			initial_recon_features = torch.zeros(target_features.size()).to(target_input.device)
 
-		combined_features = torch.cat([target_features, initial_recon_features], dim=1)
+		features = torch.cat([target_features, initial_recon_features], dim=1)
 
-		X = self.bn1(self.relu(self.fc1(combined_features)))
-		X = self.bn2(self.relu(self.fc2(X)))
-		X = self.bn3(self.relu(self.fc3(X)))
-		contrastive_features = self.bn4(self.relu(self.fc4(X)))
+		for i in range(self.num_layers):
+			fc = self.fc_list[i]
+			bn = self.bn_list[i]
+			features = bn(self.relu(fc(features)))
 
-		return contrastive_features
+		return features
 
 
 # Test network
