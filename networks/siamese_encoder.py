@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 # Defines the layers number and count for the siamese encoder
-LAYER_SIZES = [1024, 512, 512, 256]
+LAYER_SIZES = [1024, 512, 512, 512, 256]
 
 
 # Encode two inputs with a weight-sharing siamese encoder and learn combined feature vector
