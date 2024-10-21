@@ -142,8 +142,8 @@ def random_scale_batch(args):
 	return torch.stack(scale_list, dim=0)
 
 
-# Scale a given point cloud or batch of point clouds to fit within a unit sphere
-def scale_to_unit_sphere(batch_points):
+# Scale a given point cloud batch to fit within a unit sphere
+def scale_to_unit_sphere_batch(batch_points):
 	# Compute furthest point from orgin
 	squared_points = torch.square(batch_points)
 	squared_dist = torch.sum(squared_points, -1)
@@ -154,6 +154,12 @@ def scale_to_unit_sphere(batch_points):
 	scale_vec = torch.stack([scale, scale, scale], dim=-1)
 	scaled_points = scale_point_cloud_batch(batch_points, scale_vec)
 	return scaled_points
+
+
+# Scale a given point cloud to fit within a unit sphere
+def scale_to_unit_sphere(batch_points):
+	scaled_points = scale_to_unit_sphere_batch(batch_points.unsqueeze(0))
+	return scaled_points.squeeze(0)
 
 
 
@@ -214,7 +220,7 @@ def augment_sample_batch(batch_points, batch_distances, args):
 	if not args.no_scale:
 		scale_vec = random_scale_batch(args).to(augmented_points.device)
 		augmented_points = scale_point_cloud_batch(augmented_points, scale_vec)
-		augmented_points = scale_to_unit_sphere(augmented_points)
+		augmented_points = scale_to_unit_sphere_batch(augmented_points)
 
 	# Rotate
 	if not args.no_rotation:
