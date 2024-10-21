@@ -181,8 +181,8 @@ def augment_sample(points, distances, args):
 	if not args.no_noise:
 		points_noise = torch.randn(points.size(), dtype=points.dtype, device=points.device) * noise_std
 		distances_noise = torch.randn(distances.size(), dtype=distances.dtype, device=distances.device) * noise_std
-		augmented_points += points_noise.to(augmented_points.device)
-		augmented_distances += distances_noise.to(augmented_distances.device)
+		augmented_points += points_noise
+		augmented_distances += distances_noise
 
 	# Scale
 	if not args.no_scale:
@@ -207,8 +207,8 @@ def augment_sample_batch(batch_points, batch_distances, args):
 	if not args.no_noise:
 		points_noise = torch.randn(batch_points.size(), dtype=batch_points.dtype, device=batch_points.device) * noise_std
 		distances_noise = torch.randn(batch_distances.size(), dtype=batch_distances.dtype, device=batch_distances.device) * noise_std
-		augmented_points += points_noise.to(augmented_points.device)
-		augmented_distances += distances_noise.to(augmented_distances.device)
+		augmented_points += points_noise
+		augmented_distances += distances_noise
 
 	# Scale
 	if not args.no_scale:

@@ -72,13 +72,7 @@ def load_input_samples(input_file, args):
 	select_input_points = points[select_rows]
 
 	# Convert to torch tensor
-	select_input_points = torch.from_numpy(select_input_points)
-
-	# Set batch size to 1
-	select_input_points = select_input_points.unsqueeze(0)
-
-	# Send data to compute device
-	select_input_points = select_input_points.to(args.device)
+	select_input_points = torch.from_numpy(select_input_points).to(args.device).unsqueeze(0)
 	
 	return select_input_points
 

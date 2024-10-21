@@ -39,7 +39,7 @@ class SiameseEncoder(nn.Module):
 		if initial_recon_input is not None:
 			initial_recon_features, _, _ = self.encoder(initial_recon_input)
 		else:
-			initial_recon_features = torch.zeros(target_features.size()).to(target_input.device)
+			initial_recon_features = torch.zeros(target_features.size(), device=target_input.device)
 
 		features = torch.cat([target_features, initial_recon_features], dim=1)
 

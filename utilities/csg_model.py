@@ -120,7 +120,7 @@ class CSGModel():
 		(batch_size, num_points, _) = query_points.size()
 
 		# Set initial SDF to a set maximum value instead of float('inf')
-		distances = torch.full((batch_size, num_points), MAX_SDF_VALUE).to(self.device)
+		distances = torch.full((batch_size, num_points), MAX_SDF_VALUE, device=self.device)
 
 		# Compute combined SDF
 		for command in self.csg_commands:
@@ -163,7 +163,7 @@ class CSGModel():
 			# If there are too few near-surface points, mix in uniform points
 			if len(indices) < num_points:
 				num_uniform_indices = num_points - len(indices)
-				unifrom_indices = torch.randint(num_uniform_points, (num_uniform_indices, 1)).to(self.device)
+				unifrom_indices = torch.randint(num_uniform_points, (num_uniform_indices, 1), device=self.device)
 				indices = torch.cat((indices, unifrom_indices))
 			# Otherwise slice the needed number of points
 			else:
