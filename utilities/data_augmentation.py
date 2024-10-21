@@ -142,6 +142,21 @@ def random_scale_batch(args):
 	return torch.stack(scale_list, dim=0)
 
 
+# Scale a given point cloud or batch of point clouds to fit within a unit sphere
+def scale_to_unit_sphere(batch_points):
+	# Compute furthest point from orgin
+	squared_points = torch.square(batch_points)
+	squared_dist = torch.sum(squared_points, -1)
+	max_dist = torch.sqrt(torch.amax(squared_dist, -1))
+
+	# Scale the point cloud to a unit sphere
+	scale = 1.0 / max_dist
+	scale_vec = torch.stack([scale, scale, scale], dim=-1)
+	scaled_points = scale_point_cloud_batch(batch_points, scale_vec)
+	return scaled_points
+
+
+
 # Generate a list of augmented copies
 def generate_augmented_copies(points, distances, args):
 	augmented_samples_list = []
@@ -162,22 +177,23 @@ def augment_sample(points, distances, args):
 	augmented_points, augmented_distances = points, distances
 	noise_std = math.sqrt(args.noise_variance)
 
-	# Rotate
-	if not args.no_rotation:
-		rotation_quat = random_rotation(args).to(augmented_points.device)
-		augmented_points = rotate_point_cloud(augmented_points, rotation_quat)
-
-	# Scale
-	if not args.no_scale:
-		scale_vec = random_scale(args).to(augmented_points.device)
-		augmented_points = scale_point_cloud(augmented_points, scale_vec)
-
 	# Add noise to the points and distances
 	if not args.no_noise:
 		points_noise = torch.randn(points.size(), dtype=points.dtype, device=points.device) * noise_std
 		distances_noise = torch.randn(distances.size(), dtype=distances.dtype, device=distances.device) * noise_std
 		augmented_points += points_noise.to(augmented_points.device)
 		augmented_distances += distances_noise.to(augmented_distances.device)
+
+	# Scale
+	if not args.no_scale:
+		scale_vec = random_scale(args).to(augmented_points.device)
+		augmented_points = scale_point_cloud(augmented_points, scale_vec)
+		augmented_points = scale_to_unit_sphere(augmented_points)
+
+	# Rotate
+	if not args.no_rotation:
+		rotation_quat = random_rotation(args).to(augmented_points.device)
+		augmented_points = rotate_point_cloud(augmented_points, rotation_quat)
 
 	return (augmented_points, augmented_distances)
 
@@ -187,21 +203,22 @@ def augment_sample_batch(batch_points, batch_distances, args):
 	augmented_points, augmented_distances = batch_points, batch_distances
 	noise_std = math.sqrt(args.noise_variance)
 
-	# Rotate
-	if not args.no_rotation:
-		rotation_quat = random_rotation_batch(args).to(augmented_points.device)
-		augmented_points = rotate_point_cloud_batch(augmented_points, rotation_quat)
-
-	# Scale
-	if not args.no_scale:
-		scale_vec = random_scale_batch(args).to(augmented_points.device)
-		augmented_points = scale_point_cloud_batch(augmented_points, scale_vec)
-
 	# Add noise to the points and distances
 	if not args.no_noise:
 		points_noise = torch.randn(batch_points.size(), dtype=batch_points.dtype, device=batch_points.device) * noise_std
 		distances_noise = torch.randn(batch_distances.size(), dtype=batch_distances.dtype, device=batch_distances.device) * noise_std
 		augmented_points += points_noise.to(augmented_points.device)
 		augmented_distances += distances_noise.to(augmented_distances.device)
+
+	# Scale
+	if not args.no_scale:
+		scale_vec = random_scale_batch(args).to(augmented_points.device)
+		augmented_points = scale_point_cloud_batch(augmented_points, scale_vec)
+		augmented_points = scale_to_unit_sphere(augmented_points)
+
+	# Rotate
+	if not args.no_rotation:
+		rotation_quat = random_rotation_batch(args).to(augmented_points.device)
+		augmented_points = rotate_point_cloud_batch(augmented_points, rotation_quat)
 
 	return (augmented_points, augmented_distances)
