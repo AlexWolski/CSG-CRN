@@ -22,6 +22,7 @@ def options():
 	parser.add_argument('--view_sampling', default='near-surface', choices=['uniform', 'near-surface'], nargs=1, help='Visualize uniform SDF samples or samples near recosntruction surface')
 	parser.add_argument('--num_view_points', type=int, default=100000, help='Number of points to visualize the output')
 	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape')
+	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud')
 
 	args = parser.parse_args()
 	return args
@@ -167,7 +168,7 @@ def main():
 	# View reconstruction
 	get_csg_model = lambda input_file: construct_csg_model(model, input_file, args)
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
-	SdfModelViewer(csg_model, args.input_file, args.num_view_points, args.view_sampling[0], args.sample_dist, 2, False, True, "Reconstructed SDF", get_csg_model)
+	SdfModelViewer(csg_model, args.input_file, args.num_view_points, args.view_sampling[0], args.sample_dist, args.point_size, False, True, "Reconstructed SDF", get_csg_model)
 
 
 if __name__ == '__main__':

@@ -136,7 +136,7 @@ def prepare_dataset(data_dir, output_dir, args):
 			np.save(output_path, augmented_samples)
 			i += 1
 
-		print(f'Processing complete! Dataset saved to:\n{os.path.abspath(args.output_dir)}')
+	print(f'Processing complete! Dataset saved to:\n{os.path.abspath(args.output_dir)}')
 
 
 if __name__ == '__main__':

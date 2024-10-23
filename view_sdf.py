@@ -180,6 +180,7 @@ def options():
 	parser.add_argument('--input_file', required=True, type=str, help='Numpy file containing sample points and SDF values of input shape')
 	parser.add_argument('--num_view_points', type=int, default=-1, help='Number of points to display. Set to -1 to display all points')
 	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='View points outside of the object')
+	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud')
 
 	args = parser.parse_args()
 	return args
@@ -188,7 +189,7 @@ def options():
 def main():
 	args = options()
 	print('')
-	viewer = SdfFileViewer(args.input_file, args.num_view_points, 2, args.show_exterior_points, "View SDF");
+	viewer = SdfFileViewer(args.input_file, args.num_view_points, args.point_size, args.show_exterior_points, "View SDF");
 
 
 if __name__ == '__main__':
