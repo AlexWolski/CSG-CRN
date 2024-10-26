@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 # Dimensions of the layers in each regressor
-REGRESSOR_LAYER_SIZE = 256
+REGRESSOR_LAYER_SIZES = [256]
 # Tune Leaky ReLU slope for predicting negative values
 LEAKY_RELU_NEGATIVE_SLOPE = 0.2
 
@@ -20,17 +20,28 @@ class ShapeRegressor(nn.Module):
 	def __init__(self, num_shapes):
 		super(ShapeRegressor, self).__init__()
 		self.num_shapes = num_shapes
+		self.fc_list = nn.ModuleList()
+		self.num_layers = len(REGRESSOR_LAYER_SIZES)
 
-		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, num_shapes)
+		for i in range(self.num_layers - 1):
+			self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[i], REGRESSOR_LAYER_SIZES[i+1]))
+
+		self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[-1], self.num_shapes))
+
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = nn.Softmax(dim=-1)
 
 	def forward(self, X):
-		X = self.LeReLU(self.fc1(X))
-		shape = self.activation(self.fc2(X))
+		for i in range(self.num_layers):
+			fc = self.fc_list[i]
+			X = fc(X)
 
-		return shape
+			if i < self.num_layers - 1:
+				X = self.LeReLU(X)
+			else:
+				X = self.activation(X)
+
+		return X
 
 
 # Predict probability distribution for boolean operation to apply
@@ -38,17 +49,28 @@ class OperationRegressor(nn.Module):
 	def __init__(self, num_operations):
 		super(OperationRegressor, self).__init__()
 		self.num_operations = num_operations
+		self.fc_list = nn.ModuleList()
+		self.num_layers = len(REGRESSOR_LAYER_SIZES)
 
-		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, num_operations)
+		for i in range(self.num_layers - 1):
+			self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[i], REGRESSOR_LAYER_SIZES[i+1]))
+
+		self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[-1], self.num_operations))
+
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = nn.Softmax(dim=-1)
 
 	def forward(self, X):
-		X = self.LeReLU(self.fc1(X))
-		operation = self.activation(self.fc2(X))
+		for i in range(self.num_layers):
+			fc = self.fc_list[i]
+			X = fc(X)
 
-		return operation
+			if i < self.num_layers - 1:
+				X = self.LeReLU(X)
+			else:
+				X = self.activation(X)
+
+		return X
 
 
 # Predict 3D coordinate
@@ -56,18 +78,30 @@ class TranslationRegressor(nn.Module):
 	def __init__(self, translation_scale):
 		super(TranslationRegressor, self).__init__()
 		self.translation_scale = translation_scale
+		self.fc_list = nn.ModuleList()
+		self.num_layers = len(REGRESSOR_LAYER_SIZES)
+		self.output_size = 3
 
-		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
+		for i in range(self.num_layers - 1):
+			self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[i], REGRESSOR_LAYER_SIZES[i+1]))
+
+		self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[-1], self.output_size))
+
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = nn.Tanh()
 
 	def forward(self, X):
-		X = self.LeReLU(self.fc1(X))
-		translation = self.activation(self.fc2(X))
+		for i in range(self.num_layers):
+			fc = self.fc_list[i]
+			X = fc(X)
+
+			if i < self.num_layers - 1:
+				X = self.LeReLU(X)
+			else:
+				X = self.activation(X)
 
 		# Restrict predicted coordinates to fit the output unit cube
-		translation = translation * self.translation_scale
+		translation = X * self.translation_scale
 
 		return translation
 
@@ -76,17 +110,24 @@ class TranslationRegressor(nn.Module):
 class RotationRegressor(nn.Module):
 	def __init__(self):
 		super(RotationRegressor, self).__init__()
-		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 4)
+		self.fc_list = nn.ModuleList()
+		self.num_layers = len(REGRESSOR_LAYER_SIZES)
+		self.output_size = 4
+
+		for i in range(self.num_layers - 1):
+			self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[i], REGRESSOR_LAYER_SIZES[i+1]))
+
+		self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[-1], self.output_size))
+
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 
 	def forward(self, X):
-		X = self.LeReLU(self.fc1(X))
-		quaternion = self.LeReLU(self.fc2(X))
+		for i in range(self.num_layers):
+			fc = self.fc_list[i]
+			X = self.LeReLU(fc(X))
 
 		# Normalize quaternion
-		quaternion = torch.nn.functional.normalize(quaternion, dim=-1)
-
+		quaternion = torch.nn.functional.normalize(X, dim=-1)
 		return quaternion
 
 
@@ -96,18 +137,30 @@ class ScaleRegressor(nn.Module):
 		super(ScaleRegressor, self).__init__()
 		self.min_scale = min_scale
 		self.max_scale = max_scale
+		self.fc_list = nn.ModuleList()
+		self.num_layers = len(REGRESSOR_LAYER_SIZES)
+		self.output_size = 3
 
-		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 3)
+		for i in range(self.num_layers - 1):
+			self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[i], REGRESSOR_LAYER_SIZES[i+1]))
+
+		self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[-1], self.output_size))
+
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 
 	def forward(self, X):
-		X = self.LeReLU(self.fc1(X))
-		scale = self.activation(self.fc2(X))
+		for i in range(self.num_layers):
+			fc = self.fc_list[i]
+			X = fc(X)
+
+			if i < self.num_layers - 1:
+				X = self.LeReLU(X)
+			else:
+				X = self.activation(X)
 
 		# Restrict the predicted scale to expected range
-		scale = (scale * (self.max_scale - self.min_scale)) + self.min_scale
+		scale = (X * (self.max_scale - self.min_scale)) + self.min_scale
 
 		return scale
 
@@ -118,18 +171,30 @@ class BlendingRegressor(nn.Module):
 		super(BlendingRegressor, self).__init__()
 		self.min_blending = min_blending
 		self.max_blending = max_blending
+		self.fc_list = nn.ModuleList()
+		self.num_layers = len(REGRESSOR_LAYER_SIZES)
+		self.output_size = 1
 
-		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
+		for i in range(self.num_layers - 1):
+			self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[i], REGRESSOR_LAYER_SIZES[i+1]))
+
+		self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[-1], self.output_size))
+
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 	
 	def forward(self, X):
-		X = self.LeReLU(self.fc1(X))
-		blending = self.activation(self.fc2(X))
+		for i in range(self.num_layers):
+			fc = self.fc_list[i]
+			X = fc(X)
+
+			if i < self.num_layers - 1:
+				X = self.LeReLU(X)
+			else:
+				X = self.activation(X)
 
 		# Restrict the blending factor to expected range
-		blending = (blending * (self.max_blending - self.min_blending)) + self.min_blending
+		blending = (X * (self.max_blending - self.min_blending)) + self.min_blending
 
 		return blending
 
@@ -138,17 +203,29 @@ class BlendingRegressor(nn.Module):
 class RoundnessRegressor(nn.Module):
 	def __init__(self):
 		super(RoundnessRegressor, self).__init__()
+		self.fc_list = nn.ModuleList()
+		self.num_layers = len(REGRESSOR_LAYER_SIZES)
+		self.output_size = 1
 
-		self.fc1 = nn.Linear(REGRESSOR_LAYER_SIZE, REGRESSOR_LAYER_SIZE)
-		self.fc2 = nn.Linear(REGRESSOR_LAYER_SIZE, 1)
+		for i in range(self.num_layers - 1):
+			self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[i], REGRESSOR_LAYER_SIZES[i+1]))
+
+		self.fc_list.append(nn.Linear(REGRESSOR_LAYER_SIZES[-1], self.output_size))
+
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.activation = torch.sigmoid
 	
 	def forward(self, X):
-		X = self.LeReLU(self.fc1(X))
-		roundness = self.activation(self.fc2(X))
+		for i in range(self.num_layers):
+			fc = self.fc_list[i]
+			X = fc(X)
 
-		return roundness
+			if i < self.num_layers - 1:
+				X = self.LeReLU(X)
+			else:
+				X = self.activation(X)
+
+		return X
 
 
 # Pridict all primitive parameters 

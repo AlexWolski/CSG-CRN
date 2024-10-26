@@ -51,7 +51,7 @@ def load_model(args):
 
 	# Initialize model
 	model = CSG_CRN(CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness, no_batch_norm).to(args.device)
-	model.load_state_dict(state_dict)
+	model.load_state_dict(state_dict, strict=False)
 	model.eval()
 
 	return model
