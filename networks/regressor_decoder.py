@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 
 
-# Dimensions of the layers in each regressor
-REGRESSOR_LAYER_SIZES = [256]
 # Tune Leaky ReLU slope for predicting negative values
 LEAKY_RELU_NEGATIVE_SLOPE = 0.2
 
@@ -17,10 +15,11 @@ DEFAULT_MAX_BLENDING = 1
 
 # Parent regressor network class to generalize network building
 class RegressorNetwork(nn.Module):
-	def __init__(self, layer_sizes, activation_func=None):
+	def __init__(self, layer_sizes, activation_func=None, normalization_func=None):
 		super(RegressorNetwork, self).__init__()
 		self.layer_sizes = layer_sizes
 		self.activation_func = activation_func
+		self.normalization_func = normalization_func
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.init_layers();
 
@@ -40,87 +39,23 @@ class RegressorNetwork(nn.Module):
 			elif self.activation_func != None:
 				X = self.activation_func(X)
 
+		if self.normalization_func != None:
+			X = self.normalization_func(X)
+
 		return X
 
 
-# Predict probability distribution for output shape primitive
-class ShapeRegressor(RegressorNetwork):
-	def __init__(self, layer_sizes, num_shapes):
-		layer_sizes.append(num_shapes)
-		activation = nn.Softmax(dim=-1)
-		super(ShapeRegressor, self).__init__(layer_sizes, activation)
+def normalizeTranslation(translation_scale):
+	return lambda X: X * translation_scale
 
+def normalizeRotation():
+	return lambda X: torch.nn.functional.normalize(X, dim=-1)
 
-# Predict probability distribution for boolean operation to apply
-class OperationRegressor(RegressorNetwork):
-	def __init__(self, layer_sizes, num_operations):
-		layer_sizes.append(num_operations)
-		activation = nn.Softmax(dim=-1)
-		super(OperationRegressor, self).__init__(layer_sizes, activation)
+def normalizeScale(min_scale, max_scale):
+	return lambda X: (X * (max_scale - min_scale)) + min_scale
 
-
-# Predict 3D coordinate
-class TranslationRegressor(RegressorNetwork):
-	def __init__(self, layer_sizes, translation_scale):
-		self.translation_scale = translation_scale
-		layer_sizes.append(3)
-		activation = nn.Tanh()
-		super(TranslationRegressor, self).__init__(layer_sizes, activation)
-
-	# Restrict predicted coordinates to fit the output unit cube
-	def forward(self, X):
-		translation = super(TranslationRegressor, self).forward(X)
-		return translation * self.translation_scale
-
-
-# Predict quaternion rotation
-class RotationRegressor(RegressorNetwork):
-	def __init__(self, layer_sizes):
-		layer_sizes.append(4)
-		super(RotationRegressor, self).__init__(layer_sizes)
-
-	# Normalize quaternion
-	def forward(self, X):
-		quaternion = super(RotationRegressor, self).forward(X)
-		return torch.nn.functional.normalize(X, dim=-1)
-
-
-# Predict shape scale in x, y, and z axes
-class ScaleRegressor(RegressorNetwork):
-	def __init__(self, layer_sizes, min_scale, max_scale):
-		self.min_scale = min_scale
-		self.max_scale = max_scale
-		layer_sizes.append(3)
-		activation = torch.sigmoid
-		super(ScaleRegressor, self).__init__(layer_sizes, activation)
-
-	# Restrict the predicted scale to expected range
-	def forward(self, X):
-		scale = super(ScaleRegressor, self).forward(X)
-		return (scale * (self.max_scale - self.min_scale)) + self.min_scale
-
-
-# Predict amount to blend output primitive with current reconstruction
-class BlendingRegressor(RegressorNetwork):
-	def __init__(self, layer_sizes, min_blending, max_blending):
-		self.min_blending = min_blending
-		self.max_blending = max_blending
-		layer_sizes.append(1)
-		activation = torch.sigmoid
-		super(BlendingRegressor, self).__init__(layer_sizes, activation)
-	
-	# Restrict the blending factor to expected range
-	def forward(self, X):
-		blending = super(BlendingRegressor, self).forward(X)
-		return (blending * (self.max_blending - self.min_blending)) + self.min_blending
-
-
-# Predict amount to round shape into sphere
-class RoundnessRegressor(RegressorNetwork):
-	def __init__(self, layer_sizes):
-		layer_sizes.append(1)
-		activation = torch.sigmoid
-		super(RoundnessRegressor, self).__init__(layer_sizes, activation)
+def normalizeBlending(min_blending, max_blending):
+	return lambda X: (X * (max_blending - min_blending)) + min_blending
 
 
 # Pridict all primitive parameters 
@@ -137,13 +72,13 @@ class PrimitiveRegressor(nn.Module):
 
 		super(PrimitiveRegressor, self).__init__()
 
-		self.shape = ShapeRegressor(REGRESSOR_LAYER_SIZES, num_shapes)
-		self.operation = OperationRegressor(REGRESSOR_LAYER_SIZES, num_operations)
-		self.translation = TranslationRegressor(REGRESSOR_LAYER_SIZES, translation_scale)
-		self.rotation = RotationRegressor(REGRESSOR_LAYER_SIZES)
-		self.scale = ScaleRegressor(REGRESSOR_LAYER_SIZES, min_scale, max_scale)
-		self.blending = BlendingRegressor(REGRESSOR_LAYER_SIZES, min_blending, max_blending) if (predict_blending) else (None)
-		self.roundness = RoundnessRegressor(REGRESSOR_LAYER_SIZES) if (predict_roundness) else (None)
+		self.shape = RegressorNetwork([256, num_shapes], nn.Softmax(dim=-1))
+		self.operation = RegressorNetwork([256, num_operations], nn.Softmax(dim=-1))
+		self.translation = RegressorNetwork([256, 3], nn.Tanh(), normalizeTranslation(translation_scale))
+		self.rotation = RegressorNetwork([256, 4], None, normalizeRotation())
+		self.scale = RegressorNetwork([256, 3], torch.sigmoid, normalizeScale(min_scale, max_scale))
+		self.blending = RegressorNetwork([256, 1], torch.sigmoid, normalizeBlending(min_blending, max_blending)) if (predict_blending) else (None)
+		self.roundness = RegressorNetwork([256, 1], torch.sigmoid) if (predict_roundness) else (None)
 	
 	def forward(self, X, has_initial_recon):
 		shape = self.shape.forward(X)
@@ -170,41 +105,6 @@ def test():
 	batch_size = 2
 	feature_size = 256
 	inputs = torch.autograd.Variable(torch.rand(batch_size, feature_size))
-
-	network = ShapeRegressor(REGRESSOR_LAYER_SIZES, 3)
-	outputs = network(inputs)
-	print('Shape Output:')
-	print(outputs, '\n')
-	
-	network = OperationRegressor(REGRESSOR_LAYER_SIZES, 2)
-	outputs = network(inputs)
-	print('Boolean Regressor Output:')
-	print(outputs, '\n')
-	
-	network = TranslationRegressor(REGRESSOR_LAYER_SIZES, 0.6)
-	outputs = network(inputs)
-	print('Translation Output:')
-	print(outputs, '\n')
-	
-	network = RotationRegressor(REGRESSOR_LAYER_SIZES)
-	outputs = network(inputs)
-	print('Rotation Output:')
-	print(outputs, '\n')
-
-	network = ScaleRegressor(REGRESSOR_LAYER_SIZES, 0.005, 0.5)
-	outputs = network(inputs)
-	print('Scale Output:')
-	print(outputs, '\n')
-
-	network = BlendingRegressor(REGRESSOR_LAYER_SIZES, 0, 1)
-	outputs = network(inputs)
-	print('Blending Output:')
-	print(outputs, '\n')
-
-	network = RoundnessRegressor(REGRESSOR_LAYER_SIZES)
-	outputs = network(inputs)
-	print('Roundness Output:')
-	print(outputs, '\n')
 
 	network = PrimitiveRegressor(REGRESSOR_LAYER_SIZES, 3, 2)
 	outputs = network(inputs)
