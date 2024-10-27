@@ -104,6 +104,7 @@ def get_data_parser():
 	data_group.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
 	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Overwrites all other model settings')
 	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
+	data_group.add_argument('--skip_preprocess', default=False, action='store_true', help='Skip the pre-processing step if the provided data_dir already has the proper length and sampling')
 
 	return data_parser
 
@@ -179,9 +180,10 @@ def load_data_sets(args, data_split, device):
 			raise Exception(err_msg)
 
 	# Select near-surface samples and consolidate sample length
-	print('Pre-processing data samples:')
-	(skipped_samples, args.data_dir) = pre_process_data(args, file_rel_paths)
-	print(f'Skipped {skipped_samples} samples that had too few points\n')
+	if not args.skip_preprocess:
+		print('Pre-processing data samples:')
+		(skipped_samples, args.data_dir) = pre_process_data(args, file_rel_paths)
+		print(f'Skipped {skipped_samples} samples that had too few points\n')
 
 	# Save dataset lists
 	save_list(os.path.join(args.output_dir, 'train.txt'), train_split)
