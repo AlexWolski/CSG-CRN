@@ -18,7 +18,7 @@ class CSG_CRN(nn.Module):
 		self.point_encoder = PointNetfeat(global_feat=True, no_batch_norm=no_batch_norm)
 		self.siamese_encoder = SiameseEncoder(self.point_encoder, 1024, no_batch_norm)
 		self.regressor_decoder = PrimitiveRegressor(self.num_shapes, self.num_operations,
-			predict_blending=self.predict_blending, predict_roundness=self.predict_roundness)
+			predict_blending=self.predict_blending, predict_roundness=self.predict_roundness, no_batch_norm=no_batch_norm)
 
 
 	def forward(self, target_input, initial_recon_input=None):

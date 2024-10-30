@@ -15,7 +15,7 @@ class SiameseEncoder(nn.Module):
 
 		self.relu = nn.ReLU()
 		self.fc_list = nn.ModuleList()
-		self.bn_list = nn.ModuleList()
+		self.bn_list = nn.ModuleList() if not no_batch_norm else None
 		self.num_layers = len(LAYER_SIZES)
 
 		# Initialize layers
@@ -25,10 +25,10 @@ class SiameseEncoder(nn.Module):
 			initial_layer_size = encoder_feature_size*2
 			prev_layer_size = LAYER_SIZES[i-1] if i > 0 else initial_layer_size
 			curr_layer_size = LAYER_SIZES[i]
-			batch_norm_layer = nn.Identity() if no_batch_norm else nn.BatchNorm1d(curr_layer_size)
-
 			self.fc_list.append(nn.Linear(prev_layer_size, curr_layer_size))
-			self.bn_list.append(batch_norm_layer)
+
+			if self.bn_list != None:
+				self.bn_list.append(nn.BatchNorm1d(curr_layer_size))
 
 
 	def forward(self, target_input, initial_recon_input=None):
@@ -43,10 +43,15 @@ class SiameseEncoder(nn.Module):
 
 		features = torch.cat([target_features, initial_recon_features], dim=1)
 
+		# Apply fully connected, relu, and batch normalization layers
 		for i in range(self.num_layers):
-			fc = self.fc_list[i]
-			bn = self.bn_list[i]
-			features = bn(self.relu(fc(features)))
+			fc_layer = self.fc_list[i]
+			features = self.relu(fc_layer(features))
+
+			# Apply batch normalization
+			if self.bn_list != None:
+				bn_layer = self.bn_list[i]
+				features = bn_layer(features)
 
 		return features
 
