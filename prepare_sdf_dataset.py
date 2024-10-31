@@ -73,6 +73,19 @@ def create_output_dir(output_dir):
 		raise Exception(err_msg)
 
 
+# Create subdirectory for a given model file and return the path
+def create_output_subdir(data_dir, output_dir, mesh_file_path):
+	# Get path to input 3D model file
+	rel_path = os.path.relpath(mesh_file_path, data_dir)
+	model_path = os.path.join(output_dir, rel_path)
+
+	# Create any subdirectories if they don't exist
+	output_subdir = os.path.dirname(os.path.realpath(model_path))
+	os.makedirs(output_subdir, exist_ok=True)
+
+	return model_path
+
+
 # Compute SDF samples
 def sample_sdf(mesh_file_path, num_samples):
 	# Prepare mesh
@@ -88,6 +101,33 @@ def sample_sdf(mesh_file_path, num_samples):
 	distances = torch.from_numpy(distances)
 
 	return (points, distances)
+
+
+# Save sample to .npy file
+def save_sample(points, distances, output_path):
+	sample = torch.cat((points, distances.unsqueeze(0).transpose(0, 1)), dim=1)
+	np.save(output_path, sample)
+
+
+# Save augment copies
+def save_augment_samples(model_path, points, distances, args):
+	# Augment and save samples
+	augment_count = 0
+
+	for i in range(args.augment_copies):
+		# Adjsut file name for duplicate samples
+		model_path = os.path.splitext(model_path)[0]
+		output_path = model_path
+
+		if augment_count > 0:
+			output_path = output_path + f' ({augment_count})'
+
+		# Augment sample
+		(augmented_points, augmented_distances) = data_augmentation.augment_sample(points, distances, args)
+
+		# Save samples to .npy file
+		save_sample(augmented_points, augmented_distances, output_path)
+		augment_count += 1
 
 
 # Compute SDF samples for all 3D files in given directory
@@ -106,35 +146,14 @@ def prepare_dataset(data_dir, output_dir, args):
 			tqdm.write(f'Skipping Bad Mesh\n: {mesh_file_path}')
 			continue
 
+		# Create model output path
+		model_path = create_output_subdir(data_dir, output_dir, mesh_file_path)
+
 		# Augment samples
 		if args.augment_data:
-			augmented_samples_list = data_augmentation.generate_augmented_copies(points, distances, args)
+			save_augment_samples(model_path, points, distances, args)
 		else:
-			augmented_samples_list = [(points, distances)]
-
-		# Save samples
-		i = 0
-
-		for (augmented_points, augmented_distances) in augmented_samples_list:
-			# Get path to input 3D model file
-			rel_path = os.path.relpath(mesh_file_path, data_dir)
-			model_path = os.path.join(output_dir, rel_path)
-
-			# Create any subdirectories if they don't exist
-			output_subdir = os.path.dirname(os.path.realpath(model_path))
-			os.makedirs(output_subdir, exist_ok=True)
-
-			# Adjsut file name for duplicate samples
-			model_path = os.path.splitext(model_path)[0]
-			output_path = model_path
-
-			if i > 0:
-				output_path = output_path + f' ({i})'
-
-			# Save samples to .npy file
-			augmented_samples = torch.cat((augmented_points, augmented_distances.unsqueeze(0).transpose(0, 1)), dim=1)
-			np.save(output_path, augmented_samples)
-			i += 1
+			save_sample(points, distances, output_path)
 
 	print(f'Processing complete! Dataset saved to:\n{os.path.abspath(args.output_dir)}')
 

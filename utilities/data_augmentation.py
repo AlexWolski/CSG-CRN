@@ -70,7 +70,6 @@ def get_augment_parser(group_name='AUGMENT SETTINGS'):
 
 	parser_group.add_argument('--augment_data', default=False, action='store_true', help='Enable augmentation of object samples with random rotation, scaling, and noise')
 	parser_group.add_argument('--augment_copies', type=int, default=1, help='Number of augmented copies of each object to create')
-	parser_group.add_argument('--keep_original', default=False, action='store_true', help='Include the non-augmented object in an augmented output')
 	parser_group.add_argument('--no_rotation', default=False, action='store_true', help='Disable rotations in data augmentation')
 	parser_group.add_argument('--no_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
 	parser_group.add_argument('--no_noise', default=False, action='store_true', help='Disable gaussian noise for sample points and distances')
@@ -160,22 +159,6 @@ def scale_to_unit_sphere_batch(batch_points):
 def scale_to_unit_sphere(batch_points):
 	scaled_points = scale_to_unit_sphere_batch(batch_points.unsqueeze(0))
 	return scaled_points.squeeze(0)
-
-
-
-# Generate a list of augmented copies
-def generate_augmented_copies(points, distances, args):
-	augmented_samples_list = []
-
-	# Save original points and distances
-	if args.keep_original:
-		augmented_samples_list.append((points, distances))
-
-	# Create and save augmented copies
-	for i in range(args.augment_copies):
-		augmented_samples_list.append(augment_sample(points, distances, args))
-
-	return augmented_samples_list
 
 
 # Augment a single SDF sample
