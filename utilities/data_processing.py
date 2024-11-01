@@ -62,33 +62,20 @@ def select_surface_points(samples, sample_dist):
 
 
 # Select near-surface point samples and consolidate sample length
-def pre_process_data(args, processed_rel_paths):
-	pre_processed_dir = os.path.join(args.output_dir, 'pre_processed_samples')
+def pre_process_sample(args, data_sample):
 	total_points = args.num_input_points + args.num_loss_points
-	skipped_samples = 0
 
-	# Pre-process all data files
-	for processed_rel_path in tqdm(processed_rel_paths):
-		processed_path = os.path.join(args.data_dir, processed_rel_path)
-		data_samples = np.load(processed_path)
+	# Select near-surface points
+	if args.sample_method[0] == 'near-surface':
+		data_sample = select_surface_points(data_sample, args.sample_dist)
 
-		# Select near-surface points
-		if args.sample_method[0] == 'near-surface':
-			data_samples = select_surface_points(data_samples, args.sample_dist)
+	# Skip samples that don't contain enough points
+	if data_sample.shape[0] < total_points:
+		return None
 
-		# Skip samples that don't contain enough points
-		if data_samples.shape[0] < total_points:
-			skipped_samples += 1
-			continue
+	# Randomly select the required number of points
+	if data_sample.shape[0] > total_points:
+		select_rows = np.random.choice(data_sample.shape[0], total_points, replace=False)
+		data_sample = data_sample[select_rows]
 
-		# Randomly select the required number of points
-		if data_samples.shape[0] > total_points:
-			select_rows = np.random.choice(data_samples.shape[0], total_points, replace=False)
-			data_samples = data_samples[select_rows]
-
-		# Save processed data
-		processed_path = os.path.join(pre_processed_dir, processed_rel_path)
-		os.makedirs(os.path.dirname(processed_path), exist_ok=True)
-		np.save(processed_path, data_samples)
-
-	return (skipped_samples, pre_processed_dir)
+	return data_sample

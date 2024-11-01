@@ -104,7 +104,7 @@ def get_data_parser():
 	data_group.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
 	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Overwrites all other model settings')
 	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
-	data_group.add_argument('--skip_preprocess', default=False, action='store_true', help='Skip the pre-processing step if the provided data_dir already has the proper length and sampling')
+	data_group.add_argument('--skip_preprocess', default=False, action='store_true', help='Skip the pre-processing step if the provided data_dir already contains samples of the proper length and sampling method')
 
 	return data_parser
 
@@ -179,12 +179,6 @@ def load_data_splits(args, data_split, device):
 			err_msg = f'{dataset[0]} dataset ({num_augment_samples}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
 			raise Exception(err_msg)
 
-	# Select near-surface samples and consolidate sample length
-	if not args.skip_preprocess:
-		print('Pre-processing data samples:')
-		(skipped_samples, args.data_dir) = pre_process_data(args, file_rel_paths)
-		print(f'Skipped {skipped_samples} samples that had too few points\n')
-
 	# Save dataset lists
 	save_list(os.path.join(args.output_dir, 'train.txt'), train_split)
 	save_list(os.path.join(args.output_dir, 'val.txt'), val_split)
@@ -192,7 +186,7 @@ def load_data_splits(args, data_split, device):
 
 	print(f'Training set:\t{len(train_split.indices)} samples')
 	print(f'Validation set:\t{len(val_split.indices)} samples')
-	print(f'Testing set:\t{len(test_split.indices)} samples')
+	print(f'Testing set:\t{len(test_split.indices)} samples\n')
 
 	return (train_split, val_split, test_split)
 
@@ -349,8 +343,8 @@ def main():
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
 	(train_split, val_split, _) = load_data_splits(args, DATA_SPLIT, device)
-	train_dataset = PointDataset(train_split, device, args)
-	val_dataset = PointDataset(val_split, device, args)
+	train_dataset = PointDataset(train_split, device, args, "Loading Training Set")
+	val_dataset = PointDataset(val_split, device, args, "Loading Validation Set")
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
 	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=False)

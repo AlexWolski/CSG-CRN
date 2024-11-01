@@ -3,11 +3,12 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from torch.utils.data import Dataset
+from utilities.data_processing import pre_process_sample
 from utilities.data_augmentation import augment_sample_batch
 
 
 class PointDataset(Dataset):
-	def __init__(self, file_rel_paths, device, args):
+	def __init__(self, file_rel_paths, device, args, loading_desc="Loading Dataset"):
 
 		self.raw_copies = len(file_rel_paths)
 		self.device = device
@@ -16,11 +17,26 @@ class PointDataset(Dataset):
 		self.sdf_sample_list = []
 
 		# Load all data samples into memory
-		for file_rel_path in tqdm(file_rel_paths, desc="Loading Dataset"):
+		skipped_samples = 0
+
+		for file_rel_path in tqdm(file_rel_paths, desc=loading_desc):
 			sample_path = os.path.join(self.args.data_dir, file_rel_path)
 			sdf_sample = np.load(sample_path).astype(np.float32)
 			sdf_sample = torch.from_numpy(sdf_sample)
+
+			# Preprocess sample if needed
+			if not args.skip_preprocess:
+				sdf_sample = pre_process_sample(args, sdf_sample)
+
+				if sdf_sample == None:
+					skipped_samples += 1
+					continue
+
+			# Save sample in memory
 			self.sdf_sample_list.append(sdf_sample)
+
+		if skipped_samples > 0:
+			print(f'Skipped {skipped_samples} samples that had too few points\n')
 
 	def __len__(self):
 		return self.augmented_copies
