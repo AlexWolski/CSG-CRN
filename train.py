@@ -156,7 +156,7 @@ def get_device(device):
 
 
 # Prepare data files and load training dataset
-def load_data_sets(args, data_split, device):
+def load_data_splits(args, data_split, device):
 	# Load sample files
 	file_rel_paths = get_data_files(args.data_dir)
 	print('Found %i data files' % len(file_rel_paths))
@@ -194,11 +194,7 @@ def load_data_sets(args, data_split, device):
 	print(f'Validation set:\t{len(val_split.indices)} samples')
 	print(f'Testing set:\t{len(test_split.indices)} samples')
 
-	train_dataset = PointDataset(train_split, device, args)
-	val_dataset = PointDataset(val_split, device, args)
-	test_dataset = PointDataset(test_split, device, args)
-
-	return (train_dataset, val_dataset, test_dataset)
+	return (train_split, val_split, test_split)
 
 
 # Load CSG-CRN network model
@@ -352,15 +348,15 @@ def main():
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
-	(train_dataset, val_dataset, test_dataset) = load_data_sets(args, DATA_SPLIT, device)
+	(train_split, val_split, _) = load_data_splits(args, DATA_SPLIT, device)
+	train_dataset = PointDataset(train_split, device, args)
+	val_dataset = PointDataset(val_split, device, args)
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
 	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=False)
-	test_sampler = BatchSampler(RandomSampler(test_dataset), batch_size=args.batch_size, drop_last=False)
 
 	train_loader = DataLoader(train_dataset, sampler=train_sampler)
 	val_loader = DataLoader(val_dataset, sampler=val_sampler)
-	test_dataset = DataLoader(test_dataset, sampler=test_sampler)
 
 	# Save settings to file
 	settings_path = os.path.join(args.output_dir, 'settings.yml')
