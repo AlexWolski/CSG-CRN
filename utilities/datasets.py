@@ -9,14 +9,13 @@ from utilities.data_augmentation import augment_sample_batch
 
 class PointDataset(Dataset):
 	def __init__(self, file_rel_paths, device, args, loading_desc="Loading Dataset"):
-
 		self.raw_copies = len(file_rel_paths)
 		self.device = device
 		self.augmented_copies = len(file_rel_paths) * args.augment_copies
 		self.args = args
-		self.sdf_sample_list = []
 
 		# Load all data samples into memory
+		sdf_sample_list = []
 		skipped_samples = 0
 
 		for file_rel_path in tqdm(file_rel_paths, desc=loading_desc):
@@ -31,9 +30,11 @@ class PointDataset(Dataset):
 				if sdf_sample == None:
 					skipped_samples += 1
 					continue
+		
+			sdf_sample_list.append(sdf_sample)
 
-			# Save sample in memory
-			self.sdf_sample_list.append(sdf_sample)
+		# Save samples in system memory
+		self.sdf_samples = torch.stack(sdf_sample_list, dim=0)
 
 		if skipped_samples > 0:
 			print(f'Skipped {skipped_samples} samples that had too few points\n')
@@ -42,16 +43,11 @@ class PointDataset(Dataset):
 		return self.augmented_copies
 
 	def __getitem__(self, batch_idx):
-		batch_samples_list = []
+		# Adjust indices for augmented copies
+		if self.augmented_copies > self.raw_copies:
+			batch_idx = [index % self.raw_copies for index in batch_idx]
 
-		# Load all points and distances from sdf sample file
-		for idx in batch_idx:
-			index = idx % self.raw_copies
-			sdf_sample = self.sdf_sample_list[index].to(self.device)
-			batch_samples_list.append(sdf_sample)
-
-		# Combine loaded samples into batch
-		batch_sdf_samples = torch.stack(batch_samples_list, dim=0)
+		batch_sdf_samples = self.sdf_samples[batch_idx].to(self.device)
 
 		# Augment samples
 		if self.args.augment_data:
