@@ -321,6 +321,7 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 		# Save checkpoint parameters
 		if (epoch+1) % args.checkpoint_freq == 0:
 			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch+1}.pt')
+			torch.save({'model': model.state_dict(), 'args': args}, checkpoint_path)
 			print(f'Checkpoint saved to: {checkpoint_path}\n')
 
 	print('\nTraining complete! Model parameters saved to:')
