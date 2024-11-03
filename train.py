@@ -6,6 +6,7 @@ import traceback
 import signal
 import sys
 from tqdm import tqdm
+from torch import autocast
 
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import BatchSampler, RandomSampler
@@ -232,7 +233,9 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
 
 		# Predict next primitive
-		outputs = model(target_input_samples, initial_input_samples)
+		with autocast(device_type=device.type, dtype=torch.float16):
+			outputs = model(target_input_samples, initial_input_samples)
+
 		# Add primitive to CSG model
 		csg_model.add_command(*outputs)
 
@@ -250,12 +253,14 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss_func, optimizer, train_loader, args, device, desc=''):
+def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc=''):
 	total_train_loss = 0
 
 	for (target_input_samples, target_loss_samples) in tqdm(train_loader, desc=desc):
 		target_input_samples = target_input_samples.squeeze(0)
 		target_loss_samples = target_loss_samples.squeeze(0)
+
+		optimizer.zero_grad()
 
 		# Forward pass
 		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device)
@@ -263,8 +268,9 @@ def train_one_epoch(model, loss_func, optimizer, train_loader, args, device, des
 
 		# Back propagate
 		optimizer.zero_grad()
-		batch_loss.backward()
-		optimizer.step()
+		scaler.scale(batch_loss).backward()
+		scaler.step(optimizer)
+		scaler.update()
 
 	total_train_loss /= train_loader.__len__()
 	return total_train_loss
@@ -286,7 +292,7 @@ def validate(model, loss_func, val_loader, args, device):
 
 
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args, device):
+def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, args, device):
 	model.train(True)
 
 	# Initialize early stopper
@@ -298,7 +304,7 @@ def train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args
 	for epoch in range(args.max_epochs):
 		# Train model
 		desc = f'Epoch {epoch+1}/{args.max_epochs}'
-		train_loss = train_one_epoch(model, loss_func, optimizer, train_loader, args, device, desc)
+		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
 		val_loss = validate(model, loss_func, val_loader, args, device)
 		scheduler.step(val_loss)
 		early_stopping(val_loss, model)
@@ -340,6 +346,7 @@ def main():
 	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
 	optimizer = AdamW(model.parameters(), lr=args.init_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
+	scaler = torch.amp.GradScaler()
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
@@ -348,7 +355,7 @@ def main():
 	val_dataset = PointDataset(val_split, device, args, "Loading Validation Set")
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
-	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=False)
+	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=True)
 
 	train_loader = DataLoader(train_dataset, sampler=train_sampler)
 	val_loader = DataLoader(val_dataset, sampler=val_sampler)
@@ -361,7 +368,7 @@ def main():
 
 	# Train model
 	print('')
-	train(model, loss_func, optimizer, scheduler, train_loader, val_loader, args, device)
+	train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, args, device)
 
 
 if __name__ == '__main__':
