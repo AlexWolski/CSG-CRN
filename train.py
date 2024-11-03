@@ -10,7 +10,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.distributions.uniform import Uniform
-from torch.optim import Adam, lr_scheduler
+from torch.optim import AdamW, lr_scheduler
 
 from utilities.data_processing import *
 from utilities.datasets import PointDataset
@@ -337,7 +337,7 @@ def main():
 	# Initialize model
 	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args, device)
 	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
-	optimizer = Adam(model.parameters(), lr=args.init_lr)
+	optimizer = AdamW(model.parameters(), lr=args.init_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
 
 	# Load training set
