@@ -60,11 +60,11 @@ def options():
 		print(os.path.abspath(args.model_path))
 
 		# Cache data settings
-		data_args = (args.data_dir, args.output_dir, args.overwrite)
+		data_args = (args.model_path, args.data_dir, args.output_dir, args.overwrite, args.skip_preprocess)
 		# Load arguments from modle file
 		args = torch.load(args.model_path)['args']
 		# Apply data settings
-		(args.data_dir, args.output_dir, args.overwrite) = data_args
+		(args.model_path, args.data_dir, args.output_dir, args.overwrite, args.skip_preprocess) = data_args
 
 	# Parse all arguments
 	else:
@@ -74,8 +74,8 @@ def options():
 
 	# Expand paths
 	args.data_dir = os.path.abspath(args.data_dir)
-	args.model_path = os.path.abspath(args.model_path) if args.model_path else args.model_path
-	args.output_dir = os.path.abspath(args.output_dir) if args.output_dir else args.output_dir
+	args.model_path = os.path.abspath(args.model_path) if args.model_path else None
+	args.output_dir = os.path.abspath(args.output_dir)
 
 	# Disable batch norm for SGD
 	args.no_batch_norm = True if args.batch_size == 1 else args.no_batch_norm
@@ -203,7 +203,7 @@ def load_model(num_shapes, num_operations, args, device):
 
 	# Load model parameters if available
 	if args.model_path:
-		model.load_state_dict(torch.load(args.model_path))
+		model.load_state_dict(torch.load(args.model_path)['model'])
 
 	return model
 
