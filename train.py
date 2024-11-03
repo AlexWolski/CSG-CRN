@@ -261,14 +261,12 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 		target_input_samples = target_input_samples.squeeze(0)
 		target_loss_samples = target_loss_samples.squeeze(0)
 
-		optimizer.zero_grad()
-
 		# Forward pass
 		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device)
 		total_train_loss += batch_loss.item()
 
 		# Back propagate
-		optimizer.zero_grad()
+		optimizer.zero_grad(set_to_none=True)
 		scaler.scale(batch_loss).backward()
 		scaler.step(optimizer)
 		scaler.update()
