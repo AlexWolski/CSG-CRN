@@ -64,8 +64,9 @@ class ScaleAxis(Enum):
 		return list(ScaleAxis)[index]
 
 
-def get_augment_parser(group_name='AUGMENT SETTINGS'):
-	parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
+def get_augment_parser(group_name='AUGMENT SETTINGS', suppress_default=False):
+	argument_default = argparse.SUPPRESS if suppress_default else None
+	parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, argument_default=argument_default)
 	parser_group = parser.add_argument_group(group_name)
 
 	parser_group.add_argument('--augment_data', default=False, action='store_true', help='Enable augmentation of object samples with random rotation, scaling, and noise')

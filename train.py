@@ -33,25 +33,16 @@ OP_LOSS_WEIGHT = 0.01
 
 # Parse commandline arguments
 def options():
-	help_parser = get_help_parser()
-	data_parser = get_data_parser()
-	model_parser = get_model_parser()
-	augment_parser = get_augment_parser('ONLINE AUGMENT SETTINGS')
-
-
 	# Parse and handle Help argument
+	help_parser = get_help_parser()
 	args, remaining_args = help_parser.parse_known_args()
 
 	if args.help or not remaining_args:
-		print()
-		data_parser.print_help()
-		print('\n')
-		model_parser.print_help()
-		print('\n')
-		augment_parser.print_help()
+		print_help()
 		exit()
 
 	# Parse data settings
+	data_parser = get_data_parser()
 	args, remaining_args = data_parser.parse_known_args(args=remaining_args, namespace=args)
 
 	# Load settings from saved model file
@@ -60,15 +51,29 @@ def options():
 		print(os.path.abspath(args.model_path))
 
 		# Cache data settings
-		data_args = (args.model_path, args.data_dir, args.output_dir, args.overwrite, args.skip_preprocess)
-		# Load arguments from modle file
-		args = torch.load(args.model_path)['args']
-		# Apply data settings
-		(args.model_path, args.data_dir, args.output_dir, args.overwrite, args.skip_preprocess) = data_args
+		data_args = args
 
-	# Parse all arguments
+		# Load arguments from model file
+		args = torch.load(args.model_path)['args']
+
+		# Apply data settings
+		for data_arg_name in vars(data_args):
+			arg_value = getattr(data_args, data_arg_name)
+			setattr(args, data_arg_name, arg_value)
+
+		# Apply training settings
+		training_parser = get_training_parser(suppress_default=True)
+		augment_parser = get_online_augment_parser(suppress_default=True)
+		args, remaining_args = training_parser.parse_known_args(args=remaining_args, namespace=args)
+		augment_parser.parse_args(args=remaining_args, namespace=args)
+
+	# Parse remaining arguments
 	else:
+		model_parser = get_model_parser()
+		training_parser = get_training_parser()
+		augment_parser = get_online_augment_parser()
 		args, remaining_args = model_parser.parse_known_args(args=remaining_args, namespace=args)
+		args, remaining_args = training_parser.parse_known_args(args=remaining_args, namespace=args)
 		augment_parser.parse_args(args=remaining_args, namespace=args)
 
 
@@ -84,10 +89,18 @@ def options():
 	print('\nArguments:')
 	print('----------')
 
-	for arg in vars(args):
-		print('{0:20} - {1}'.format(arg, getattr(args, arg)))
+	for arg_name in vars(args):
+		print('{0:20} - {1}'.format(arg_name, getattr(args, arg_name)))
 
 	return args
+
+
+def print_help():
+	parsers = [get_data_parser(), get_model_parser(), get_training_parser(), get_online_augment_parser()]
+
+	for parser in parsers:
+		print('\n')
+		parser.print_help()
 
 
 def get_help_parser():
@@ -103,7 +116,7 @@ def get_data_parser():
 
 	data_group.add_argument('--data_dir', type=str, required=True, help='[REQUIRED] Dataset parent directory (data in subdirectories is included)')
 	data_group.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
-	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Overwrites all other model settings')
+	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Provided arguments overwrite all the saved arguments except for network model settings')
 	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 	data_group.add_argument('--skip_preprocess', default=False, action='store_true', help='Skip the pre-processing step if the provided data_dir already contains samples of the proper length and sampling method')
 
@@ -113,8 +126,7 @@ def get_data_parser():
 def get_model_parser():
 	model_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
 	model_group = model_parser.add_argument_group('MODEL SETTINGS')
-	training_group = model_parser.add_argument_group('TRAINING SETTINGS')
-	
+
 	# Model settings
 	model_group.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
 	model_group.add_argument('--num_loss_points', type=int, default=20000, help='Number of points to use when computing the loss')
@@ -125,6 +137,14 @@ def get_model_parser():
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 	model_group.add_argument('--sample_method', default=['near-surface'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
 	model_group.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
+
+	return model_parser
+
+
+def get_training_parser(suppress_default=False):
+	argument_default = argparse.SUPPRESS if suppress_default else None
+	training_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, argument_default=argument_default)
+	training_group = training_parser.add_argument_group('TRAINING SETTINGS')
 
 	# Training settings
 	training_group.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
@@ -140,7 +160,11 @@ def get_model_parser():
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
 	training_group.add_argument('--disable_amp', default=False, action='store_true', help='Disable Automatic Mixed Precision')
 
-	return model_parser
+	return training_parser
+
+
+def get_online_augment_parser(suppress_default=False):
+	return get_augment_parser('ONLINE AUGMENT SETTINGS', suppress_default)
 
 
 # Determine device to train on
