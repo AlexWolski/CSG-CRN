@@ -89,9 +89,7 @@ def rotation_to_quat_tensor(rotation):
 
 
 # Generate a random rotation quaternion
-def random_rotation(args):
-	rotate_axis = args.rotate_axis
-
+def random_rotation(rotate_axis):
 	# Generate a quaternion with random rotations on all axes
 	if rotate_axis == RotationAxis('ALL'):
 		random_rot = rotation_to_quat_tensor(Rotation.random())
@@ -109,18 +107,16 @@ def random_rotation(args):
 
 
 # Generate a random rotation quaternion
-def random_rotation_batch(args):
-	rotation_list = [random_rotation(args) for i in range(args.batch_size)]
+def random_rotation_batch(rotate_axis, batch_size):
+	rotation_list = [random_rotation(rotate_axis) for i in range(batch_size)]
 	return torch.stack(rotation_list, dim=0)
 
 
 # Generate a random scale vector
-def random_scale(args):
-	scale_axis = args.scale_axis
-
+def random_scale(scale_axis, min_scale, max_scale):
 	# Generate a random value for each axis
 	if scale_axis == ScaleAxis('ALL'):
-		scale_vec = [random.uniform(args.min_scale, args.max_scale) for i in range(3)]
+		scale_vec = [random.uniform(min_scale, max_scale) for i in range(3)]
 		return torch.FloatTensor(scale_vec)
 
 	# Select an axis to scale
@@ -129,15 +125,15 @@ def random_scale(args):
 
 	# Generate a random scalar for each axis
 	axes = [ScaleAxis('X'), ScaleAxis('Y'), ScaleAxis('Z')]
-	scale_vec = [random.uniform(args.min_scale, args.max_scale)
+	scale_vec = [random.uniform(min_scale, max_scale)
 				if scale_axis == axes[i] else 1.0 for i in range(3)]
 
 	return torch.FloatTensor(scale_vec)
 
 
 # Generate a random scale vector
-def random_scale_batch(args):
-	scale_list = [random_scale(args) for i in range(args.batch_size)]
+def random_scale_batch(scale_axis, min_scale, max_scale, batch_size):
+	scale_list = [random_scale(scale_axis, min_scale, max_scale) for i in range(batch_size)]
 	return torch.stack(scale_list, dim=0)
 
 
@@ -175,13 +171,13 @@ def augment_sample(points, distances, args):
 
 	# Scale
 	if not args.no_scale:
-		scale_vec = random_scale(args).to(augmented_points.device)
+		scale_vec = random_scale(args.scale_axis, args.min_scale, args.max_scale).to(augmented_points.device)
 		augmented_points = scale_point_cloud(augmented_points, scale_vec)
 		augmented_points = scale_to_unit_sphere(augmented_points)
 
 	# Rotate
 	if not args.no_rotation:
-		rotation_quat = random_rotation(args).to(augmented_points.device)
+		rotation_quat = random_rotation(args.rotate_axis).to(augmented_points.device)
 		augmented_points = rotate_point_cloud(augmented_points, rotation_quat)
 
 	return (augmented_points, augmented_distances)
@@ -189,6 +185,7 @@ def augment_sample(points, distances, args):
 
 # Augment a single SDF sample
 def augment_sample_batch(batch_points, batch_distances, args):
+	batch_size = batch_points.size()[0]
 	augmented_points, augmented_distances = batch_points, batch_distances
 	noise_std = math.sqrt(args.noise_variance)
 
@@ -201,13 +198,13 @@ def augment_sample_batch(batch_points, batch_distances, args):
 
 	# Scale
 	if not args.no_scale:
-		scale_vec = random_scale_batch(args).to(augmented_points.device)
+		scale_vec = random_scale_batch(args.scale_axis, args.min_scale, args.max_scale, batch_size).to(augmented_points.device)
 		augmented_points = scale_point_cloud_batch(augmented_points, scale_vec)
 		augmented_points = scale_to_unit_sphere_batch(augmented_points)
 
 	# Rotate
 	if not args.no_rotation:
-		rotation_quat = random_rotation_batch(args).to(augmented_points.device)
+		rotation_quat = random_rotation_batch(args.rotate_axis, batch_size).to(augmented_points.device)
 		augmented_points = rotate_point_cloud_batch(augmented_points, rotation_quat)
 
 	return (augmented_points, augmented_distances)
