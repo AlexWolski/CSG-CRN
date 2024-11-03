@@ -138,6 +138,7 @@ def get_model_parser():
 	training_group.add_argument('--early_stop_threshold', type=float, default=0.05, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
+	training_group.add_argument('--disable_amp', default=False, action='store_true', help='Disable Automatic Mixed Precision')
 
 	return model_parser
 
@@ -233,7 +234,7 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
 
 		# Predict next primitive
-		with autocast(device_type=device.type, dtype=torch.float16):
+		with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
 			outputs = model(target_input_samples, initial_input_samples)
 
 		# Add primitive to CSG model
@@ -346,7 +347,7 @@ def main():
 	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
 	optimizer = AdamW(model.parameters(), lr=args.init_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
-	scaler = torch.amp.GradScaler()
+	scaler = torch.amp.GradScaler(enabled=not args.disable_amp)
 
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
