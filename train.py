@@ -354,8 +354,8 @@ def main():
 	train_dataset = PointDataset(train_split, device, args, "Loading Training Set")
 	val_dataset = PointDataset(val_split, device, args, "Loading Validation Set")
 
-	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
-	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=True)
+	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
+	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
 
 	train_loader = DataLoader(train_dataset, sampler=train_sampler)
 	val_loader = DataLoader(val_dataset, sampler=val_sampler)
