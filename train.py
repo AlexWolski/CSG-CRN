@@ -235,7 +235,7 @@ def load_model(num_shapes, num_operations, args, device):
 # Run a forwards pass of the network model
 def model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device):
 	# Load data
-	target_all_points = target_loss_samples[..., :3]
+	target_loss_points = target_loss_samples[..., :3]
 	target_loss_distances = target_loss_samples[..., 3]
 	(batch_size, num_input_points, _) = target_input_samples.size()
 
@@ -243,7 +243,7 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 	csg_model = CSGModel(device)
 
 	# Sample initial reconstruction for loss function
-	initial_loss_distances = csg_model.sample_csg(target_all_points)
+	initial_loss_distances = csg_model.sample_csg(target_loss_points)
 
 	# Iteratively generate a set of primitives to build a CSG model
 	for prim in range(args.num_prims):
@@ -265,7 +265,7 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 		csg_model.add_command(*outputs)
 
 	# Sample generated CSG model
-	refined_loss_distances = csg_model.sample_csg(target_all_points)
+	refined_loss_distances = csg_model.sample_csg(target_loss_points)
 
 	# Get primitive shape and boolean operation propability distributions
 	shapes_weights = torch.cat([x['shape weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
