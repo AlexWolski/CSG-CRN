@@ -242,9 +242,6 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 	# Initialize SDF CSG model
 	csg_model = CSGModel(device)
 
-	# Sample initial reconstruction for loss function
-	initial_loss_distances = csg_model.sample_csg(target_loss_points)
-
 	# Iteratively generate a set of primitives to build a CSG model
 	for prim in range(args.num_prims):
 		# Randomly sample initial reconstruction surface to generate input
