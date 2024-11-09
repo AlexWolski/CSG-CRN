@@ -17,6 +17,7 @@ class PointDataset(Dataset):
 		# Load all data samples into memory
 		sdf_sample_list = []
 		skipped_samples = 0
+		total_points = args.num_input_points + args.num_loss_points
 
 		for file_rel_path in tqdm(file_rel_paths, desc=loading_desc):
 			sample_path = os.path.join(self.args.data_dir, file_rel_path)
@@ -30,8 +31,14 @@ class PointDataset(Dataset):
 				if sdf_sample == None:
 					skipped_samples += 1
 					continue
-		
+
+			# Ensure that the sample has the correct number of points
+			if sdf_sample.shape[0] != total_points:
+					skipped_samples += 1
+					continue
+
 			sdf_sample_list.append(sdf_sample)
+
 
 		# Throw an exception if there are no valid data samples
 		if len(sdf_sample_list) == 0:
