@@ -33,6 +33,10 @@ class PointDataset(Dataset):
 		
 			sdf_sample_list.append(sdf_sample)
 
+		# Throw an exception if there are no valid data samples
+		if len(sdf_sample_list) == 0:
+			raise Exception(f'All samples skipped due to insufficient points. No valid samples found in directory:\n{self.args.data_dir}')
+
 		# Save samples in system memory
 		self.sdf_samples = torch.stack(sdf_sample_list, dim=0)
 
