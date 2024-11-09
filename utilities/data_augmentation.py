@@ -79,7 +79,6 @@ def get_augment_parser(group_name='AUGMENT SETTINGS', suppress_default=False):
 	parser_group.add_argument('--min_scale', type=float, default=0.5, help='Lower bound on random scale value')
 	parser_group.add_argument('--max_scale', type=float, default=2.0, help='Upper bound on random scale value')
 	parser_group.add_argument('--noise_variance', type=float, default=1e-10, help='The variance of the gaussian noise aded to each sample point and distance')
-	parser_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
 	return parser
 

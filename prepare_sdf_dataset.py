@@ -27,6 +27,7 @@ def options():
 	data_group.add_argument('--data_dir', type=str, required=True, help='Parent directory containing input 3D data files (3mf, obj, off, glb, gltf, ply, stl, 3dxml)')
 	data_group.add_argument('--output_dir', type=str, default='./data/output', help='Output directory to store SDF samples')
 	data_group.add_argument('--num_samples', type=int, default=200000, help='Number of SDF samples to compute')
+	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
 
 	# Parse and handle Help argument
