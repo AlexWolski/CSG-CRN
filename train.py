@@ -371,8 +371,16 @@ def main():
 	# Load training set
 	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
 	(train_split, val_split, _) = load_data_splits(args, DATA_SPLIT, device)
-	train_dataset = PointDataset(train_split, device, args, "Loading Training Set")
-	val_dataset = PointDataset(val_split, device, args, "Loading Validation Set")
+
+	train_dataset = PointDataset(train_split, device, args, "Training Set")
+
+	if train_dataset.sdf_samples == None:
+		return
+
+	val_dataset = PointDataset(val_split, device, args, "Validation Set")
+
+	if val_dataset.sdf_samples == None:
+		return
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
 	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)

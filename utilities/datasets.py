@@ -8,7 +8,7 @@ from utilities.data_augmentation import augment_sample_batch
 
 
 class PointDataset(Dataset):
-	def __init__(self, file_rel_paths, device, args, loading_desc="Loading Dataset"):
+	def __init__(self, file_rel_paths, device, args, dataset_name="Dataset"):
 		self.raw_copies = len(file_rel_paths)
 		self.device = device
 		self.augmented_copies = len(file_rel_paths) * args.augment_copies
@@ -19,7 +19,7 @@ class PointDataset(Dataset):
 		skipped_samples = 0
 		total_points = args.num_input_points + args.num_loss_points
 
-		for file_rel_path in tqdm(file_rel_paths, desc=loading_desc):
+		for file_rel_path in tqdm(file_rel_paths, desc=f'Loading {dataset_name}'):
 			sample_path = os.path.join(self.args.data_dir, file_rel_path)
 			sdf_sample = np.load(sample_path).astype(np.float32)
 			sdf_sample = torch.from_numpy(sdf_sample)
@@ -40,12 +40,15 @@ class PointDataset(Dataset):
 			sdf_sample_list.append(sdf_sample)
 
 
-		# Throw an exception if there are no valid data samples
-		if len(sdf_sample_list) == 0:
-			raise Exception(f'All samples skipped due to insufficient points. No valid samples found in directory:\n{self.args.data_dir}')
+		if not sdf_sample_list:
+			self.sdf_samples = None
+			print(f'{dataset_name} contains no samples with a sufficient number of points.')
+			print('Lower the number of input and loss points or use a dataset with more samples points.')
+			return
 
 		# Save samples in system memory
 		self.sdf_samples = torch.stack(sdf_sample_list, dim=0)
+
 
 		if skipped_samples > 0:
 			print(f'Skipped {skipped_samples} samples that had too few points\n')
