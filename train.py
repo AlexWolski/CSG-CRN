@@ -325,9 +325,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	training_logger = TrainingLogger(args.output_dir, 'training_results', args.overwrite)
 
 	# Train until model stops improving or a maximum number of epochs is reached
-	for epoch in range(args.max_epochs):
+	for epoch in range(1, args.max_epochs+1):
 		# Train model
-		desc = f'Epoch {epoch+1}/{args.max_epochs}'
+		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
 		val_loss = validate(model, loss_func, val_loader, args, device)
 		learning_rate = optimizer.param_groups[0]['lr']
@@ -341,7 +341,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		print(f"Learning Rate:   {learning_rate}")
 		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
 		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
-		training_logger.add_result(epoch+1, train_loss, val_loss, learning_rate)
+		training_logger.add_result(epoch, train_loss, val_loss, learning_rate)
 
 		# Update learning rate
 		args.init_lr = optimizer.param_groups[0]['lr']
@@ -352,8 +352,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			break
 
 		# Save checkpoint parameters
-		if (epoch+1) % args.checkpoint_freq == 0:
-			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch+1}.pt')
+		if epoch % args.checkpoint_freq == 0:
+			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch}.pt')
 			torch.save({'model': model.state_dict(), 'args': args}, checkpoint_path)
 			print(f'Checkpoint saved to: {checkpoint_path}\n')
 
