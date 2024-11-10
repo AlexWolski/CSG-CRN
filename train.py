@@ -17,6 +17,7 @@ from utilities.data_processing import *
 from utilities.datasets import PointDataset
 from utilities.data_augmentation import get_augment_parser
 from utilities.early_stopping import EarlyStopping
+from utilities.training_logger import TrainingLogger
 
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
@@ -320,21 +321,27 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	save_best_model = lambda _: torch.save({'model': model.state_dict(), 'args': args}, trained_model_path)
 	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
+	# Dictionary for storing training telemetry
+	training_logger = TrainingLogger(args.output_dir, 'training_results', args.overwrite)
+
 	# Train until model stops improving or a maximum number of epochs is reached
 	for epoch in range(args.max_epochs):
 		# Train model
 		desc = f'Epoch {epoch+1}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
 		val_loss = validate(model, loss_func, val_loader, args, device)
+		learning_rate = optimizer.param_groups[0]['lr']
 		scheduler.step(val_loss)
 		early_stopping(val_loss, model)
 
+		# Print and save epoch training results
 		print(f"Training Loss:   {train_loss}")
 		print(f"Validation Loss: {val_loss}")
 		print(f"Best Val Loss:   {scheduler.best}")
-		print(f"Learning Rate:   {optimizer.param_groups[0]['lr']}")
+		print(f"Learning Rate:   {learning_rate}")
 		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
 		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
+		training_logger.append_training_result(epoch+1, train_loss, val_loss, learning_rate)
 
 		# Update learning rate
 		args.init_lr = optimizer.param_groups[0]['lr']
