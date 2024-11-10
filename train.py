@@ -1,27 +1,26 @@
-import os
 import argparse
-import yaml
-import torch
-import traceback
+import os
 import signal
 import sys
+import torch
+import traceback
+import yaml
+
 from tqdm import tqdm
 from torch import autocast
-
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.distributions.uniform import Uniform
 from torch.optim import AdamW, lr_scheduler
 
+from losses.loss import Loss
+from networks.csg_crn import CSG_CRN
+from utilities.csg_model import CSGModel
 from utilities.data_processing import *
 from utilities.datasets import PointDataset
 from utilities.data_augmentation import get_augment_parser
 from utilities.early_stopping import EarlyStopping
 from utilities.training_logger import TrainingLogger
-
-from networks.csg_crn import CSG_CRN
-from utilities.csg_model import CSGModel
-from losses.loss import Loss
 
 
 # Percentage of data to use for training, validation, and testing
