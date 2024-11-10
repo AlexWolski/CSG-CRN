@@ -341,7 +341,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		print(f"Learning Rate:   {learning_rate}")
 		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
 		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
-		training_logger.append_training_result(epoch+1, train_loss, val_loss, learning_rate)
+		training_logger.add_result(epoch+1, train_loss, val_loss, learning_rate)
 
 		# Update learning rate
 		args.init_lr = optimizer.param_groups[0]['lr']
