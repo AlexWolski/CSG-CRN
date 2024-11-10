@@ -55,6 +55,17 @@ def save_list(file_path, list):
 			f.write(f"{item}\n")
 
 
+# Read all the lines of a file to a list
+def load_list(file_path):
+	list_data = []
+
+	with open(file_path, 'r') as f:
+		for item in f:
+			list_data.append(item.rstrip('\n'))
+
+	return list_data
+
+
 # Select points within a threshold distance of the surface
 def select_surface_points(samples, sample_dist):
 	surface_sample_rows = np.where(abs(samples[:,3]) <= sample_dist)

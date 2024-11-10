@@ -45,6 +45,11 @@ def options():
 	data_parser = get_data_parser()
 	args, remaining_args = data_parser.parse_known_args(args=remaining_args, namespace=args)
 
+	# Enforce prerequisite for resume_training option
+	if args.resume_training and not args.model_path:
+		print('Cannot use the resume_training option without providing a model_path')
+		exit()
+
 	# Load settings from saved model file
 	if args.model_path:
 		print('\nLoading Arguments From Model File:')
@@ -117,6 +122,7 @@ def get_data_parser():
 	data_group.add_argument('--data_dir', type=str, required=True, help='[REQUIRED] Dataset parent directory (data in subdirectories is included)')
 	data_group.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
 	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Provided arguments overwrite all the saved arguments except for network model settings')
+	data_group.add_argument('--resume_training', default=False, action='store_true', help='If a model path is supplied, resume training of the model with the original training data')
 	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 	data_group.add_argument('--skip_preprocess', default=False, action='store_true', help='Skip the pre-processing step if the provided data_dir already contains samples of the proper length and sampling method')
 
@@ -183,6 +189,13 @@ def get_device(device):
 
 # Prepare data files and load training dataset
 def load_data_splits(args, data_split, device):
+	# If resuming training of a model, load data splits from file
+	if args.resume_training:
+		train_split = load_list(args.train_split_path)
+		val_split = load_list(args.val_split_path)
+		test_split = load_list(args.test_split_path)
+		return (train_split, val_split, test_split)
+
 	# Load sample files
 	file_rel_paths = get_data_files(args.data_dir)
 	print('Found %i data files' % len(file_rel_paths))
@@ -205,10 +218,14 @@ def load_data_splits(args, data_split, device):
 			err_msg = f'{dataset[0]} dataset ({num_augment_samples}) is smaller than batch size ({args.batch_size})! Add data samples or set keep_last_batch option'
 			raise Exception(err_msg)
 
-	# Save dataset lists
-	save_list(os.path.join(args.output_dir, 'train.txt'), train_split)
-	save_list(os.path.join(args.output_dir, 'val.txt'), val_split)
-	save_list(os.path.join(args.output_dir, 'test.txt'), test_split)
+	# Save data split lists
+	args.train_split_path = os.path.join(args.output_dir, 'train.txt')
+	args.val_split_path = os.path.join(args.output_dir, 'val.txt')
+	args.test_split_path = os.path.join(args.output_dir, 'test.txt')
+
+	save_list(args.train_split_path, train_split)
+	save_list(args.val_split_path, val_split)
+	save_list(args.test_split_path, test_split)
 
 	print(f'Training set:\t{len(train_split.indices)} samples')
 	print(f'Validation set:\t{len(val_split.indices)} samples')
@@ -218,7 +235,7 @@ def load_data_splits(args, data_split, device):
 
 
 # Load CSG-CRN network model
-def load_model(num_shapes, num_operations, args, device):
+def load_model(num_shapes, num_operations, device, args, model_params=None):
 	predict_blending = not args.no_blending
 	predict_roundness = not args.no_roundness
 
@@ -226,8 +243,8 @@ def load_model(num_shapes, num_operations, args, device):
 	model = CSG_CRN(num_shapes, num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(device)
 
 	# Load model parameters if available
-	if args.model_path:
-		model.load_state_dict(torch.load(args.model_path)['model'])
+	if model_params:
+		model.load_state_dict(model_params)
 
 	return model
 
@@ -311,27 +328,32 @@ def validate(model, loss_func, val_loader, args, device):
 	return total_val_loss
 
 
+# Save the model and settings to file
+def save_model(model, args, epoch, learning_rate, model_path):
+	torch.save({'model': model.state_dict(), 'args': args, 'epoch': epoch, 'learning_rate': learning_rate}, model_path)
+
+
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, args, device):
+def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, args, device, init_epoch=1):
 	model.train(True)
 
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
-	save_best_model = lambda _: torch.save({'model': model.state_dict(), 'args': args}, trained_model_path)
+	save_best_model = lambda epoch, learning_rate: save_model(model, args, epoch, learning_rate, trained_model_path)
 	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
 	# Dictionary for storing training telemetry
 	training_logger = TrainingLogger(args.output_dir, 'training_results', args.overwrite)
 
 	# Train until model stops improving or a maximum number of epochs is reached
-	for epoch in range(1, args.max_epochs+1):
+	for epoch in range(init_epoch, args.max_epochs+1):
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
 		val_loss = validate(model, loss_func, val_loader, args, device)
 		learning_rate = optimizer.param_groups[0]['lr']
 		scheduler.step(val_loss)
-		early_stopping(val_loss, model)
+		early_stopping(val_loss, (epoch, learning_rate))
 
 		# Print and save epoch training results
 		print(f"Training Loss:   {train_loss}")
@@ -342,9 +364,6 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
 		training_logger.add_result(epoch, train_loss, val_loss, learning_rate)
 
-		# Update learning rate
-		args.init_lr = optimizer.param_groups[0]['lr']
-
 		# Check for early stopping
 		if early_stopping.early_stop:
 			print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
@@ -353,7 +372,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Save checkpoint parameters
 		if epoch % args.checkpoint_freq == 0:
 			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch}.pt')
-			torch.save({'model': model.state_dict(), 'args': args}, checkpoint_path)
+			save_model(model, args, epoch, learning_rate, checkpoint_path)
 			print(f'Checkpoint saved to: {checkpoint_path}\n')
 
 	print('\nTraining complete! Model parameters saved to:')
@@ -364,18 +383,30 @@ def main():
 	args = options()
 	print('')
 
+	# Load saved settings if a model path is provided
+	if args.model_path:
+		saved_settings_dict = torch.load(args.model_path)
+		model_params = saved_settings_dict['model']
+
+	if args.resume_training:
+		epoch = saved_settings_dict['epoch']
+		learning_rate = saved_settings_dict['learning_rate']
+
 	# Set training device
 	device = get_device(args.device)
 
 	# Initialize model
-	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, args, device)
+	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
 	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
-	optimizer = AdamW(model.parameters(), lr=args.init_lr)
+	current_lr = learning_rate if args.resume_training else args.init_lr
+	optimizer = AdamW(model.parameters(), lr=current_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
 	scaler = torch.amp.GradScaler(enabled=not args.disable_amp)
 
 	# Load training set
-	(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
+	if not args.resume_training:
+		(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
+
 	(train_split, val_split, _) = load_data_splits(args, DATA_SPLIT, device)
 
 	train_dataset = PointDataset(train_split, device, args, "Training Set")
@@ -402,7 +433,7 @@ def main():
 
 	# Train model
 	print('')
-	train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, args, device)
+	train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, args, device, epoch if args.resume_training else None)
 
 
 if __name__ == '__main__':

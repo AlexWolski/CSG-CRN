@@ -10,7 +10,7 @@ class EarlyStopping:
 		self.early_stop = False
 
 
-	def __call__(self, val_loss, model):
+	def __call__(self, val_loss, callback_args=None):
 		# Initial epoch
 		if self.best_loss is None:
 			self.best_loss = val_loss
@@ -25,7 +25,10 @@ class EarlyStopping:
 			self.counter = 0
 
 			if self.improvement_callback != None:
-				self.improvement_callback(val_loss)
+				if callback_args:
+					self.improvement_callback(*callback_args)
+				else:
+					self.improvement_callback()
 
 		# Early stop reached
 		if self.counter >= self.patience:
