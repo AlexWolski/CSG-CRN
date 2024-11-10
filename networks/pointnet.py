@@ -10,6 +10,9 @@ import numpy as np
 import torch.nn.functional as F
 
 
+POINTNET_FEAT_OUTPUT_SIZE = 1024
+
+
 class STN4d(nn.Module):
     def __init__(self, no_batch_norm=False):
         super(STN4d, self).__init__()

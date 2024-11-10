@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from networks.pointnet import PointNetfeat
-from networks.siamese_encoder import SiameseEncoder
+from networks.pointnet import PointNetfeat, POINTNET_FEAT_OUTPUT_SIZE
+from networks.siamese_encoder import SiameseEncoder, SIAMEZE_ENCODER_OUTPUT_SIZE
 from networks.regressor_decoder import PrimitiveRegressor
 
 
@@ -16,8 +16,8 @@ class CSG_CRN(nn.Module):
 		self.predict_roundness = predict_roundness
 
 		self.point_encoder = PointNetfeat(global_feat=True, no_batch_norm=no_batch_norm)
-		self.siamese_encoder = SiameseEncoder(self.point_encoder, 1024, no_batch_norm)
-		self.regressor_decoder = PrimitiveRegressor(self.num_shapes, self.num_operations,
+		self.siamese_encoder = SiameseEncoder(self.point_encoder, POINTNET_FEAT_OUTPUT_SIZE, no_batch_norm)
+		self.regressor_decoder = PrimitiveRegressor(SIAMEZE_ENCODER_OUTPUT_SIZE, self.num_shapes, self.num_operations,
 			predict_blending=self.predict_blending, predict_roundness=self.predict_roundness, no_batch_norm=no_batch_norm)
 
 

@@ -4,6 +4,7 @@ import torch.nn as nn
 
 # Defines the layers number and count for the siamese encoder
 LAYER_SIZES = [1024, 512, 512, 512, 256]
+SIAMEZE_ENCODER_OUTPUT_SIZE = LAYER_SIZES[-1]
 
 
 # Encode two inputs with a weight-sharing siamese encoder and learn combined feature vector
@@ -11,7 +12,6 @@ class SiameseEncoder(nn.Module):
 	def __init__(self, encoder, encoder_feature_size, no_batch_norm=False):
 		super(SiameseEncoder, self).__init__()
 		self.encoder = encoder
-		self.encoder_feature_size = encoder_feature_size
 
 		self.relu = nn.ReLU()
 		self.fc_list = nn.ModuleList()

@@ -72,6 +72,7 @@ class PrimitiveRegressor(nn.Module):
 
 
 	def __init__(self,
+		input_feature_size,
 		num_shapes, num_operations,
 		translation_scale=DEFAULT_TRANSLATION_SCALE,
 		min_scale=DEFAULT_MIN_SCALE,
@@ -84,13 +85,13 @@ class PrimitiveRegressor(nn.Module):
 
 		super(PrimitiveRegressor, self).__init__()
 
-		self.shape = RegressorNetwork([256, num_shapes], nn.Softmax(dim=-1), no_batch_norm=no_batch_norm)
-		self.operation = RegressorNetwork([256, num_operations], nn.Softmax(dim=-1), no_batch_norm=no_batch_norm)
-		self.translation = RegressorNetwork([256, 3], nn.Tanh(), self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
-		self.rotation = RegressorNetwork([256, 4], None, self._normalizeRotation(), no_batch_norm=no_batch_norm)
-		self.scale = RegressorNetwork([256, 3], torch.sigmoid, self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
-		self.blending = RegressorNetwork([256, 1], torch.sigmoid, self._normalizeBlending(min_blending, max_blending), no_batch_norm=no_batch_norm) if (predict_blending) else (None)
-		self.roundness = RegressorNetwork([256, 1], torch.sigmoid, no_batch_norm=no_batch_norm) if (predict_roundness) else (None)
+		self.shape = RegressorNetwork([input_feature_size, num_shapes], nn.Softmax(dim=-1), no_batch_norm=no_batch_norm)
+		self.operation = RegressorNetwork([input_feature_size, num_operations], nn.Softmax(dim=-1), no_batch_norm=no_batch_norm)
+		self.translation = RegressorNetwork([input_feature_size, 3], nn.Tanh(), self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
+		self.rotation = RegressorNetwork([input_feature_size, 4], None, self._normalizeRotation(), no_batch_norm=no_batch_norm)
+		self.scale = RegressorNetwork([input_feature_size, 3], torch.sigmoid, self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
+		self.blending = RegressorNetwork([input_feature_size, 1], torch.sigmoid, self._normalizeBlending(min_blending, max_blending), no_batch_norm=no_batch_norm) if (predict_blending) else (None)
+		self.roundness = RegressorNetwork([input_feature_size, 1], torch.sigmoid, no_batch_norm=no_batch_norm) if (predict_roundness) else (None)
 
 	
 	def forward(self, X, has_initial_recon):
