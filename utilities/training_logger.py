@@ -75,17 +75,21 @@ class TrainingLogger():
 		val_loss = self.training_results['Validation Loss']
 		learning_rate = self.training_results['Learning Rate']
 
-		plt.plot(epoch, train_loss, color='blue', label='Training Loss')
-		plt.plot(epoch, val_loss, color='red', label='Validation Loss')
-		# plt.plot(epoch, learning_rate, color='grey', label='Learning Rate', linestyle='--')
+		fig, axes1 = plt.subplots()
 
-		plt.legend()
-		plt.xlabel('Epoch')
-		plt.ylabel('Loss')
-		plt.yscale('log')
+		axes1.plot(epoch, train_loss, color='blue', label='Training Loss')
+		axes1.plot(epoch, val_loss, color='red', label='Validation Loss')
+		axes1.set_xlabel('Epoch')
+		axes1.set_ylabel('Loss')
+		axes1.set_yscale('log')
 
-		plt.savefig(self.plot_output_file, dpi=300)
-		plt.close()
+		axes2 = axes1.twinx()
+		axes2.plot(epoch, learning_rate, color='grey', label='Learning Rate', linestyle='--')
+		axes1.set_ylabel('Learning Rate')
+
+		fig.legend()
+		fig.tight_layout()
+		fig.savefig(self.plot_output_file, dpi=300)
 
 
 	# Append epoch result data to training_results dictionary
