@@ -313,32 +313,30 @@ def validate(model, loss_func, val_loader, args, device):
 
 
 # Save the model and settings to file
-def save_model(model, args, data_splits, epoch, learning_rate, model_path):
+def save_model(model, args, data_splits, training_results, model_path):
 	torch.save({
 		'model': model.state_dict(),
 		'args': args,
 		'data_dir': args.data_dir,
 		'output_dir': args.output_dir,
 		'data_splits': data_splits,
-		'epoch': epoch,
-		'learning_rate': learning_rate
+		'training_results': training_results
 	}, model_path)
 
 
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, data_splits, args, device, init_epoch=1):
+def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, data_splits, args, device, training_logger):
 	model.train(True)
 
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
 	checkpoint_dir = get_checkpoint_dir(args.output_dir)
-	save_best_model = lambda epoch, learning_rate: save_model(model, args, data_splits, epoch, learning_rate, trained_model_path)
+	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path)
 	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
-	# Dictionary for storing training telemetry
-	training_logger = TrainingLogger(args.output_dir, 'training_results', args.overwrite)
-
 	# Train until model stops improving or a maximum number of epochs is reached
+	init_epoch = training_logger.get_last_epoch()+1 if training_logger.get_last_epoch() else 1
+
 	for epoch in range(init_epoch, args.max_epochs+1):
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
@@ -346,7 +344,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		val_loss = validate(model, loss_func, val_loader, args, device)
 		learning_rate = optimizer.param_groups[0]['lr']
 		scheduler.step(val_loss)
-		early_stopping(val_loss, (epoch, learning_rate))
+
+		training_logger.add_result(epoch, train_loss, val_loss, learning_rate)
+		early_stopping(val_loss)
 
 		# Print and save epoch training results
 		print(f"Training Loss:   {train_loss}")
@@ -355,7 +355,6 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		print(f"Learning Rate:   {learning_rate}")
 		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
 		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
-		training_logger.add_result(epoch, train_loss, val_loss, learning_rate)
 
 		# Check for early stopping
 		if early_stopping.early_stop:
@@ -365,7 +364,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Save checkpoint parameters
 		if epoch % args.checkpoint_freq == 0:
 			checkpoint_path = os.path.join(checkpoint_dir, f'epoch_{epoch}.pt')
-			save_model(model, args, data_splits, epoch, learning_rate, checkpoint_path)
+			save_model(model, args, data_splits, training_logger.get_results(), checkpoint_path)
 			print(f'Checkpoint saved to: {checkpoint_path}\n')
 
 	print('\nTraining complete! Model parameters saved to:')
@@ -389,16 +388,17 @@ def main():
 		args.data_dir = saved_settings_dict['data_dir']
 		args.output_dir = saved_settings_dict['output_dir']
 		data_splits = saved_settings_dict['data_splits']
-		epoch = saved_settings_dict['epoch']
-		learning_rate = saved_settings_dict['learning_rate']
+		training_results = saved_settings_dict['training_results']
+		training_logger = TrainingLogger(args.output_dir, 'training_results', training_results)
 	else:
 		(args.output_dir, checkpoint_dir) = create_out_dir(args)
 		data_splits = load_data_splits(args, DATA_SPLIT, device)
+		training_logger = TrainingLogger(args.output_dir, 'training_results')
 
 	# Initialize model
 	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
 	loss_func = Loss(PRIM_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT, OP_LOSS_WEIGHT).to(device)
-	current_lr = learning_rate if args.resume_training else args.init_lr
+	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = AdamW(model.parameters(), lr=current_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
 	scaler = torch.amp.GradScaler(enabled=not args.disable_amp)
@@ -426,9 +426,8 @@ def main():
 		yaml.dump(args.__dict__, out_path, sort_keys=False)
 
 	# Train model
-	init_epoch = epoch if args.resume_training else 1
 	print('')
-	train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, data_splits, args, device, init_epoch)
+	train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, data_splits, args, device, training_logger)
 
 
 if __name__ == '__main__':
