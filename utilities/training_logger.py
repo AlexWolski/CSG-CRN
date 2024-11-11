@@ -1,5 +1,7 @@
 import csv
 import os
+import matplotlib.pyplot as plt
+
 
 HEADERS = ['Epoch', 'Training Loss', 'Validation Loss', 'Learning Rate']
 
@@ -18,6 +20,7 @@ class TrainingLogger():
 		# Initialize output csv file
 		self.create_csv_file()
 		self.write_results(self.training_results)
+		self.plot_results()
 
 
 	# Create new csv file and print header
@@ -65,6 +68,26 @@ class TrainingLogger():
 				csv_writer.writerow([epoch, train_loss, val_loss, learning_rate])
 
 
+	# Generate plot image of results
+	def plot_results(self):
+		epoch = self.training_results['Epoch']
+		train_loss = self.training_results['Training Loss']
+		val_loss = self.training_results['Validation Loss']
+		learning_rate = self.training_results['Learning Rate']
+
+		plt.plot(epoch, train_loss, color='blue', label='Training Loss')
+		plt.plot(epoch, val_loss, color='red', label='Validation Loss')
+		# plt.plot(epoch, learning_rate, color='grey', label='Learning Rate', linestyle='--')
+
+		plt.legend()
+		plt.xlabel('Epoch')
+		plt.ylabel('Loss')
+		plt.yscale('log')
+
+		plt.savefig(self.plot_output_file, dpi=300)
+		plt.close()
+
+
 	# Append epoch result data to training_results dictionary
 	def _append_training_results(self, epoch, train_loss, val_loss, learning_rate):
 		self.training_results['Epoch'].append(epoch)
@@ -80,3 +103,5 @@ class TrainingLogger():
 		with open(self.csv_output_file, 'a') as fd:
 			csv_writer = csv.writer(fd)
 			csv_writer.writerow([epoch, train_loss, val_loss, learning_rate])
+
+		self.plot_results()
