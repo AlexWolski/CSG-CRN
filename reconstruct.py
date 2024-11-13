@@ -152,6 +152,7 @@ def construct_csg_model(model, input_file, args):
 	print_csg_commands(csg_model)
 	# Print reconstruction loss
 	print_recon_loss(input_samples, csg_model, args)
+	print('\n')
 
 	return csg_model
 

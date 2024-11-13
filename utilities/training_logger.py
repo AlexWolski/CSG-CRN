@@ -75,21 +75,26 @@ class TrainingLogger():
 		val_loss = self.training_results['Validation Loss']
 		learning_rate = self.training_results['Learning Rate']
 
-		fig, axes1 = plt.subplots()
+		fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(5,8))
 
-		axes1.plot(epoch, train_loss, color='blue', label='Training Loss')
-		axes1.plot(epoch, val_loss, color='red', label='Validation Loss')
-		axes1.set_xlabel('Epoch')
-		axes1.set_ylabel('Loss')
-		axes1.set_yscale('log')
+		ax1.plot(epoch, train_loss, color='blue', label='Training Loss')
+		ax1.plot(epoch, val_loss, color='red', label='Validation Loss')
+		ax1.set_xlabel('Epoch')
+		ax1.set_ylabel('Loss')
+		ax1.set_yscale('log')
+		ax1.legend()
 
-		axes2 = axes1.twinx()
-		axes2.plot(epoch, learning_rate, color='grey', label='Learning Rate', linestyle='--')
-		axes1.set_ylabel('Learning Rate')
+		# ax2.plot(epoch, train_accuracy, color='blue', label='Training Accuracy')
+		# ax2.plot(epoch, val_accuracy, color='red', label='Validation Accuracy')
+		ax2.set_xlabel('Epoch')
+		ax2.set_ylabel('Accuracy')
+		ax2.legend()
 
-		fig.legend()
-		fig.tight_layout()
-		fig.savefig(self.plot_output_file, dpi=300)
+		ax3.plot(epoch, learning_rate, color='black', label='Learning Rate')
+		ax3.set_xlabel('Epoch')
+		ax3.set_ylabel('Learning Rate')
+
+		fig.savefig(self.plot_output_file, bbox_inches="tight", dpi=300)
 
 
 	# Append epoch result data to training_results dictionary
