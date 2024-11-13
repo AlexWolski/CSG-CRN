@@ -45,8 +45,8 @@ def load_model(args):
 	args.sample_dist = saved_args.sample_dist
 
 	# Check for weights corresponding to blending and roundness regressors
-	predict_blending = 'regressor_decoder.blending.fc1.weight' in state_dict
-	predict_roundness = 'regressor_decoder.roundness.fc1.weight' in state_dict
+	predict_blending = 'regressor_decoder.blending.fc_list.0.weight' in state_dict
+	predict_roundness = 'regressor_decoder.roundness.fc_list.0.weight' in state_dict
 	no_batch_norm = not 'point_encoder.bn1.weight' in state_dict
 
 	# Initialize model
