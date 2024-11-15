@@ -8,13 +8,11 @@ import torch.nn as nn
 class ReconstructionLoss(nn.Module):
 	def __init__(self):
 		super(ReconstructionLoss, self).__init__()
-		self.l1_loss = torch.nn.L1Loss(reduction='none')
+		self.l2_loss = torch.nn.MSELoss(reduction='none')
 
 	def forward(self, target_sdf, predicted_sdf):
-		num_samples = target_sdf.size(dim=-1)
-
-		# Compute average L1 loss of SDF samples for each batch
-		recon_loss = self.l1_loss(target_sdf, predicted_sdf)
+		# Compute average L2 loss of SDF samples for each batch
+		recon_loss = self.l2_loss(target_sdf, predicted_sdf)
 		# Compute average loss of all batches
 		recon_loss = torch.mean(recon_loss)
 

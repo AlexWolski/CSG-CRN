@@ -89,7 +89,7 @@ class PrimitiveRegressor(nn.Module):
 
 		super(PrimitiveRegressor, self).__init__()
 
-		gumbel_softmax_args = {'hard': True, 'dim': -1}
+		gumbel_softmax_args = {'hard': True, 'tau': 0.5, 'dim': -1}
 
 		self.shape = RegressorNetwork([input_feature_size, num_shapes], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
 		self.operation = RegressorNetwork([input_feature_size, num_operations], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
