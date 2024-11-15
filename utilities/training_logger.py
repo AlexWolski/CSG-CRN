@@ -86,15 +86,16 @@ class TrainingLogger():
 
 		# ax2.plot(epoch, train_accuracy, color='blue', label='Training Accuracy')
 		# ax2.plot(epoch, val_accuracy, color='red', label='Validation Accuracy')
-		ax2.set_xlabel('Epoch')
-		ax2.set_ylabel('Accuracy')
-		ax2.legend()
+		# ax2.set_xlabel('Epoch')
+		# ax2.set_ylabel('Accuracy')
+		# ax2.legend()
 
 		ax3.plot(epoch, learning_rate, color='black', label='Learning Rate')
 		ax3.set_xlabel('Epoch')
 		ax3.set_ylabel('Learning Rate')
 
 		fig.savefig(self.plot_output_file, bbox_inches="tight", dpi=300)
+		plt.close()
 
 
 	# Append epoch result data to training_results dictionary
