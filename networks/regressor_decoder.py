@@ -15,11 +15,12 @@ DEFAULT_MAX_BLENDING = 1
 
 # Parent regressor network class to generalize network building
 class RegressorNetwork(nn.Module):
-	def __init__(self, layer_sizes, activation_func=None, normalization_func=None, no_batch_norm=False):
+	def __init__(self, layer_sizes, activ_func=None, activ_func_args=None, norm_func=None, no_batch_norm=False):
 		super(RegressorNetwork, self).__init__()
 		self.layer_sizes = layer_sizes
-		self.activation_func = activation_func
-		self.normalization_func = normalization_func
+		self.activ_func = activ_func
+		self.activ_func_args = activ_func_args
+		self.norm_func = norm_func
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.init_layers(no_batch_norm);
 
@@ -47,11 +48,14 @@ class RegressorNetwork(nn.Module):
 					bn_layer = self.bn_list[i]
 					X = bn_layer(X)
 
-			elif self.activation_func != None:
-				X = self.activation_func(X)
+			elif self.activ_func != None:
+				if self.activ_func_args:
+					X = self.activ_func(X, **self.activ_func_args)
+				else:
+					X = self.activ_func(X)
 
-		if self.normalization_func != None:
-			X = self.normalization_func(X)
+		if self.norm_func != None:
+			X = self.norm_func(X)
 
 		return X
 
@@ -85,13 +89,15 @@ class PrimitiveRegressor(nn.Module):
 
 		super(PrimitiveRegressor, self).__init__()
 
-		self.shape = RegressorNetwork([input_feature_size, num_shapes], nn.Softmax(dim=-1), no_batch_norm=no_batch_norm)
-		self.operation = RegressorNetwork([input_feature_size, num_operations], nn.Softmax(dim=-1), no_batch_norm=no_batch_norm)
-		self.translation = RegressorNetwork([input_feature_size, 3], nn.Tanh(), self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
-		self.rotation = RegressorNetwork([input_feature_size, 4], None, self._normalizeRotation(), no_batch_norm=no_batch_norm)
-		self.scale = RegressorNetwork([input_feature_size, 3], torch.sigmoid, self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
-		self.blending = RegressorNetwork([input_feature_size, 1], torch.sigmoid, self._normalizeBlending(min_blending, max_blending), no_batch_norm=no_batch_norm) if (predict_blending) else (None)
-		self.roundness = RegressorNetwork([input_feature_size, 1], torch.sigmoid, no_batch_norm=no_batch_norm) if (predict_roundness) else (None)
+		gumbel_softmax_args = {'hard': True, 'dim': -1}
+
+		self.shape = RegressorNetwork([input_feature_size, num_shapes], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
+		self.operation = RegressorNetwork([input_feature_size, num_operations], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
+		self.translation = RegressorNetwork([input_feature_size, 3], activ_func=nn.Tanh(), norm_func=self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
+		self.rotation = RegressorNetwork([input_feature_size, 4], activ_func=None, norm_func=self._normalizeRotation(), no_batch_norm=no_batch_norm)
+		self.scale = RegressorNetwork([input_feature_size, 3], activ_func=torch.sigmoid, norm_func=self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
+		self.blending = RegressorNetwork([input_feature_size, 1], activ_func=torch.sigmoid, norm_func=self._normalizeBlending(min_blending, max_blending), no_batch_norm=no_batch_norm) if (predict_blending) else (None)
+		self.roundness = RegressorNetwork([input_feature_size, 1], activ_func=torch.sigmoid, no_batch_norm=no_batch_norm) if (predict_roundness) else (None)
 
 	
 	def forward(self, X, has_initial_recon):
