@@ -26,7 +26,7 @@ def options():
 	# Data settings
 	data_group.add_argument('--data_dir', type=str, required=True, help='Parent directory containing input 3D data files (3mf, obj, off, glb, gltf, ply, stl, 3dxml)')
 	data_group.add_argument('--output_dir', type=str, default='./data/output', help='Output directory to store SDF samples')
-	data_group.add_argument('--num_samples', type=int, default=200000, help='Number of SDF samples to compute')
+	data_group.add_argument('--num_sample_points', type=int, default=10000, help='Number of points to sample for each SDF')
 	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
 
@@ -88,13 +88,13 @@ def create_output_subdir(data_dir, output_dir, mesh_file_path):
 
 
 # Compute SDF samples
-def sample_sdf(mesh_file_path, num_samples):
+def sample_sdf(mesh_file_path, num_sample_points):
 	# Prepare mesh
 	mesh = trimesh.load(mesh_file_path)
 	mesh = scale_to_unit_sphere(mesh)
 
 	# Sample mesh surface
-	points = sample_uniform_points_in_unit_sphere(num_samples).astype(np.float32)
+	points = sample_uniform_points_in_unit_sphere(num_sample_points).astype(np.float32)
 	distances = mesh_to_sdf.mesh_to_sdf(mesh, points).astype(np.float32)
 
 	# Convert to torch tensor
@@ -141,7 +141,7 @@ def prepare_dataset(data_dir, output_dir, args):
 	for mesh_file_path in tqdm(mesh_file_paths):
 		# Compute SDF samples
 		try:
-			(points, distances) = sample_sdf(mesh_file_path, args.num_samples)
+			(points, distances) = sample_sdf(mesh_file_path, args.num_sample_points)
 		# Skip meshes that raise an error
 		except BadMeshException:
 			tqdm.write(f'Skipping Bad Mesh\n: {mesh_file_path}')
