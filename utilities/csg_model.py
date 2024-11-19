@@ -4,7 +4,7 @@ from torch.distributions.uniform import Uniform
 from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder
 
 
-# Supported bounds is a sphere with radius MAX_BOUND
+# Supported bounds is a cube with length MAX_BOUND
 MAX_BOUND = 1
 # Maximum SDF value is twice the radius
 MAX_SDF_VALUE = MAX_BOUND * 2

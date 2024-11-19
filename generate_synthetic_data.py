@@ -135,6 +135,11 @@ def generate_dataset(args):
 		else:
 			(sample_points, sample_distances) = csg_model.sample_csg_surface(1, args.num_sample_points, args.sample_dist)
 
+		# Re-generate sample if there are no samples
+		if sample_points.nelement() == 0:
+			i = i-1
+			continue
+
 		# Save model samples to file
 		samples = torch.cat((sample_points, sample_distances.unsqueeze(-1)), dim=-1).squeeze(0).cpu()
 		np.save(output_path, samples)
