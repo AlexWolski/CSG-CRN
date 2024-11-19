@@ -138,7 +138,7 @@ def random_scale_batch(scale_axis, min_scale, max_scale, batch_size):
 
 
 # Scale a given point cloud batch to fit within a unit sphere
-def scale_to_unit_sphere_batch(batch_points):
+def scale_to_unit_sphere_batch(batch_points, batch_distances):
 	# Compute furthest point from orgin
 	squared_points = torch.square(batch_points)
 	squared_dist = torch.sum(squared_points, -1)
@@ -148,13 +148,14 @@ def scale_to_unit_sphere_batch(batch_points):
 	scale = 1.0 / max_dist
 	scale_vec = torch.stack([scale, scale, scale], dim=-1)
 	scaled_points = scale_point_cloud_batch(batch_points, scale_vec)
-	return scaled_points
+	scaled_distances = batch_distances * scale[:, None, None]
+	return (scaled_points, scaled_distances)
 
 
 # Scale a given point cloud to fit within a unit sphere
-def scale_to_unit_sphere(batch_points):
-	scaled_points = scale_to_unit_sphere_batch(batch_points.unsqueeze(0))
-	return scaled_points.squeeze(0)
+def scale_to_unit_sphere(points, distances):
+	(scaled_points, scaled_distances) = scale_to_unit_sphere_batch(points.unsqueeze(0), distances.unsqueeze(0))
+	return (scaled_points.squeeze(0), distances.squeeze(0))
 
 
 # Augment a single SDF sample
@@ -173,7 +174,7 @@ def augment_sample(points, distances, args):
 	if not args.no_scale:
 		scale_vec = random_scale(args.scale_axis, args.min_scale, args.max_scale).to(augmented_points.device)
 		augmented_points = scale_point_cloud(augmented_points, scale_vec)
-		augmented_points = scale_to_unit_sphere(augmented_points)
+		(augmented_points, augmented_distances) = scale_to_unit_sphere(augmented_points)
 
 	# Rotate
 	if not args.no_rotation:
@@ -200,7 +201,7 @@ def augment_sample_batch(batch_points, batch_distances, args):
 	if not args.no_scale:
 		scale_vec = random_scale_batch(args.scale_axis, args.min_scale, args.max_scale, batch_size).to(augmented_points.device)
 		augmented_points = scale_point_cloud_batch(augmented_points, scale_vec)
-		augmented_points = scale_to_unit_sphere_batch(augmented_points)
+		(augmented_points, augmented_distances) = scale_to_unit_sphere_batch(augmented_points, augmented_distances)
 
 	# Rotate
 	if not args.no_rotation:
