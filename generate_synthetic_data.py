@@ -7,6 +7,7 @@ from tqdm import tqdm
 from utilities import data_augmentation
 from utilities.data_augmentation import RotationAxis, ScaleAxis, random_rotation_batch, random_scale_batch, scale_to_unit_sphere_batch
 from utilities.csg_model import CSGModel, add_sdf
+from reconstruct import print_csg_commands
 
 
 # Number of samples to take form a CSG model to find a near-surface point
@@ -19,7 +20,6 @@ def options():
 	help_parser = argparse.ArgumentParser(add_help=False)
 	data_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
 	gen_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
-	augment_parser = data_augmentation.get_augment_parser('OFFLINE AUGMENT SETTINGS')
 	data_group = data_parser.add_argument_group('DATA SETTINGS')
 	gen_group = gen_parser.add_argument_group('GENERATION SETTINGS')
 
@@ -36,8 +36,14 @@ def options():
 	gen_group.add_argument('--num_shapes', type=int, default=1, help='Number of shapes to generate per CSG model')
 	gen_group.add_argument('--sample_method', default=['near-surface'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
 	gen_group.add_argument('--sample_dist', type=float, default=0.001, help='Maximum distance to object surface for near-surface sampling (must be >0)')
+	gen_group.add_argument('--min_scale', type=float, default=0.2, help='Lower bound on random scale value')
+	gen_group.add_argument('--max_scale', type=float, default=0.8, help='Upper bound on random scale value')
 	gen_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
+	gen_group.add_argument('--min_blending', type=float, default=0.0, help='Minimum bound for random primitive blending value')
+	gen_group.add_argument('--max_blending', type=float, default=0.2, help='Maximum bound for random primitive blending value')
 	gen_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
+	gen_group.add_argument('--min_roundness', type=float, default=0.0, help='Minimum bound for random roundness value')
+	gen_group.add_argument('--max_roundness', type=float, default=0.2, help='Maximum bound for random roundness value')
 
 	# Parse and handle Help argument
 	args, remaining_args = help_parser.parse_known_args()
@@ -46,15 +52,11 @@ def options():
 		print()
 		data_parser.print_help()
 		print('\n')
-		augment_parser.print_help()
+		gen_parser.print_help()
 		exit()
 
-	# Parse data settings
+	# Parse settings
 	args, remaining_args = data_parser.parse_known_args(args=remaining_args, namespace=args)
-
-	# Parse augment settings
-	args, remaining_args = augment_parser.parse_known_args(args=remaining_args, namespace=args)
-
 	gen_parser.parse_args(args=remaining_args, namespace=args)
 
 	return args
@@ -95,15 +97,20 @@ def random_position(csg_model):
 	return points.squeeze()[min_dist_index]
 
 
+# Generate a tensor with random float value within the given bounds
+def rand_float_tensor(min_bound, max_bound, device):
+	return torch.Tensor([[random.uniform(min_bound,max_bound)]]).to(device) 
+
+
 # Randomly generate a shape to add to the CSG model
-def generate_shape(csg_model, is_first_shape, no_blending, no_roundness, no_rotation, no_scale, rotate_axis, scale_axis, min_scale, max_scale):
+def generate_shape(csg_model, is_first_shape, no_blending, min_blending, max_blending, no_roundness, min_roundness, max_roundness, min_scale, max_scale):
 	shape_weights = random_shape().to(csg_model.device)
 	operation_weights = random_operation(is_first_shape).to(csg_model.device)
 	translation = random_position(csg_model).to(csg_model.device)
-	rotation = random_rotation_batch(rotate_axis, 1).to(csg_model.device)
-	scale = random_scale_batch(scale_axis, min_scale, max_scale, 1).to(csg_model.device)
-	no_blending = torch.rand(1,1).to(csg_model.device) if not (no_blending or is_first_shape) else None
-	no_roundness = torch.rand(1,1).to(csg_model.device) if not no_roundness else None
+	rotation = random_rotation_batch(RotationAxis.allAxes, 1).to(csg_model.device)
+	scale = random_scale_batch(ScaleAxis.allAxes, min_scale, max_scale, 1).to(csg_model.device)
+	no_blending = rand_float_tensor(min_blending, max_blending, csg_model.device) if not (no_blending or is_first_shape) else None
+	no_roundness = rand_float_tensor(min_roundness, max_roundness, csg_model.device) if not no_roundness else None
 	csg_model.add_command(shape_weights, operation_weights, translation, rotation, scale, no_blending, no_roundness)
 
 
@@ -112,7 +119,6 @@ def generate_dataset(args):
 	os.makedirs(args.output_dir, exist_ok=True)
 
 	for i in tqdm(range(args.num_samples)):
-		is_first_shape = i == 0
 		output_path = os.path.join(args.output_dir, f'Sample {i}.npy')
 
 		device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -120,7 +126,8 @@ def generate_dataset(args):
 
 		# Generate model
 		for i in range(args.num_shapes):
-			generate_shape(csg_model, is_first_shape, args.no_blending, args.no_roundness, args.no_rotation, args.no_scale, args.rotate_axis, args.scale_axis, args.min_scale, args.max_scale)
+			is_first_shape = i == 0
+			generate_shape(csg_model, is_first_shape, args.no_blending, args.min_blending, args.max_blending, args.no_roundness, args.min_roundness, args.max_roundness, args.min_scale, args.max_scale)
 
 		# Sample model
 		if args.sample_method[0] == 'uniform':
