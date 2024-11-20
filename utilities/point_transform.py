@@ -128,27 +128,11 @@ def rotate_point_cloud(point_cloud, rotation):
 	return rotated_points.squeeze(0)
 
 
-# Scales a BxNx3 point cloud tensor by a Bx3 rotation tensor
-# Where B = Batch size and N = Number of points
-def scale_point_cloud_batch(point_clouds, scales):
-	point_clouds_homo = to_homogeneous_batch(point_clouds)
-	scale_matrices = scale_to_mat4_batch(scales)
-	scaled_points = scale_matrices.matmul(point_clouds_homo)
-	scaled_points = to_cartesian_batch(scaled_points)
-	return scaled_points
-
-
-# Scales an Nx3 point cloud matrix by a scale vector
-def scale_point_cloud(point_cloud, scale):
-	scaled_points = scale_point_cloud_batch(point_cloud.unsqueeze(0), scale.unsqueeze(0))
-	return scaled_points.squeeze(0)
-
-
 # Transforms a BxNx3 point cloud tensor to a given space
 # Where B = Batch size and N = Number of points
 # Target space is defined by a Bx3 translation tensor and a Bx4 quaternion tensor
 # Rotations are quaternions of form [w, x, y, z]
-def transform_point_cloud_batch(point_clouds, translations, rotations, scales):
+def transform_point_cloud_batch(point_clouds, translations, rotations):
 	transformed_points = rotate_point_cloud_batch(point_clouds, rotations)
 	transformed_points = translate_point_cloud_batch(transformed_points, translations)
 	return transformed_points
@@ -156,7 +140,7 @@ def transform_point_cloud_batch(point_clouds, translations, rotations, scales):
 
 # Transforms a Nx3 point cloud tensor to a given space
 # Rotations are quaternions of form [w, x, y, z]
-def transform_point_cloud(point_cloud, translation, rotation, scales):
+def transform_point_cloud(point_cloud, translation, rotation):
 	transformed_points = rotate_point_cloud(point_clouds, rotation)
 	transformed_points = translate_point_cloud(transformed_points, translation)
 	return transformed_points
@@ -184,10 +168,6 @@ def test():
 		[0.7071068, 0.7071068, 0, 0],
 		[0.7325378, 0.4619398, 0.1913417, 0.4619398]])
 
-	batch_scales = torch.FloatTensor([
-		[0.5, 0.5, 0.5],
-		[2, 2, 2]])
-
 	expected_result = torch.FloatTensor([
 		[[1.0, 0.0, 2.0],
 		 [0.0, 0.0, 3.0],
@@ -197,7 +177,7 @@ def test():
 		 [2, 3, 3],
 		 [2.707107, 2.5, 3.5]]])
 
-	actual_result = transform_point_cloud_batch(batch_points, batch_translations, batch_rotations, batch_scales)
+	actual_result = transform_point_cloud_batch(batch_points, batch_translations, batch_rotations)
 
 	print('Points:')
 	print(batch_points)

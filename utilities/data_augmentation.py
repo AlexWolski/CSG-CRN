@@ -4,7 +4,7 @@ import random
 import torch
 import math
 from enum import Enum
-from utilities.point_transform import rotate_point_cloud, rotate_point_cloud_batch, scale_point_cloud, scale_point_cloud_batch
+from utilities.point_transform import rotate_point_cloud, rotate_point_cloud_batch
 from scipy.spatial.transform import Rotation
 
 
@@ -75,9 +75,6 @@ def get_augment_parser(group_name='AUGMENT SETTINGS', suppress_default=False):
 	parser_group.add_argument('--no_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
 	parser_group.add_argument('--no_noise', default=False, action='store_true', help='Disable gaussian noise for sample points and distances')
 	parser_group.add_argument('--rotate_axis', default='ALL', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
-	parser_group.add_argument('--scale_axis', default='ALL', type=ScaleAxis, choices=list(ScaleAxis), help='Axes to scale')
-	parser_group.add_argument('--min_scale', type=float, default=0.5, help='Lower bound on random scale value')
-	parser_group.add_argument('--max_scale', type=float, default=2.0, help='Upper bound on random scale value')
 	parser_group.add_argument('--noise_variance', type=float, default=1e-10, help='The variance of the gaussian noise aded to each sample point and distance')
 
 	return parser
@@ -170,12 +167,6 @@ def augment_sample(points, distances, args):
 		augmented_points += points_noise
 		augmented_distances += distances_noise
 
-	# Scale
-	if not args.no_scale:
-		scale_vec = random_scale(args.scale_axis, args.min_scale, args.max_scale).to(augmented_points.device)
-		augmented_points = scale_point_cloud(augmented_points, scale_vec)
-		(augmented_points, augmented_distances) = scale_to_unit_sphere(augmented_points)
-
 	# Rotate
 	if not args.no_rotation:
 		rotation_quat = random_rotation(args.rotate_axis).to(augmented_points.device)
@@ -196,12 +187,6 @@ def augment_sample_batch(batch_points, batch_distances, args):
 		distances_noise = torch.randn(batch_distances.size(), dtype=batch_distances.dtype, device=batch_distances.device) * noise_std
 		augmented_points += points_noise
 		augmented_distances += distances_noise
-
-	# Scale
-	if not args.no_scale:
-		scale_vec = random_scale_batch(args.scale_axis, args.min_scale, args.max_scale, batch_size).to(augmented_points.device)
-		augmented_points = scale_point_cloud_batch(augmented_points, scale_vec)
-		(augmented_points, augmented_distances) = scale_to_unit_sphere_batch(augmented_points, augmented_distances)
 
 	# Rotate
 	if not args.no_rotation:
