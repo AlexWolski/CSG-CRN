@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from utilities import data_augmentation
 from utilities.data_augmentation import RotationAxis, ScaleAxis, random_rotation_batch, random_scale_batch
+from utilities.point_transform import center_point_cloud_batch
 from utilities.csg_model import CSGModel, add_sdf
 from reconstruct import print_csg_commands
 
@@ -139,6 +140,9 @@ def generate_dataset(args):
 		if sample_points.nelement() == 0:
 			i = i-1
 			continue
+
+		# Center sample
+		sample_points = center_point_cloud_batch(sample_points)
 
 		# Save model samples to file
 		samples = torch.cat((sample_points, sample_distances.unsqueeze(-1)), dim=-1).squeeze(0).cpu()

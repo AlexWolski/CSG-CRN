@@ -167,6 +167,20 @@ def scale_to_unit_sphere(points, distances):
 	return (scaled_points.squeeze(0), distances.squeeze(0))
 
 
+# Translate a point cloud batch to center it
+def center_point_cloud_batch(batch_points):
+	(maxBounds, _) = torch.max(batch_points, dim=1)
+	(minBounds, _) = torch.min(batch_points, dim=1)
+	center = (maxBounds + minBounds) / 2
+	return translate_point_cloud_batch(batch_points, -center)
+
+
+# Translate a point cloud to center it
+def center_point_cloud(point_cloud):
+	centered_points = center_point_cloud_batch(point_cloud.unsqueeze(0))
+	return centered_points.squeeze(0)
+
+
 # Test transform
 def test():
 	batch_size = 2
