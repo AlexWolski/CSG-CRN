@@ -142,7 +142,7 @@ def get_model_parser():
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 	model_group.add_argument('--sample_method', default=['near-surface'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
-	model_group.add_argument('--sample_dist', type=float, default=0.01, help='Maximum distance to object surface for near-surface sampling (must be >0)')
+	model_group.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
 
 	return model_parser
 

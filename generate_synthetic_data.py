@@ -36,7 +36,7 @@ def options():
 	# Shape generation parser
 	gen_group.add_argument('--num_shapes', type=int, default=1, help='Number of shapes to generate per CSG model')
 	gen_group.add_argument('--sample_method', default=['near-surface'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
-	gen_group.add_argument('--sample_dist', type=float, default=0.001, help='Maximum distance to object surface for near-surface sampling (must be >0)')
+	gen_group.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
 	gen_group.add_argument('--min_scale', type=float, default=0.2, help='Lower bound on random scale value')
 	gen_group.add_argument('--max_scale', type=float, default=0.8, help='Upper bound on random scale value')
 	gen_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
