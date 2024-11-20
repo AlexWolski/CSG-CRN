@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from utilities import data_augmentation
-from utilities.data_augmentation import RotationAxis, ScaleAxis, random_rotation_batch, random_scale_batch, scale_to_unit_sphere_batch
+from utilities.data_augmentation import RotationAxis, ScaleAxis, random_rotation_batch, random_scale_batch
 from utilities.csg_model import CSGModel, add_sdf
 from reconstruct import print_csg_commands
 

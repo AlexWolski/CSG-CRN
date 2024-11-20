@@ -134,27 +134,6 @@ def random_scale_batch(scale_axis, min_scale, max_scale, batch_size):
 	return torch.stack(scale_list, dim=0)
 
 
-# Scale a given point cloud batch to fit within a unit sphere
-def scale_to_unit_sphere_batch(batch_points, batch_distances):
-	# Compute furthest point from orgin
-	squared_points = torch.square(batch_points)
-	squared_dist = torch.sum(squared_points, -1)
-	max_dist = torch.sqrt(torch.amax(squared_dist, -1))
-
-	# Scale the point cloud to a unit sphere
-	scale = 1.0 / max_dist
-	scale_vec = torch.stack([scale, scale, scale], dim=-1)
-	scaled_points = scale_point_cloud_batch(batch_points, scale_vec)
-	scaled_distances = batch_distances * scale[:, None, None]
-	return (scaled_points, scaled_distances)
-
-
-# Scale a given point cloud to fit within a unit sphere
-def scale_to_unit_sphere(points, distances):
-	(scaled_points, scaled_distances) = scale_to_unit_sphere_batch(points.unsqueeze(0), distances.unsqueeze(0))
-	return (scaled_points.squeeze(0), distances.squeeze(0))
-
-
 # Augment a single SDF sample
 def augment_sample(points, distances, args):
 	augmented_points, augmented_distances = points, distances
