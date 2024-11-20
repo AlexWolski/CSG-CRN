@@ -132,16 +132,17 @@ def generate_dataset(args):
 
 		# Sample model
 		if args.sample_method[0] == 'uniform':
-			(sample_points, sample_distances) = csg_model.sample_csg_uniform(1, args.num_sample_points)
+			surface_points = csg_model.sample_csg_uniform(1, args.num_sample_points)
 		else:
-			(sample_points, sample_distances) = csg_model.sample_csg_surface(1, args.num_sample_points, args.sample_dist)
+			surface_points = csg_model.sample_csg_surface(1, args.num_sample_points, args.sample_dist, allow_uniform_points=False)
 
 		# Re-generate sample if there are no samples
-		if sample_points.nelement() == 0:
+		if surface_points is None:
 			i = i-1
 			continue
 
 		# Center sample
+		(sample_points, sample_distances) = surface_points
 		sample_points = center_point_cloud_batch(sample_points)
 
 		# Save model samples to file

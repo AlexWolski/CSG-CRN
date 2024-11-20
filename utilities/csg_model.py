@@ -143,7 +143,8 @@ class CSGModel():
 
 
 	# Sample a given number of signed distances at near-surface points
-	def sample_csg_surface(self, batch_size, num_points, sample_dist):
+	# allow_uniform_points option determines if uniform points are included when the number of surface points is insufficient
+	def sample_csg_surface(self, batch_size, num_points, sample_dist, allow_uniform_points=True):
 		# Return None if there are no csg commands
 		if not self.csg_commands:
 			return None
@@ -162,6 +163,10 @@ class CSGModel():
 
 			# If there are too few near-surface points, mix in uniform points
 			if len(indices) < num_points:
+				# If there are insufficient surface points, return none
+				if not allow_uniform_points:
+					return None
+
 				num_uniform_indices = num_points - len(indices)
 				unifrom_indices = torch.randint(num_uniform_points, (num_uniform_indices, 1), device=self.device)
 				indices = torch.cat((indices, unifrom_indices))
