@@ -46,6 +46,9 @@ class PointDataset(Dataset):
 			print('Lower the number of input and loss points or use a dataset with more samples points.')
 			return
 
+		# Remove skipped copies
+		self.raw_copies -= skipped_samples
+
 		# Save samples in system memory
 		self.sdf_samples = torch.stack(sdf_sample_list, dim=0)
 
