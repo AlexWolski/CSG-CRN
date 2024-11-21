@@ -215,12 +215,12 @@ def load_data_splits(args, data_split, device):
 
 
 # Load CSG-CRN network model
-def load_model(num_shapes, num_operations, device, args, model_params=None):
+def load_model(num_prims, num_shapes, num_operations, device, args, model_params=None):
 	predict_blending = not args.no_blending
 	predict_roundness = not args.no_roundness
 
 	# Initialize model
-	model = CSG_CRN(num_shapes, num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(device)
+	model = CSG_CRN(num_prims, num_shapes, num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(device)
 
 	# Load model parameters if available
 	if model_params:
@@ -239,24 +239,23 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 	# Initialize SDF CSG model
 	csg_model = CSGModel(device)
 
-	# Iteratively generate a set of primitives to build a CSG model
-	for prim in range(args.num_prims):
-		# Randomly sample initial reconstruction surface to generate input
-		if args.sample_method[0] == 'uniform':
-			initial_input_samples = csg_model.sample_csg_uniform(batch_size, num_input_points)
-		else:
-			initial_input_samples = csg_model.sample_csg_surface(batch_size, num_input_points, args.sample_dist)
+	# Randomly sample initial reconstruction surface to generate input
+	if args.sample_method[0] == 'uniform':
+		initial_input_samples = csg_model.sample_csg_uniform(batch_size, num_input_points)
+	else:
+		initial_input_samples = csg_model.sample_csg_surface(batch_size, num_input_points, args.sample_dist)
 
-		if initial_input_samples is not None:
-			(initial_input_points, initial_input_distances) = initial_input_samples
-			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
+	if initial_input_samples is not None:
+		(initial_input_points, initial_input_distances) = initial_input_samples
+		initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
 
-		# Predict next primitive
-		with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-			outputs = model(target_input_samples, initial_input_samples)
+	# Generate a set of primitives to add to the CSG model
+	with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+		output_list = model(target_input_samples, initial_input_samples)
 
-		# Add primitive to CSG model
-		csg_model.add_command(*outputs)
+	# Add primitive to CSG model
+	for output in output_list:
+		csg_model.add_command(*output)
 
 	# Sample generated CSG model
 	refined_loss_distances = csg_model.sample_csg(target_loss_points)
@@ -392,7 +391,7 @@ def main():
 		training_logger = TrainingLogger(args.output_dir, 'training_results')
 
 	# Initialize model
-	model = load_model(CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
+	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
 	loss_func = ReconstructionLoss().to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = AdamW(model.parameters(), lr=current_lr)

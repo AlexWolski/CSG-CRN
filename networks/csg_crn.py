@@ -6,10 +6,11 @@ from networks.regressor_decoder import PrimitiveRegressor
 
 
 class CSG_CRN(nn.Module):
-	def __init__(self, num_shapes, num_operations,
+	def __init__(self, num_prims, num_shapes, num_operations,
 		predict_blending=True, predict_roundness=True, no_batch_norm=False):
 
 		super(CSG_CRN, self).__init__()
+		self.num_prims = num_prims
 		self.num_shapes = num_shapes
 		self.num_operations = num_operations
 		self.predict_blending = predict_blending
@@ -17,8 +18,13 @@ class CSG_CRN(nn.Module):
 
 		self.point_encoder = PointNetfeat(global_feat=True, no_batch_norm=no_batch_norm)
 		self.siamese_encoder = SiameseEncoder(self.point_encoder, POINTNET_FEAT_OUTPUT_SIZE, no_batch_norm)
-		self.regressor_decoder = PrimitiveRegressor(SIAMEZE_ENCODER_OUTPUT_SIZE, self.num_shapes, self.num_operations,
-			predict_blending=self.predict_blending, predict_roundness=self.predict_roundness, no_batch_norm=no_batch_norm)
+		self.regressor_decoder_list = nn.ModuleList()
+
+		# Initialize a separate decoder for each primitive
+		for i in range(self.num_prims):
+			regressor_decoder = PrimitiveRegressor(SIAMEZE_ENCODER_OUTPUT_SIZE, self.num_shapes, self.num_operations,
+				predict_blending=self.predict_blending, predict_roundness=self.predict_roundness, no_batch_norm=no_batch_norm)
+			self.regressor_decoder_list.append(regressor_decoder)
 
 
 	def forward(self, target_input, initial_recon_input=None):
@@ -30,9 +36,13 @@ class CSG_CRN(nn.Module):
 			initial_recon_input = initial_recon_input.permute(0, 2, 1)
 
 		features = self.siamese_encoder(target_input, initial_recon_input)
-		outputs = self.regressor_decoder(features, initial_recon_input is not None)
 
-		return outputs
+		output_list = []
+
+		for i, decoder in enumerate(self.regressor_decoder_list):
+			output_list.append(decoder(features, initial_recon_input is not None))
+
+		return output_list
 
 
 # Test network
