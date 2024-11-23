@@ -8,16 +8,74 @@ import tkinter
 from utilities.file_loader import FileLoader
 from utilities.csg_model import add_sdf
 
+import pyglet
+from pyglet.gl import *
+
+
+class Button():
+	def __init__(self, x, y, width, height, text='', text_color=(0,0,0), color=(100,100,100), pressed_color=(20,20,20), callback=None):
+		self.x = x
+		self.y = y
+		self.width = width
+		self.height = height
+		self.text = text
+		self.text_color = text_color
+		self.color = color
+		self.pressed_color = pressed_color
+		self.callback = callback
+		self.pressed = False
+
+
+	def draw(self):
+		if self.pressed:
+			button_color = self.pressed_color
+		else:
+			button_color = self.color
+
+		text_x = self.x + self.width // 2
+		text_y = self.y + self.height // 2
+		text = pyglet.text.Label(self.text, x=text_x, y=text_y, anchor_x='center', anchor_y='center', color=self.text_color)
+		rect = pyglet.shapes.Rectangle(self.x, self.y, self.width, self.height, button_color)
+
+		glDisable(GL_DEPTH_TEST)
+		rect.draw()
+		text.draw()
+
+
+	def is_over_button(self, mouse_x, mouse_y):
+		return (self.x < mouse_x < self.x + self.width and
+				self.y < mouse_y < self.y + self.height)
+
+
+	def on_mouse_press(self, mouse_x, mouse_y):
+		if self.is_over_button(mouse_x, mouse_y):
+			self.pressed = True
+
+
+	def on_mouse_drag(self, mouse_x, mouse_y):
+		self.pressed = self.is_over_button(mouse_x, mouse_y)
+
+
+	def on_mouse_release(self, mouse_x, mouse_y):
+		if self.is_over_button(mouse_x, mouse_y) and self.callback:
+			callback()
+
+		self.pressed = False
+
+
 
 class _SdfViewer(pyrender.Viewer):
 	LEFT_KEY = 65361
 	RIGHT_KEY = 65363
+	buttons = []
 
-	def __init__(self, window_title, point_size, show_exterior_points, num_view_points):
+	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, view_width=1000, view_height=1000):
 		self.show_exterior_points = show_exterior_points
 		self.num_view_points = num_view_points
 		self.mesh_node = pyrender.Node()
 		self.update_mesh_node()
+		self.view_width = view_width
+		self.view_height = view_height
 
 		scene = pyrender.Scene()
 		scene.add_node(self.mesh_node)
@@ -27,9 +85,14 @@ class _SdfViewer(pyrender.Viewer):
 			use_raymond_lighting=True,
 			point_size=point_size,
 			show_world_axis=True,
-			viewport_size=(1000,1000),
+			viewport_size=(self.view_width, self.view_height),
 			window_title=window_title,
-			view_center=[0,0,0])
+			view_center=[0,0,0],
+			run_in_thread=True)
+
+
+	def add_button(self, button):
+		self.buttons.append(button)
 
 
 	def set_points(self, points, distances):
@@ -68,6 +131,34 @@ class _SdfViewer(pyrender.Viewer):
 			self.view_next()
 
 		super(_SdfViewer, self).on_key_press(key, modifiers)
+
+
+	def on_mouse_press(self, x, y, button, modifiers):
+		for button in self.buttons:
+			button.on_mouse_press(x, y)
+
+		super(_SdfViewer, self).on_mouse_press(x, y, button, modifiers)
+
+
+	def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+		for button in self.buttons:
+			button.on_mouse_drag(x, y)
+
+		super(_SdfViewer, self).on_mouse_drag(x, y, dx, dy, buttons, modifiers)
+
+
+	def on_mouse_release(self, x, y, button, modifiers):
+		for button in self.buttons:
+			button.on_mouse_release(x, y)
+
+		super(_SdfViewer, self).on_mouse_release(x, y, button, modifiers)
+
+
+	def on_draw(self):
+		super(_SdfViewer, self).on_draw()
+
+		for button in self.buttons:
+			button.draw()
 
 
 	def view_prev(self):
@@ -124,6 +215,12 @@ class SdfModelViewer(_SdfViewer):
 			point_size,
 			show_exterior_points,
 			num_view_points)
+
+		self._init_buttons()
+
+
+	def _init_buttons(self):
+		self.add_button(Button(0, 0, 200, 200, 'Test'))
 
 
 	def update_mesh_node(self):
