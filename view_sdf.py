@@ -13,7 +13,7 @@ from pyglet.gl import *
 
 
 class Button():
-	def __init__(self, x, y, width, height, text='', text_color=(0,0,0), color=(100,100,100), pressed_color=(20,20,20), callback=None):
+	def __init__(self, x, y, width, height, text='', text_color=(0,0,0), color=(200,200,200), pressed_color=(100,100,100), callback=None):
 		self.x = x
 		self.y = y
 		self.width = width
@@ -32,10 +32,10 @@ class Button():
 		else:
 			button_color = self.color
 
+		rect = pyglet.shapes.Rectangle(self.x, self.y, self.width, self.height, button_color)
 		text_x = self.x + self.width // 2
 		text_y = self.y + self.height // 2
 		text = pyglet.text.Label(self.text, x=text_x, y=text_y, anchor_x='center', anchor_y='center', color=self.text_color)
-		rect = pyglet.shapes.Rectangle(self.x, self.y, self.width, self.height, button_color)
 
 		glDisable(GL_DEPTH_TEST)
 		rect.draw()
@@ -58,7 +58,7 @@ class Button():
 
 	def on_mouse_release(self, mouse_x, mouse_y):
 		if self.is_over_button(mouse_x, mouse_y) and self.callback:
-			callback()
+			self.callback()
 
 		self.pressed = False
 
@@ -101,14 +101,17 @@ class _SdfViewer(pyrender.Viewer):
 
 
 	def update_mesh_node(self):
-		if not self.show_exterior_points:
-			self.points = self.points[self.distances <= 0, :]
-			self.distances = self.distances[self.distances <= 0]
+		select_points = self.points
+		select_distances = self.distances
 
-		colors = np.zeros(self.points.shape)
-		colors[self.distances < 0, 2] = 1
-		colors[self.distances > 0, 0] = 1
-		cloud = pyrender.Mesh.from_points(self.points, colors=colors)
+		if not self.show_exterior_points:
+			select_points = select_points[self.distances <= 0, :]
+			select_distances = select_distances[self.distances <= 0]
+
+		colors = np.zeros(select_points.shape)
+		colors[select_distances < 0, 2] = 1
+		colors[select_distances > 0, 0] = 1
+		cloud = pyrender.Mesh.from_points(select_points, colors=colors)
 		self.mesh_node.mesh = cloud
 
 
@@ -201,14 +204,19 @@ class SdfFileViewer(_SdfViewer):
 
 
 class SdfModelViewer(_SdfViewer):
-	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file, csg_model, view_sampling, sample_dist, get_csg_model=None):
+	ORIGINAL_VIEW = "Original View"
+	COMBINED_VIEW = "Combined View"
+	RECON_VIEW = "Reconstruction View"
+
+
+	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file, csg_model, sample_dist, get_csg_model=None):
 		self.csg_model = csg_model
 		self.num_view_points = num_view_points
 		self.sample_dist = sample_dist
-		self.view_sampling = view_sampling
 		self.get_csg_model = get_csg_model
 		self.file_loader = FileLoader(input_file)
 		self.load_samples(input_file)
+		self.view_mode = self.COMBINED_VIEW
 
 		super(SdfModelViewer, self).__init__(
 			window_title,
@@ -220,10 +228,32 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def _init_buttons(self):
-		self.add_button(Button(0, 0, 200, 200, 'Test'))
+		self.add_button(Button(10, 130, 200, 50, 'View Original', callback=lambda: self.set_view_mode(self.ORIGINAL_VIEW)))
+		self.add_button(Button(10, 70, 200, 50, 'View Combined', callback=lambda: self.set_view_mode(self.COMBINED_VIEW)))
+		self.add_button(Button(10, 10, 200, 50, 'View Reconstruction', callback=lambda: self.set_view_mode(self.RECON_VIEW)))
+
+
+	def set_view_mode(self, mode):
+		self.view_mode = mode
+		self.update_mesh_node()
 
 
 	def update_mesh_node(self):
+		match self.view_mode:
+			case self.ORIGINAL_VIEW:
+				super(SdfModelViewer, self).update_mesh_node()
+				return
+
+			case self.COMBINED_VIEW:
+				self.view_combined()
+				return
+
+			case self.RECON_VIEW:
+				self.view_reconstruction()
+				return
+
+
+	def view_combined(self):
 		# Convert numpy arrays to torch tensors
 		torch_points = torch.from_numpy(self.points).to(self.csg_model.device)
 		torch_distances = torch.from_numpy(self.distances).to(self.csg_model.device)
@@ -249,6 +279,37 @@ class SdfModelViewer(_SdfViewer):
 		colors[csg_distances < 0, 2] = 1
 
 		cloud = pyrender.Mesh.from_points(internal_points, colors=colors)
+		self.mesh_node.mesh = cloud
+
+
+	def view_reconstruction(self):
+		csg_view_points = self.num_view_points
+
+		if csg_view_points < 0:
+			csg_view_points = self.points.shape[0]
+
+
+		# Sample reconstructed CSG model
+		if self.show_exterior_points:
+			(csg_points, csg_distances) = self.csg_model.sample_csg_uniform(1, csg_view_points)
+		else:
+			(csg_points, csg_distances) = self.csg_model.sample_csg_surface(1, csg_view_points, self.sample_dist)
+
+		# Convert to numpy
+		csg_points = csg_points.squeeze(0).cpu().numpy()
+		csg_distances = csg_distances.squeeze(0).cpu().numpy()
+
+		# Remove exterior points
+		if not self.show_exterior_points:
+			csg_points = csg_points[csg_distances <= 0, :]
+			csg_distances = csg_distances[csg_distances <= 0]
+
+		# Internal points are blue and external points are red
+		colors = np.zeros(csg_points.shape)
+		colors[csg_distances < 0, 2] = 1
+		colors[csg_distances > 0, 0] = 1
+
+		cloud = pyrender.Mesh.from_points(csg_points, colors=colors)
 		self.mesh_node.mesh = cloud
 
 
