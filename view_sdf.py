@@ -13,10 +13,11 @@ class _SdfViewer(pyrender.Viewer):
 	LEFT_KEY = 65361
 	RIGHT_KEY = 65363
 
-	def __init__(self, points, distances, window_title, point_size, show_exterior_points):
+	def __init__(self, window_title, point_size, show_exterior_points, num_view_points):
 		self.show_exterior_points = show_exterior_points
+		self.num_view_points = num_view_points
 		self.mesh_node = pyrender.Node()
-		self.set_points(points, distances)
+		self.update_mesh_node()
 
 		scene = pyrender.Scene()
 		scene.add_node(self.mesh_node)
@@ -29,6 +30,35 @@ class _SdfViewer(pyrender.Viewer):
 			viewport_size=(1000,1000),
 			window_title=window_title,
 			view_center=[0,0,0])
+
+
+	def set_points(self, points, distances):
+		self.points = points
+		self.distances = distances
+
+
+	def update_mesh_node(self):
+		if not self.show_exterior_points:
+			self.points = self.points[self.distances <= 0, :]
+			self.distances = self.distances[self.distances <= 0]
+
+		colors = np.zeros(self.points.shape)
+		colors[self.distances < 0, 2] = 1
+		colors[self.distances > 0, 0] = 1
+		cloud = pyrender.Mesh.from_points(self.points, colors=colors)
+		self.mesh_node.mesh = cloud
+
+
+	def load_samples(self, input_file):
+		samples = np.load(input_file).astype(np.float32)
+
+		if self.num_view_points > 0:
+			samples = samples[:self.num_view_points,:]
+
+		points = samples[:,:3]
+		distances = samples[:,3]
+
+		self.set_points(points, distances)
 
 
 	def on_key_press(self, key, modifiers):
@@ -48,109 +78,80 @@ class _SdfViewer(pyrender.Viewer):
 		raise NotImplementedError("Implement method in inheriting class")
 
 
-	def set_points(self, points, distances):
-		if not self.show_exterior_points:
-			points = points[distances <= 0, :]
-			distances = distances[distances <= 0]
-
-		colors = np.zeros(points.shape)
-		colors[distances < 0, 2] = 1
-		colors[distances > 0, 0] = 1
-		cloud = pyrender.Mesh.from_points(points, colors=colors)
-		self.mesh_node.mesh = cloud
-
-
-	def load_samples(input_file, num_view_points):
-		samples = np.load(input_file).astype(np.float32)
-
-		if num_view_points > 0:
-			samples = samples[:num_view_points,:]
-
-		points = samples[:,:3]
-		distances = samples[:,3]
-
-		return (points, distances)
-
-
 class SdfFileViewer(_SdfViewer):
-	def __init__(self, input_file, num_view_points, point_size, show_exterior_points, window_title):
+	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file):
 		self.num_view_points = num_view_points
 		self.file_loader = FileLoader(input_file)
-		(points, distances) = self.load_file(input_file)
+		self.load_file(input_file)
 
 		super(SdfFileViewer, self).__init__(
-			points,
-			distances,
 			window_title,
 			point_size,
-			show_exterior_points)
+			show_exterior_points,
+			num_view_points)
 
 
 	def load_file(self, input_file):
 		self.input_file = input_file
-
-		(points, distances) = _SdfViewer.load_samples(input_file, self.num_view_points)
-		print(f'Point samples: {points.shape[0]}')
-
-		return (points, distances)
+		self.load_samples(input_file)
+		print(f'Point samples: {self.points.shape[0]}')
 
 
 	def view_prev(self):
 		file_path = self.file_loader.prev_file()
-		self.set_points(*self.load_file(file_path))
+		self.load_file(file_path)
+		self.update_mesh_node()
 
 
 	def view_next(self):
 		file_path = self.file_loader.next_file()
-		self.set_points(*self.load_file(file_path))
+		self.load_file(file_path)
+		self.update_mesh_node()
 
 
 class SdfModelViewer(_SdfViewer):
-	def __init__(self, csg_model, input_file, num_view_points, view_sampling, sample_dist, point_size, show_exterior_points, show_diff, window_title, get_csg_model=None):
+	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file, csg_model, view_sampling, sample_dist, get_csg_model=None):
 		self.csg_model = csg_model
 		self.num_view_points = num_view_points
 		self.sample_dist = sample_dist
 		self.view_sampling = view_sampling
-		self.show_diff = show_diff
 		self.get_csg_model = get_csg_model
 		self.file_loader = FileLoader(input_file)
-		(sample_points, sample_distances) = _SdfViewer.load_samples(input_file, self.num_view_points)
+		self.load_samples(input_file)
 
 		super(SdfModelViewer, self).__init__(
-			sample_points,
-			sample_distances,
 			window_title,
 			point_size,
-			show_exterior_points)
+			show_exterior_points,
+			num_view_points)
 
 
-	def set_points(self, sample_points, sample_distances):
+	def update_mesh_node(self):
 		# Convert numpy arrays to torch tensors
-		sample_distances = torch.from_numpy(sample_distances).to(self.csg_model.device)
+		torch_points = torch.from_numpy(self.points).to(self.csg_model.device)
+		torch_distances = torch.from_numpy(self.distances).to(self.csg_model.device)
 
 		# Get distances from sample points to csg model
-		torch_points = torch.from_numpy(sample_points).to(self.csg_model.device)
 		csg_distances = self.csg_model.sample_csg(torch_points.unsqueeze(0)).squeeze(0)
 
 		# Apply union on distances of original shape and reconstruction
-		combined_sdf = add_sdf(sample_distances, csg_distances, None).squeeze(0)
+		combined_sdf = add_sdf(torch_distances, csg_distances, None).squeeze(0)
 
 		# Convert to numpy again
-		sample_distances = sample_distances.cpu().numpy()
 		csg_distances = csg_distances.cpu().numpy()
 		combined_sdf = combined_sdf.cpu().numpy()
 
 		# Remove exterior points
-		sample_points = sample_points[combined_sdf <= 0, :]
-		sample_distances = sample_distances[combined_sdf <= 0]
+		internal_points = self.points[combined_sdf <= 0, :]
+		internal_distances = self.distances[combined_sdf <= 0]
 		csg_distances = csg_distances[combined_sdf <= 0]
 
 		# Original shape is red, reconstruction is blue, and the intersection is purple
-		colors = np.zeros(sample_points.shape)
-		colors[sample_distances < 0, 0] = 1
+		colors = np.zeros(internal_points.shape)
+		colors[internal_distances < 0, 0] = 1
 		colors[csg_distances < 0, 2] = 1
 
-		cloud = pyrender.Mesh.from_points(sample_points, colors=colors)
+		cloud = pyrender.Mesh.from_points(internal_points, colors=colors)
 		self.mesh_node.mesh = cloud
 
 
@@ -160,7 +161,8 @@ class SdfModelViewer(_SdfViewer):
 
 		input_file = self.file_loader.prev_file()
 		self.csg_model = self.get_csg_model(input_file)
-		self.set_points(*_SdfViewer.load_samples(input_file, self.num_view_points))
+		self.load_samples(input_file)
+		self.update_mesh_node()
 
 
 	def view_next(self):
@@ -169,7 +171,8 @@ class SdfModelViewer(_SdfViewer):
 
 		input_file = self.file_loader.next_file()
 		self.csg_model = self.get_csg_model(input_file)
-		self.set_points(*_SdfViewer.load_samples(input_file, self.num_view_points))
+		self.load_samples(input_file)
+		self.update_mesh_node()
 
 
 # Parse commandline arguments
@@ -188,7 +191,7 @@ def options():
 def main():
 	args = options()
 	print('')
-	viewer = SdfFileViewer(args.input_file, args.num_view_points, args.point_size, args.show_exterior_points, "View SDF")
+	viewer = SdfFileViewer("View SDF", args.point_size, args.show_exterior_points, args.num_view_points, args.input_file)
 
 
 if __name__ == '__main__':
