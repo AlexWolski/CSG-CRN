@@ -28,14 +28,7 @@ def smooth_min(a, b, blending):
 
 
 def smooth_max(a, b, blending):
-	if blending is None:
-		smooth_factor = 0
-	else:
-		absolute_diff = (a-b).abs()
-		h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
-		smooth_factor = h * h * blending * 0.25
-
-	return torch.max(a, b) + smooth_factor
+	return -smooth_min(-a, -b, blending)
 
 
 # Union of two SDFs
