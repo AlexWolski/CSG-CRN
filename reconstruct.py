@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from networks.csg_crn import CSG_CRN
-from utilities.csg_model import CSGModel
+from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
 from utilities.file_loader import FileLoader
@@ -115,9 +115,12 @@ def print_csg_commands(csg_model):
 	count = 1
 
 	for command in csg_model.csg_commands:
+		shape_weights = command['shape weights']
+		operation_weights = command['operation weights']
+
 		print(f'Command {count}:')
-		pretty_print_tensor('Shape:\t\t', command['shape weights'])
-		pretty_print_tensor('Operation:\t', command['operation weights'])
+		print(f'Shape:\t\t{get_primitive_name(shape_weights)}')
+		print(f'Operation:\t{get_operation_name(operation_weights)}')
 		pretty_print_tensor('Translation:\t', command['transforms'][0])
 		pretty_print_tensor('Rotation:\t', command['transforms'][1])
 		pretty_print_tensor('Scale:\t\t', command['transforms'][2])

@@ -41,6 +41,35 @@ def subtract_sdf(distances, new_distances, blending):
 	return smooth_max(distances, new_distances, blending)
 
 
+# Map primitive SDF function to MagicaCSG primitive name
+primitive_name_map = {
+	sdf_ellipsoid: "sphere",
+	sdf_cuboid: "cube",
+	sdf_cylinder: "cylinder"
+}
+
+
+# Map SDF operation function to MagicaCSG operation name
+operation_name_map = {
+	add_sdf: "add",
+	subtract_sdf: "sub",
+}
+
+
+# Return the MagicaCSG primitive name given a shape weight tensor
+def get_primitive_name(shape_weights):
+	shape_index = torch.argmax(shape_weights).item()
+	shape_function = CSGModel.sdf_functions[shape_index]
+	return primitive_name_map[shape_function]
+
+
+# Return the MagicaCSG operation name given a shape weight tensor
+def get_operation_name(operation_weights):
+	operation_index = torch.argmax(operation_weights).item()
+	operation_function = CSGModel.operation_functions[operation_index]
+	return operation_name_map[operation_function]
+
+
 class CSGModel():
 	sdf_functions = [
 		sdf_ellipsoid,
