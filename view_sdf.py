@@ -7,6 +7,7 @@ import numpy as np
 import tkinter
 from utilities.file_loader import FileLoader
 from utilities.csg_model import add_sdf
+from utilities.csg_to_magica import prompt_and_export_to_magica
 
 import pyglet
 from pyglet.gl import *
@@ -228,9 +229,20 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def _init_buttons(self):
-		self.add_button(Button(10, 130, 200, 50, 'View Original', callback=lambda: self.set_view_mode(self.ORIGINAL_VIEW)))
-		self.add_button(Button(10, 70, 200, 50, 'View Combined', callback=lambda: self.set_view_mode(self.COMBINED_VIEW)))
-		self.add_button(Button(10, 10, 200, 50, 'View Reconstruction', callback=lambda: self.set_view_mode(self.RECON_VIEW)))
+		padding = 10
+		width = 200
+		height = 50
+
+		recon_y = padding
+		combined_y = recon_y + height + padding
+		original_y = combined_y  + height + padding
+		self.add_button(Button(padding, original_y, width, height, 'View Original', callback=lambda: self.set_view_mode(self.ORIGINAL_VIEW)))
+		self.add_button(Button(padding, combined_y, width, height, 'View Combined', callback=lambda: self.set_view_mode(self.COMBINED_VIEW)))
+		self.add_button(Button(padding, padding, width, height, 'View Reconstruction', callback=lambda: self.set_view_mode(self.RECON_VIEW)))
+
+		export_x = self.viewport_size[0] - width - padding
+		export_y = padding
+		self.add_button(Button(export_x, export_y, width, height, 'Export to MagicaCSG', callback=lambda: prompt_and_export_to_magica(self.csg_model)))
 
 
 	def set_view_mode(self, mode):
