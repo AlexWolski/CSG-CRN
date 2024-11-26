@@ -40,7 +40,7 @@ def export_operation(operation_weights):
 
 # Adjust the blending value to match the MagicaCSG 
 def export_blending(blending):
-	blending_value = blending_string.item()
+	blending_value = blending.item()
 	blending_value *= 10
 	return str(blending_value)
 
