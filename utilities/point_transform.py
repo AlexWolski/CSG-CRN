@@ -133,17 +133,23 @@ def rotate_point_cloud(point_cloud, rotation):
 # Target space is defined by a Bx3 translation tensor and a Bx4 quaternion tensor
 # Rotations are quaternions of form [w, x, y, z]
 def transform_point_cloud_batch(point_clouds, translations, rotations):
-	transformed_points = rotate_point_cloud_batch(point_clouds, rotations)
-	transformed_points = translate_point_cloud_batch(transformed_points, translations)
+	# Convert data to matrices
+	point_clouds_homo = to_homogeneous_batch(point_clouds)
+	translation_matrices = translation_to_mat4_batch(translations)
+	rot_matrices = quat_to_mat4_batch(rotations)
+
+	# Transform points
+	transformed_points = rot_matrices.matmul(point_clouds_homo)
+	transformed_points = translation_matrices.matmul(transformed_points)
+	transformed_points = to_cartesian_batch(transformed_points)
 	return transformed_points
 
 
 # Transforms a Nx3 point cloud tensor to a given space
 # Rotations are quaternions of form [w, x, y, z]
 def transform_point_cloud(point_cloud, translation, rotation):
-	transformed_points = rotate_point_cloud(point_clouds, rotation)
-	transformed_points = translate_point_cloud(transformed_points, translation)
-	return transformed_points
+	transformed_points = transform_point_cloud_batch(point_cloud.unsqueeze(0), translation.unsqueeze(0), rotation.unsqueeze(0))
+	return transformed_points.squeeze(0)
 
 
 # Scale a given point cloud batch to fit within a unit sphere
