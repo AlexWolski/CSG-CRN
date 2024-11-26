@@ -38,7 +38,7 @@ def add_sdf(distances, new_distances, blending):
 
 # Intersection of one SDF and the conjugate of the other
 def subtract_sdf(distances, new_distances, blending):
-	return smooth_max(distances, new_distances, blending)
+	return smooth_max(distances, -new_distances, blending)
 
 
 # Map primitive SDF function to MagicaCSG primitive name
