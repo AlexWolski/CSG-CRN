@@ -1,5 +1,12 @@
 import torch
-from utilities.point_transform import transform_point_cloud_batch
+from utilities.point_transform import transform_point_cloud_batch, invert_translation, invert_quaternion
+
+
+# Transform batch of query points in world space to the local space of a primitive
+def world_to_local_points(query_points, translations, rotations):
+	inverse_translations = invert_translation(translations)
+	inverse_rotations = invert_quaternion(rotations)
+	return transform_point_cloud_batch(query_points, inverse_translations, inverse_rotations)
 
 
 # Equations for all primitive SDFs are borrowed from iquilezles.org
@@ -8,7 +15,7 @@ from utilities.point_transform import transform_point_cloud_batch
 
 def sdf_ellipsoid(query_points, translations, rotations, dimensions, roundness=None):
 	# Transform query points to primitive space
-	transformed_query_points = transform_point_cloud_batch(query_points, translations, rotations)
+	transformed_query_points = world_to_local_points(query_points, translations, rotations)
 	dimensions = dimensions.unsqueeze(1)
 
 	# Scale sphere to approximate ellipsoid
@@ -22,7 +29,7 @@ def sdf_ellipsoid(query_points, translations, rotations, dimensions, roundness=N
 
 def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
 	# Transform query points to primitive space
-	transformed_query_points = transform_point_cloud_batch(query_points, translations, rotations)
+	transformed_query_points = world_to_local_points(query_points, translations, rotations)
 
 	# Adjust roundness value per dimension to keep the rounding effect uniform
 	(min_dims, _) = torch.min(dimensions, dim=-1, keepdim=True)
@@ -48,7 +55,7 @@ def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
 
 def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
 	# Transform query points to primitive space
-	transformed_query_points = transform_point_cloud_batch(query_points, translations, rotations)
+	transformed_query_points = world_to_local_points(query_points, translations, rotations)
 	dimensions = dimensions.unsqueeze(1)
 
 	qxy = transformed_query_points[..., :2]

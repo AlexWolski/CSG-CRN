@@ -2,6 +2,18 @@ import torch
 import math
 
 
+# Invert translation vectors
+def invert_translation(translations):
+	return -translations
+
+
+# Invert the rotation of a quaternion by negating the imaginary components
+def invert_quaternion(quaternions):
+	inverted_quaternions = quaternions.clone()
+	inverted_quaternions[..., 1:] *= -1
+	return inverted_quaternions
+
+
 # Converts a Bx4 quaternion tensor to a Bx4x4 rotation matrix tensor
 # Where B = Batch size
 # https://en.wikipedia.org/wiki/Rotation_matrix#Quaternion
