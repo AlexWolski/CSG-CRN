@@ -13,7 +13,7 @@ from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.distributions.uniform import Uniform
 from torch.optim import AdamW, lr_scheduler
 
-from losses.reconstruction_loss import ReconstructionLoss
+from losses.loss import Loss
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
 from utilities.data_processing import *
@@ -23,6 +23,8 @@ from utilities.early_stopping import EarlyStopping
 from utilities.training_logger import TrainingLogger
 
 
+# Weights for regularization loss
+PRIM_LOSS_WEIGHT = 1
 # Percentage of data to use for training, validation, and testing
 DATA_SPLIT = [0.8, 0.1, 0.1]
 
@@ -265,7 +267,7 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 	operation_weights = torch.cat([x['operation weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
 
 	# Compute loss
-	loss = loss_func(target_loss_distances, refined_loss_distances)
+	loss = loss_func(target_loss_points, target_loss_distances, refined_loss_distances, csg_model)
 
 	return loss
 
@@ -392,7 +394,7 @@ def main():
 
 	# Initialize model
 	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
-	loss_func = ReconstructionLoss().to(device)
+	loss_func = Loss(PRIM_LOSS_WEIGHT).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = AdamW(model.parameters(), lr=current_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')

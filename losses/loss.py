@@ -1,46 +1,23 @@
 import torch
 import torch.nn as nn
-from losses.entropy_loss import EntropyLoss
 from losses.primitive_loss import PrimitiveLoss
 from losses.reconstruction_loss import ReconstructionLoss
 
 
 class Loss(nn.Module):
-	def __init__(self, clamp_dist, prim_loss_weight=0, shape_loss_weight=0, op_loss_weight=0):
+	def __init__(self, prim_loss_weight=0):
 		super(Loss, self).__init__()
 
-		self.clamp_dist = clamp_dist
-		self.l1_loss = torch.nn.L1Loss(reduction='none')
 		self.prim_loss_weight = prim_loss_weight
-		self.shape_loss_weight = shape_loss_weight
-		self.op_loss_weight = op_loss_weight
-
-		self.recon_loss = ReconstructionLoss(self.clamp_dist)
+		self.recon_loss = ReconstructionLoss()
 		self.primitive_loss = PrimitiveLoss()
-		self.entropy_loss_1 = EntropyLoss()
-		self.entropy_loss_2 = EntropyLoss()
 
 
-	def forward(self, target_sdf, refined_sdf, shape_probs=None, operation_probs=None):
-		# Compute reconstruction loss
-		refined_recon_loss = self.recon_loss(target_sdf, refined_sdf)
-
-		# Compute weighted regularizer losses
-		primitive_loss = self.prim_loss_weight * self.primitive_loss(refined_sdf)
-
-		if shape_probs is not None:
-			shape_reg_loss = self.shape_loss_weight * self.entropy_loss_1(shape_probs)
-		else:
-			shape_reg_loss = 0
-
-		if operation_probs is not None:
-			operation_reg_loss = self.op_loss_weight * self.entropy_loss_2(operation_probs)
-		else:
-			operation_reg_loss = 0
-		
-		# Combine losses
-		total_loss = refined_recon_loss + primitive_loss + shape_reg_loss + operation_reg_loss
-
+	# Compute reconstruction and primitive loss
+	def forward(self, target_points, target_distances, refined_distances, csg_model):
+		refined_recon_loss = self.recon_loss(target_distances, refined_distances)
+		primitive_loss = self.prim_loss_weight * self.primitive_loss(target_points, csg_model)
+		total_loss = refined_recon_loss + primitive_loss
 		return total_loss
 
 
@@ -48,18 +25,13 @@ class Loss(nn.Module):
 def test():
 	batch_size = 2
 	num_points = 2
-	clamp_dist = 0.1
 	prim_loss_weight = 0.001
 	shape_loss_weight = 0.001
 	op_loss_weight = 0.001
 
-	target_sdf = torch.rand([batch_size, num_points]) * clamp_dist
-	refined_sdf = torch.rand([batch_size, num_points]) * clamp_dist
-
-	shape_probs = torch.tensor([0.2,0.3,0.5], dtype=float).repeat(batch_size,1)
-	operation_probs = torch.tensor([0.9,0.1], dtype=float).repeat(batch_size,1)
-
+	target_distances = torch.rand([batch_size, num_points])
+	refined_distances = torch.rand([batch_size, num_points])
 	loss = Loss(clamp_dist, prim_loss_weight, shape_loss_weight, op_loss_weight)
 
 	print('Total Loss:')
-	print(loss.forward(target_sdf, refined_sdf, shape_probs, operation_probs))
+	print(loss.forward(target_distances, refined_distances, shape_probs, operation_probs))

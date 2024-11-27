@@ -1,22 +1,25 @@
 import torch
 import torch.nn as nn
+from utilities.csg_model import CSGModel
 
 
 # Square the minimum distance between the primitive and the closest sample point
-# Loss function borrowed from CSGNet
+# Loss function inspired by CSGNet
 # https://github.com/kimren227/CSGStumpNet/blob/main/loss.py#L4-L12
 class PrimitiveLoss(nn.Module):
 	def __init__(self):
 		super(PrimitiveLoss, self).__init__()
 
-	def forward(self, sdf_samples):
-		# Compute primitive loss of each batch
-		(primitive_loss, _) = sdf_samples.min(dim=-1, keepdim=True)
-		primitive_loss = torch.square(primitive_loss)
+	def forward(self, target_points, csg_model):
+		primitive_loss = 0
 
-		# Compute average primitive loss of all batches
-		primitive_loss = torch.mean(primitive_loss)
+		for command in csg_model.csg_commands:
+			prim_distances = CSGModel.sample_sdf(target_points, command)
+			min_distances = torch.square(prim_distances)
+			min_distances = torch.amin(min_distances, dim=-1, keepdim=True)
+			primitive_loss += torch.mean(min_distances)
 
+		primitive_loss = primitive_loss / len(csg_model.csg_commands)
 		return primitive_loss
 
 
