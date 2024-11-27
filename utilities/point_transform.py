@@ -151,8 +151,8 @@ def transform_point_cloud_batch(point_clouds, translations, rotations):
 	rot_matrices = quat_to_mat4_batch(rotations)
 
 	# Transform points
-	transformed_points = rot_matrices.matmul(point_clouds_homo)
-	transformed_points = translation_matrices.matmul(transformed_points)
+	transformed_points = translation_matrices.matmul(point_clouds_homo)
+	transformed_points = rot_matrices.matmul(transformed_points)
 	transformed_points = to_cartesian_batch(transformed_points)
 	return transformed_points
 
