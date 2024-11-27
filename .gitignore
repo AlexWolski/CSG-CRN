@@ -6,6 +6,9 @@
 [Oo]utput/*
 ![Oo]utput/README.md
 
+# MagicaCSG output files
+*.mcsg
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
