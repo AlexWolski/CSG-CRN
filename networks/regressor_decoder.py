@@ -78,6 +78,7 @@ class PrimitiveRegressor(nn.Module):
 	def __init__(self,
 		input_feature_size,
 		num_shapes, num_operations,
+		layer_sizes=[],
 		translation_scale=DEFAULT_TRANSLATION_SCALE,
 		min_scale=DEFAULT_MIN_SCALE,
 		max_scale=DEFAULT_MAX_SCALE,
@@ -90,14 +91,15 @@ class PrimitiveRegressor(nn.Module):
 		super(PrimitiveRegressor, self).__init__()
 
 		gumbel_softmax_args = {'hard': True, 'tau': 0.5, 'dim': -1}
+		layer_sizes = [input_feature_size] + layer_sizes
 
-		self.shape = RegressorNetwork([input_feature_size, num_shapes], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
-		self.operation = RegressorNetwork([input_feature_size, num_operations], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
-		self.translation = RegressorNetwork([input_feature_size, 3], activ_func=nn.Tanh(), norm_func=self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
-		self.rotation = RegressorNetwork([input_feature_size, 4], activ_func=None, norm_func=self._normalizeRotation(), no_batch_norm=no_batch_norm)
-		self.scale = RegressorNetwork([input_feature_size, 3], activ_func=torch.sigmoid, norm_func=self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
-		self.blending = RegressorNetwork([input_feature_size, 1], activ_func=torch.sigmoid, norm_func=self._normalizeBlending(min_blending, max_blending), no_batch_norm=no_batch_norm) if (predict_blending) else (None)
-		self.roundness = RegressorNetwork([input_feature_size, 1], activ_func=torch.sigmoid, no_batch_norm=no_batch_norm) if (predict_roundness) else (None)
+		self.shape = RegressorNetwork(layer_sizes + [num_shapes], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
+		self.operation = RegressorNetwork(layer_sizes + [num_operations], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
+		self.translation = RegressorNetwork(layer_sizes + [3], activ_func=nn.Tanh(), norm_func=self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
+		self.rotation = RegressorNetwork(layer_sizes + [4], activ_func=None, norm_func=self._normalizeRotation(), no_batch_norm=no_batch_norm)
+		self.scale = RegressorNetwork(layer_sizes + [3], activ_func=torch.sigmoid, norm_func=self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
+		self.blending = RegressorNetwork(layer_sizes + [1], activ_func=torch.sigmoid, norm_func=self._normalizeBlending(min_blending, max_blending), no_batch_norm=no_batch_norm) if (predict_blending) else (None)
+		self.roundness = RegressorNetwork(layer_sizes + [1], activ_func=torch.sigmoid, no_batch_norm=no_batch_norm) if (predict_roundness) else (None)
 
 	
 	def forward(self, X, first_prim):

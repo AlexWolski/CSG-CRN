@@ -6,7 +6,7 @@ from networks.regressor_decoder import PrimitiveRegressor
 
 
 class CSG_CRN(nn.Module):
-	def __init__(self, num_prims, num_shapes, num_operations,
+	def __init__(self, num_prims, num_shapes, num_operations, decoder_layers=[],
 		predict_blending=True, predict_roundness=True, no_batch_norm=False):
 
 		super(CSG_CRN, self).__init__()
@@ -23,7 +23,7 @@ class CSG_CRN(nn.Module):
 		# Initialize a separate decoder for each primitive
 		for i in range(self.num_prims):
 			regressor_decoder = PrimitiveRegressor(SIAMEZE_ENCODER_OUTPUT_SIZE, self.num_shapes, self.num_operations,
-				predict_blending=self.predict_blending, predict_roundness=self.predict_roundness, no_batch_norm=no_batch_norm)
+				layer_sizes=decoder_layers, predict_blending=self.predict_blending, predict_roundness=self.predict_roundness, no_batch_norm=no_batch_norm)
 			self.regressor_decoder_list.append(regressor_decoder)
 
 

@@ -42,6 +42,7 @@ def load_model(args):
 	args.num_prims = saved_args.num_prims
 	args.sample_method = saved_args.sample_method
 	args.sample_dist = saved_args.sample_dist
+	args.decoder_layers = saved_args.decoder_layers
 	args.no_blending = saved_args.no_blending
 	args.no_roundness = saved_args.no_roundness
 	args.no_batch_norm = saved_args.no_batch_norm
@@ -50,7 +51,7 @@ def load_model(args):
 	predict_roundness = not args.no_roundness
 
 	# Initialize model
-	model = CSG_CRN(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(args.device)
+	model = CSG_CRN(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, args.decoder_layers, predict_blending, predict_roundness, args.no_batch_norm).to(args.device)
 	model.load_state_dict(state_dict, strict=False)
 	model.eval()
 

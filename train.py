@@ -145,6 +145,7 @@ def get_model_parser():
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 	model_group.add_argument('--sample_method', default=['near-surface'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
 	model_group.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
+	model_group.add_argument('--decoder_layers', nargs='+', type=int, default=[], help='List of hidden layers to add to the decoder network')
 
 	return model_parser
 
@@ -222,7 +223,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 	predict_roundness = not args.no_roundness
 
 	# Initialize model
-	model = CSG_CRN(num_prims, num_shapes, num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(device)
+	model = CSG_CRN(num_prims, num_shapes, num_operations, args.decoder_layers, predict_blending, predict_roundness, args.no_batch_norm).to(device)
 
 	# Load model parameters if available
 	if model_params:
