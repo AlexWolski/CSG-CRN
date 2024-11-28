@@ -14,9 +14,9 @@ class Loss(nn.Module):
 
 
 	# Compute reconstruction and primitive loss
-	def forward(self, target_points, target_distances, refined_distances, csg_model):
+	def forward(self, target_points, target_distances, refined_distances, primitive_distances):
 		refined_recon_loss = self.recon_loss(target_distances, refined_distances)
-		primitive_loss = self.prim_loss_weight * self.primitive_loss(target_points, csg_model)
+		primitive_loss = self.prim_loss_weight * self.primitive_loss(target_points, primitive_distances)
 		total_loss = refined_recon_loss + primitive_loss
 		return total_loss
 

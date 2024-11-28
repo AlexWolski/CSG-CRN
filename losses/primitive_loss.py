@@ -10,17 +10,11 @@ class PrimitiveLoss(nn.Module):
 	def __init__(self):
 		super(PrimitiveLoss, self).__init__()
 
-	def forward(self, target_points, csg_model):
-		primitive_loss = 0
-
-		for command in csg_model.csg_commands:
-			prim_distances = CSGModel.sample_sdf(target_points, command)
-			min_distances = torch.square(prim_distances)
-			min_distances = torch.amin(min_distances, dim=-1, keepdim=True)
-			primitive_loss += torch.mean(min_distances)
-
-		primitive_loss = primitive_loss / len(csg_model.csg_commands)
-		return primitive_loss
+	def forward(self, target_points, primitive_distances):
+		primitive_distances = torch.stack(primitive_distances)
+		min_distances = torch.square(primitive_distances)
+		min_distances = torch.amin(min_distances, dim=-1, keepdim=True)
+		return torch.mean(min_distances)
 
 
 # Test loss

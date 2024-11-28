@@ -261,14 +261,15 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 		csg_model.add_command(*output)
 
 	# Sample generated CSG model
-	refined_loss_distances = csg_model.sample_csg(target_loss_points)
+	primitive_distances = []
+	refined_loss_distances = csg_model.sample_csg(target_loss_points, primitive_distances)
 
 	# Get primitive shape and boolean operation propability distributions
 	shapes_weights = torch.cat([x['shape weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
 	operation_weights = torch.cat([x['operation weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
 
 	# Compute loss
-	loss = loss_func(target_loss_points, target_loss_distances, refined_loss_distances, csg_model)
+	loss = loss_func(target_loss_points, target_loss_distances, refined_loss_distances, primitive_distances)
 
 	return loss
 

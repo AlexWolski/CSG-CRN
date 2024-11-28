@@ -104,7 +104,6 @@ class CSGModel():
 
 
 	# Compute blended SDF for all primitive types given primitive weights and a transform
-	# We blend the weighted primitives instead of 
 	def sample_sdf(query_points, command):
 		distances = 0
 
@@ -134,7 +133,8 @@ class CSGModel():
 
 
 	# Sample signed distances from a set of query points
-	def sample_csg(self, query_points):
+	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
+	def sample_csg(self, query_points, out_primitive_samples=None):
 		# Return None if there are no csg commands
 		if not self.csg_commands:
 			return None
@@ -147,33 +147,40 @@ class CSGModel():
 		# Compute combined SDF
 		for command in self.csg_commands:
 			new_distances = CSGModel.sample_sdf(query_points, command)
+
+			# Populate out parameter
+			if out_primitive_samples is not None:
+				out_primitive_samples.append(new_distances)
+
 			distances = CSGModel.apply_operation(distances, new_distances, command)
 
 		return distances
 
 
 	# Sample a given number of signed distances at uniformly distributed points
-	def sample_csg_uniform(self, batch_size, num_points):
+	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
+	def sample_csg_uniform(self, batch_size, num_points, out_primitive_samples=None):
 		# Return None if there are no csg commands
 		if not self.csg_commands:
 			return None
 
 		uniform_points = Uniform(-MAX_BOUND, MAX_BOUND).sample((batch_size, num_points, 3)).to(self.device)
-		uniform_distances = self.sample_csg(uniform_points)
+		uniform_distances = self.sample_csg(uniform_points, out_primitive_samples)
 
 		return (uniform_points.detach(), uniform_distances.detach())
 
 
 	# Sample a given number of signed distances at near-surface points
 	# allow_uniform_points option determines if uniform points are included when the number of surface points is insufficient
-	def sample_csg_surface(self, batch_size, num_points, sample_dist, allow_uniform_points=True):
+	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
+	def sample_csg_surface(self, batch_size, num_points, sample_dist, allow_uniform_points=True, out_primitive_samples=None):
 		# Return None if there are no csg commands
 		if not self.csg_commands:
 			return None
 
 		# Get uniform points
 		num_uniform_points = math.ceil(num_points / sample_dist) * SURFACE_SAMPLE_RATIO
-		(uniform_points, uniform_distances) = self.sample_csg_uniform(batch_size, num_uniform_points)
+		(uniform_points, uniform_distances) = self.sample_csg_uniform(batch_size, num_uniform_points, out_primitive_samples)
 
 		# Store all indices in flat tensor
 		all_indices = None
