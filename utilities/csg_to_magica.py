@@ -8,6 +8,8 @@ from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
 
 # Amount to scale the output 
 SCALE_FACTOR = 100
+# Scalar multiplier when converting the blending strength to MagicaCSG
+BLENDING_SCALAR = 100
 # Marching cubes resolution in MagicaCSG
 RESOLUTION = 128
 
@@ -41,7 +43,7 @@ def export_operation(operation_weights):
 # Adjust the blending value to match the MagicaCSG 
 def export_blending(blending):
 	blending_value = blending.item()
-	blending_value *= 10
+	blending_value *= BLENDING_SCALAR
 	return str(blending_value)
 
 
