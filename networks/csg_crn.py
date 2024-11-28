@@ -38,9 +38,11 @@ class CSG_CRN(nn.Module):
 		features = self.siamese_encoder(target_input, initial_recon_input)
 
 		output_list = []
+		first_prim = True
 
 		for i, decoder in enumerate(self.regressor_decoder_list):
-			output_list.append(decoder(features, initial_recon_input is not None))
+			output_list.append(decoder(features, first_prim))
+			first_prim = False
 
 		return output_list
 
