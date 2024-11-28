@@ -42,14 +42,15 @@ def load_model(args):
 	args.num_prims = saved_args.num_prims
 	args.sample_method = saved_args.sample_method
 	args.sample_dist = saved_args.sample_dist
+	args.no_blending = saved_args.no_blending
+	args.no_roundness = saved_args.no_roundness
+	args.no_batch_norm = saved_args.no_batch_norm
 
-	# Check for weights corresponding to blending and roundness regressors
-	predict_blending = 'regressor_decoder.blending.fc_list.0.weight' in state_dict
-	predict_roundness = 'regressor_decoder.roundness.fc_list.0.weight' in state_dict
-	no_batch_norm = not 'point_encoder.bn1.weight' in state_dict
+	predict_blending = not args.no_blending
+	predict_roundness = not args.no_roundness
 
 	# Initialize model
-	model = CSG_CRN(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness, no_batch_norm).to(args.device)
+	model = CSG_CRN(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, predict_blending, predict_roundness, args.no_batch_norm).to(args.device)
 	model.load_state_dict(state_dict, strict=False)
 	model.eval()
 
