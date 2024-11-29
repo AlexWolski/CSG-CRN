@@ -1,9 +1,11 @@
 import os
+import sys
 import signal
 import argparse
 import pyrender
 import numpy as np
 import torch
+import time
 
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
@@ -173,22 +175,38 @@ def main():
 	# View reconstruction
 	get_csg_model = lambda input_file: construct_csg_model(model, input_file, args)
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
-	SdfModelViewer("Reconstructed SDF", args.point_size, False, args.num_view_points, args.input_file, csg_model, args.sample_dist, get_csg_model)
+
+	viewer = SdfModelViewer("Reconstructed SDF", args.point_size, False, args.num_view_points, args.input_file, csg_model, args.sample_dist, get_csg_model)
+	await_viewer(viewer)
+
+
+# Wait for the viewer to be closed
+def await_viewer(viewer):
+	# Catch CTRL+Z force shutdown
+	signal.signal(signal.SIGTSTP, lambda _signum, _frame: exit_handler(viewer))
+
+	# Wait for the viewer to be closed
+	try:
+		while viewer.is_active:
+			time.sleep(0.1)
+	# Catch CTRL+C force shutdown
+	except KeyboardInterrupt:
+		print('\nProgram interrupted by keyboard input')
+	finally:
+		exit_handler(viewer)
+
+
+# Gracefully close the external viewer and exit the program
+def exit_handler(viewer):
+	viewer.close_external()
+
+	while viewer.is_active:
+		time.sleep(0.1)
+
+	print('\nClearing GPU cache and quitting')
+	torch.cuda.empty_cache()
+	sys.exit()
 
 
 if __name__ == '__main__':
-	# Catch CTRL+Z force shutdown
-	def exit_handler(signum, frame):
-		print('\nClearing GPU cache')
-		torch.cuda.empty_cache()
-		print('Enter CTRL+C multiple times to exit')
-		sys.exit()
-
-	signal.signal(signal.SIGTSTP, exit_handler)
-
-	# Catch CTRL+C force shutdown
-	try:
-		main()
-	except KeyboardInterrupt:
-		print('\nClearing GPU cache and quitting')
-		torch.cuda.empty_cache()
+	main()

@@ -430,20 +430,18 @@ def main():
 
 
 if __name__ == '__main__':
-	# Catch CTRL+Z force shutdown
-	def exit_handler(signum, frame):
-		print('\nClearing GPU cache')
+	def exit_handler():
+		print('\nClearing GPU cache and quitting')
 		torch.cuda.empty_cache()
-		print('Enter CTRL+C multiple times to exit')
 		sys.exit()
 
-	signal.signal(signal.SIGTSTP, exit_handler)
+	# Catch CTRL+Z force shutdown
+	signal.signal(signal.SIGTSTP, lambda _signum, _frame: exit_handler())
 
-	# Catch CTRL+C force shutdown
 	try:
 		main()
+	# Catch CTRL+C force shutdown
 	except KeyboardInterrupt:
 		print('\nProgram interrupted by keyboard input')
 	finally:
-		print('\nClearing GPU cache and quitting')
-		torch.cuda.empty_cache()
+		exit_handler()
