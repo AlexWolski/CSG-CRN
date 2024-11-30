@@ -134,7 +134,7 @@ class CSGModel():
 
 	# Sample signed distances from a set of query points
 	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
-	def sample_csg(self, query_points, out_primitive_samples=None):
+	def sample_csg(self, query_points, initial_distances=None, out_primitive_samples=None):
 		# Return None if there are no csg commands
 		if not self.csg_commands:
 			return None
@@ -142,7 +142,10 @@ class CSGModel():
 		(batch_size, num_points, _) = query_points.size()
 
 		# Set initial SDF to a set maximum value instead of float('inf')
-		distances = torch.full((batch_size, num_points), MAX_SDF_VALUE, device=self.device)
+		if initial_distances is not None:
+			distances = initial_distances
+		else:
+			distances = torch.full((batch_size, num_points), MAX_SDF_VALUE, device=self.device)
 
 		# Compute combined SDF
 		for command in self.csg_commands:
