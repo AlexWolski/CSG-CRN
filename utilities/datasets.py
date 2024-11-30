@@ -80,7 +80,10 @@ class PointDataset(Dataset):
 		batch_sdf_samples = batch_sdf_samples[:, torch.randperm(total_points)]
 
 		# Separate input and loss samples
-		batch_select_input_samples = batch_sdf_samples[:,:self.args.num_input_points]
-		batch_select_loss_samples = batch_sdf_samples[:,self.args.num_input_points:]
+		batch_select_input_samples = batch_sdf_samples[:,:self.args.num_input_points].detach()
+		batch_select_loss_samples = batch_sdf_samples[:,self.args.num_input_points:].detach()
 
-		return (batch_select_input_samples.detach(), batch_select_loss_samples.detach())
+		# TODO: Implement initial sample loading
+		batch_select_init_recon_samples = None
+
+		return (batch_select_input_samples, batch_select_loss_samples, batch_select_init_recon_samples)

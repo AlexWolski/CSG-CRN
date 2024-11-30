@@ -233,33 +233,23 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 
 
 # Run a forwards pass of the network model
-def model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device):
+def model_forward(model, loss_func, target_input_samples, target_loss_samples, init_recon_samples, args, device):
 	# Load data
 	(batch_size, num_input_points, _) = target_input_samples.size()
 
 	# Initialize SDF CSG model
 	csg_model = CSGModel(device)
 
-	# Randomly sample initial reconstruction surface to generate input
-	if args.sample_method[0] == 'uniform':
-		initial_input_samples = csg_model.sample_csg_uniform(batch_size, num_input_points)
-	else:
-		initial_input_samples = csg_model.sample_csg_surface(batch_size, num_input_points, args.sample_dist)
-
-	if initial_input_samples is not None:
-		(initial_input_points, initial_input_distances) = initial_input_samples
-		initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
-
 	# Generate a set of primitives to add to the CSG model
 	with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-		output_list = model(target_input_samples, initial_input_samples)
+		output_list = model(target_input_samples, init_recon_samples)
 
 	# Add primitive to CSG model
 	for output in output_list:
 		csg_model.add_command(*output)
 
 	# Compute loss
-	loss = loss_func(target_loss_samples, csg_model)
+	loss = loss_func(target_loss_samples, init_recon_samples, csg_model)
 
 	return loss
 
@@ -268,12 +258,9 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc=''):
 	total_train_loss = 0
 
-	for (target_input_samples, target_loss_samples) in tqdm(train_loader, desc=desc):
-		target_input_samples = target_input_samples.squeeze(0)
-		target_loss_samples = target_loss_samples.squeeze(0)
-
+	for (target_input_samples, target_loss_samples, init_recon_samples) in tqdm(train_loader, desc=desc):
 		# Forward pass
-		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device)
+		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, init_recon_samples, args, device)
 		total_train_loss += batch_loss.item()
 
 		# Back propagate
@@ -290,11 +277,8 @@ def validate(model, loss_func, val_loader, args, device):
 	total_val_loss = 0
 
 	with torch.no_grad():
-		for (target_input_samples, target_loss_samples) in val_loader:
-			target_input_samples = target_input_samples.squeeze(0)
-			target_loss_samples = target_loss_samples.squeeze(0)
-
-			batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device)
+		for (target_input_samples, target_loss_samples, init_recon_samples) in val_loader:
+			batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, init_recon_samples, args, device)
 			total_val_loss += batch_loss.item()
 
 	total_val_loss /= val_loader.__len__()
@@ -405,8 +389,10 @@ def main():
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
 	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
 
-	train_loader = DataLoader(train_dataset, sampler=train_sampler)
-	val_loader = DataLoader(val_dataset, sampler=val_sampler)
+	# The PointDataset class has a custom __getitem__ function so the collate function is unneeded
+	collate_fn = lambda data: data[0]
+	train_loader = DataLoader(train_dataset, sampler=train_sampler, collate_fn=collate_fn)
+	val_loader = DataLoader(val_dataset, sampler=val_sampler, collate_fn=collate_fn)
 
 	# Save settings to file
 	settings_path = os.path.join(args.output_dir, 'settings.yml')

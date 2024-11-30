@@ -14,13 +14,15 @@ class Loss(nn.Module):
 
 
 	# Compute reconstruction and primitive loss
-	def forward(self, target_samples, csg_model):
+	def forward(self, target_samples, init_recon_samples, csg_model):
 		target_points = target_samples[..., :3]
 		target_distances = target_samples[..., 3]
+		init_recon_points = init_recon_samples[..., :3] if init_recon_samples is not None else None
+		init_recon_distances = init_recon_samples[..., 3] if init_recon_samples is not None else None
 
 		# Sample CSG model
 		primitive_distances = []
-		refined_distances = csg_model.sample_csg(target_points, out_primitive_samples=primitive_distances)
+		refined_distances = csg_model.sample_csg(target_points, initial_distances=init_recon_distances, out_primitive_samples=primitive_distances)
 
 		# Compute loss
 		refined_recon_loss = self.recon_loss(target_distances, refined_distances)
