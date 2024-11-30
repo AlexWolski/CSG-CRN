@@ -24,7 +24,7 @@ from utilities.training_logger import TrainingLogger
 
 
 # Weights for regularization loss
-PRIM_LOSS_WEIGHT = 1
+PROXIMITY_LOSS_WEIGHT = 1
 # Percentage of data to use for training, validation, and testing
 DATA_SPLIT = [0.8, 0.1, 0.1]
 
@@ -262,7 +262,7 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 
 	# Sample generated CSG model
 	primitive_distances = []
-	refined_loss_distances = csg_model.sample_csg(target_loss_points, primitive_distances)
+	refined_loss_distances = csg_model.sample_csg(target_loss_points, out_primitive_samples=primitive_distances)
 
 	# Get primitive shape and boolean operation propability distributions
 	shapes_weights = torch.cat([x['shape weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
@@ -396,7 +396,7 @@ def main():
 
 	# Initialize model
 	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
-	loss_func = Loss(PRIM_LOSS_WEIGHT).to(device)
+	loss_func = Loss(PROXIMITY_LOSS_WEIGHT).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = AdamW(model.parameters(), lr=current_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
