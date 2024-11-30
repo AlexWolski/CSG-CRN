@@ -443,5 +443,7 @@ if __name__ == '__main__':
 	# Catch CTRL+C force shutdown
 	except KeyboardInterrupt:
 		print('\nProgram interrupted by keyboard input')
+	except Exception:
+		print(traceback.format_exc())
 	finally:
 		exit_handler()
