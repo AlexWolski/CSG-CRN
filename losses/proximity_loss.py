@@ -10,7 +10,7 @@ class ProximityLoss(nn.Module):
 	def __init__(self):
 		super(ProximityLoss, self).__init__()
 
-	def forward(self, target_points, primitive_distances):
+	def forward(self, primitive_distances):
 		primitive_distances = torch.stack(primitive_distances)
 		min_distances = torch.square(primitive_distances)
 		min_distances = torch.amin(min_distances, dim=-1, keepdim=True)

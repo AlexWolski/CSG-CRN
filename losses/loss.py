@@ -26,7 +26,7 @@ class Loss(nn.Module):
 
 		# Compute loss
 		refined_recon_loss = self.recon_loss(target_distances, refined_distances)
-		proximity_loss = self.proximity_loss_weight * self.proximity_loss(target_points, primitive_distances)
+		proximity_loss = self.proximity_loss_weight * self.proximity_loss(primitive_distances)
 		total_loss = refined_recon_loss + proximity_loss
 		return total_loss
 
