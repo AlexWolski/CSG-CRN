@@ -235,8 +235,6 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 # Run a forwards pass of the network model
 def model_forward(model, loss_func, target_input_samples, target_loss_samples, args, device):
 	# Load data
-	target_loss_points = target_loss_samples[..., :3]
-	target_loss_distances = target_loss_samples[..., 3]
 	(batch_size, num_input_points, _) = target_input_samples.size()
 
 	# Initialize SDF CSG model
@@ -260,16 +258,8 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, a
 	for output in output_list:
 		csg_model.add_command(*output)
 
-	# Sample generated CSG model
-	primitive_distances = []
-	refined_loss_distances = csg_model.sample_csg(target_loss_points, out_primitive_samples=primitive_distances)
-
-	# Get primitive shape and boolean operation propability distributions
-	shapes_weights = torch.cat([x['shape weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
-	operation_weights = torch.cat([x['operation weights'] for x in csg_model.csg_commands]).view(batch_size, args.num_prims, -1)
-
 	# Compute loss
-	loss = loss_func(target_loss_points, target_loss_distances, refined_loss_distances, primitive_distances)
+	loss = loss_func(target_loss_samples, csg_model)
 
 	return loss
 
