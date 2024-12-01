@@ -233,7 +233,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 
 
 # Run a forwards pass of the network model
-def model_forward(model, loss_func, target_input_samples, target_loss_samples, init_recon_samples, args, device):
+def model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device):
 	# Load data
 	(batch_size, num_input_points, _) = target_input_samples.size()
 
@@ -242,14 +242,14 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, i
 
 	# Generate a set of primitives to add to the CSG model
 	with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-		output_list = model(target_input_samples, init_recon_samples)
+		output_list = model(target_input_samples, recon_input_samples)
 
 	# Add primitive to CSG model
 	for output in output_list:
 		csg_model.add_command(*output)
 
 	# Compute loss
-	loss = loss_func(target_loss_samples, init_recon_samples, csg_model)
+	loss = loss_func(target_loss_samples, recon_loss_samples, csg_model)
 
 	return loss
 
@@ -258,9 +258,9 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, i
 def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc=''):
 	total_train_loss = 0
 
-	for (target_input_samples, target_loss_samples, init_recon_samples) in tqdm(train_loader, desc=desc):
+	for (target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples) in tqdm(train_loader, desc=desc):
 		# Forward pass
-		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, init_recon_samples, args, device)
+		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
 		total_train_loss += batch_loss.item()
 
 		# Back propagate
@@ -277,8 +277,8 @@ def validate(model, loss_func, val_loader, args, device):
 	total_val_loss = 0
 
 	with torch.no_grad():
-		for (target_input_samples, target_loss_samples, init_recon_samples) in val_loader:
-			batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, init_recon_samples, args, device)
+		for (target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples) in val_loader:
+			batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
 			total_val_loss += batch_loss.item()
 
 	total_val_loss /= val_loader.__len__()
