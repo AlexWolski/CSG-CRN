@@ -12,6 +12,7 @@ from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
 from utilities.file_loader import FileLoader
+from utilities.data_processing import split_uniform_surface_samples
 
 
 # Parse commandline arguments
@@ -42,7 +43,7 @@ def load_model(args):
 	# Load training args
 	args.num_input_points = saved_args.num_input_points
 	args.num_prims = saved_args.num_prims
-	args.sample_method = saved_args.sample_method
+	args.surface_uniform_ratio = saved_args.surface_uniform_ratio
 	args.sample_dist = saved_args.sample_dist
 	args.decoder_layers = saved_args.decoder_layers
 	args.no_blending = saved_args.no_blending
@@ -65,10 +66,9 @@ def load_input_samples(input_file, args):
 	# Load all points from file
 	points = np.load(input_file).astype(np.float32)
 
-	# Select near-surface points if needed
-	if args.sample_method[0] == 'near-surface':
-		surface_sample_rows = np.where(abs(points[:,3]) <= args.sample_dist)
-		points = points[surface_sample_rows]
+	# Select required ratio of uniform and near-surface samples
+	(uniform_samples, surface_samples) = split_uniform_surface_samples(points, args.sample_dist)
+	points = np.concatenate((uniform_samples, surface_samples), axis=0)
 
 	# Randomly select needed number of input surface points
 	replace = (points.shape[0] < args.num_input_points)
@@ -87,10 +87,7 @@ def run_model(model, input_samples, args):
 		csg_model = CSGModel(args.device)
 
 		# Randomly sample initial reconstruction surface to generate input
-		if args.sample_method[0] == 'uniform':
-			initial_input_samples = csg_model.sample_csg_uniform(1, args.num_input_points)
-		else:
-			initial_input_samples = csg_model.sample_csg_surface(1, args.num_input_points, args.sample_dist)
+		initial_input_samples = csg_model.gen_csg_samples(1, args.num_input_points, args.surface_uniform_ratio, args.sample_dist)
 
 		if initial_input_samples is not None:
 			(initial_input_points, initial_input_distances) = initial_input_samples

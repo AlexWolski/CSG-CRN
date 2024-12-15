@@ -35,7 +35,7 @@ def options():
 
 	# Shape generation parser
 	gen_group.add_argument('--num_shapes', type=int, default=1, help='Number of shapes to generate per CSG model')
-	gen_group.add_argument('--sample_method', default=['near-surface'], choices=['uniform', 'near-surface'], nargs=1, help='Select SDF samples uniformly or near object surfaces. Near-surface requires pre-processing')
+	gen_group.add_argument('--surface_uniform_ratio', type=float, default=0.5, help='Percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples')
 	gen_group.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
 	gen_group.add_argument('--min_scale', type=float, default=0.2, help='Lower bound on random scale value')
 	gen_group.add_argument('--max_scale', type=float, default=0.8, help='Upper bound on random scale value')
@@ -86,7 +86,7 @@ def random_operation(is_first_shape):
 # Randomly sample a point near the surface of the CSG model
 def random_position(csg_model):
 	# Sample the CSG model
-	sample_points = csg_model.sample_csg_uniform(1, POSITION_SAMPLE_POINTS)
+	sample_points = csg_model.gen_uniform_csg_samples(1, POSITION_SAMPLE_POINTS)
 
 	# Return the origin if the CSG model contains no shapes
 	if not sample_points:
@@ -131,10 +131,7 @@ def generate_dataset(args):
 			generate_shape(csg_model, is_first_shape, args.no_blending, args.min_blending, args.max_blending, args.no_roundness, args.min_roundness, args.max_roundness, args.min_scale, args.max_scale)
 
 		# Sample model
-		if args.sample_method[0] == 'uniform':
-			surface_points = csg_model.sample_csg_uniform(1, args.num_sample_points)
-		else:
-			surface_points = csg_model.sample_csg_surface(1, args.num_sample_points, args.sample_dist, allow_uniform_points=False)
+		surface_points = csg_model.gen_csg_samples(1, args.num_sample_points, args.surface_uniform_ratio, args.sample_dist, strict_ratio=True)
 
 		# Re-generate sample if there are no samples
 		if surface_points is None:

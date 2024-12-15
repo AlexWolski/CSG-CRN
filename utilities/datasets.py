@@ -22,13 +22,12 @@ class PointDataset(Dataset):
 		for file_rel_path in tqdm(file_rel_paths, desc=f'Loading {dataset_name}'):
 			sample_path = os.path.join(self.args.data_dir, file_rel_path)
 			sdf_sample = np.load(sample_path).astype(np.float32)
-			sdf_sample = torch.from_numpy(sdf_sample)
 
 			# Preprocess sample if needed
 			if not args.skip_preprocess:
 				sdf_sample = pre_process_sample(args, sdf_sample)
 
-				if sdf_sample == None:
+				if sdf_sample is None:
 					skipped_samples += 1
 					continue
 
@@ -37,6 +36,7 @@ class PointDataset(Dataset):
 					skipped_samples += 1
 					continue
 
+			sdf_sample = torch.from_numpy(sdf_sample)
 			sdf_sample_list.append(sdf_sample)
 
 

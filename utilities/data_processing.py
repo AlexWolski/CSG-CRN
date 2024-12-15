@@ -1,5 +1,6 @@
 import os
 import glob
+import math
 import numpy as np
 from tqdm import tqdm
 
@@ -71,27 +72,32 @@ def load_list(file_path):
 	return list_data
 
 
-# Select points within a threshold distance of the surface
-def select_surface_points(samples, sample_dist):
-	surface_sample_rows = np.where(abs(samples[:,3]) <= sample_dist)
-	return samples[surface_sample_rows]
+# Separate uniform and near-surface points and return in tuple
+def split_uniform_surface_samples(samples, sample_dist):
+	# Separate near-surface and uniform points
+	uniform_sample_rows = np.where(abs(samples[:,3]) > sample_dist)
+	uniform_samples = samples[uniform_sample_rows]
+	surface_samples = np.delete(samples, uniform_sample_rows, axis=0)
+	return (uniform_samples, surface_samples)
 
 
 # Select near-surface point samples and consolidate sample length
 def pre_process_sample(args, data_sample):
 	total_points = args.num_input_points + args.num_loss_points
+	num_uniform = math.ceil(total_points * args.surface_uniform_ratio)
+	num_surface = math.floor(total_points * (1 - args.surface_uniform_ratio))
 
-	# Select near-surface points
-	if args.sample_method[0] == 'near-surface':
-		data_sample = select_surface_points(data_sample, args.sample_dist)
+	# Separate near-surface and uniform points
+	(uniform_samples, surface_samples) = split_uniform_surface_samples(data_sample, args.sample_dist)
 
 	# Skip samples that don't contain enough points
-	if data_sample.shape[0] < total_points:
+	if uniform_samples.shape[0] < num_uniform or surface_samples.shape[0] < num_surface:
 		return None
 
 	# Randomly select the required number of points
-	if data_sample.shape[0] > total_points:
-		select_rows = np.random.choice(data_sample.shape[0], total_points, replace=False)
-		data_sample = data_sample[select_rows]
+	select_uniform_rows = np.random.choice(uniform_samples.shape[0], num_uniform, replace=False)
+	uniform_samples = uniform_samples[select_uniform_rows]
+	select_surface_rows = np.random.choice(surface_samples.shape[0], num_surface, replace=False)
+	surface_samples = surface_samples[select_surface_rows]
 
-	return data_sample
+	return np.concatenate((uniform_samples, surface_samples), axis=0)

@@ -300,12 +300,8 @@ class SdfModelViewer(_SdfViewer):
 		if csg_view_points < 0:
 			csg_view_points = self.points.shape[0]
 
-
 		# Sample reconstructed CSG model
-		if self.show_exterior_points:
-			(csg_points, csg_distances) = self.csg_model.sample_csg_uniform(1, csg_view_points)
-		else:
-			(csg_points, csg_distances) = self.csg_model.sample_csg_surface(1, csg_view_points, self.sample_dist)
+		(csg_points, csg_distances) = self.csg_model.gen_csg_samples(1, csg_view_points)
 
 		# Convert to numpy
 		csg_points = csg_points.squeeze(0).cpu().numpy()

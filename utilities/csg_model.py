@@ -169,7 +169,7 @@ class CSGModel():
 
 	# Sample a given number of signed distances at uniformly distributed points
 	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
-	def sample_csg_uniform(self, batch_size, num_points, out_primitive_samples=None):
+	def gen_uniform_csg_samples(self, batch_size, num_points, out_primitive_samples=None):
 		# Return None if there are no csg commands
 		if not self.csg_commands:
 			return None
@@ -181,58 +181,59 @@ class CSGModel():
 
 
 	# Sample a given number of signed distances at near-surface points
-	# allow_uniform_points option determines if uniform points are included when the number of surface points is insufficient
+	# surface_uniform_ratio controls percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples
 	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
-	def sample_csg_surface(self, batch_size, num_points, sample_dist, allow_uniform_points=True, out_primitive_samples=None):
+	def gen_csg_samples(self, batch_size, num_points, surface_uniform_ratio=0, sample_dist=0.1, strict_ratio=True, out_primitive_samples=None):
 		# Return None if there are no csg commands
 		if not self.csg_commands:
 			return None
 
-		# Get uniform points
-		num_uniform_points = math.ceil(num_points / sample_dist) * SURFACE_SAMPLE_RATIO
-		(uniform_points, uniform_distances) = self.sample_csg_uniform(batch_size, num_uniform_points, out_primitive_samples)
+		# Generate uniform samples
+		num_generate = math.ceil(num_points / sample_dist) * SURFACE_SAMPLE_RATIO
+		(uniform_points, uniform_distances) = self.gen_uniform_csg_samples(batch_size, num_generate, out_primitive_samples=out_primitive_samples)
 
-		# Store all indices in flat tensor
-		all_indices = None
+		# Separate uniform and near-surface samples
+		num_uniform = math.ceil(num_points * surface_uniform_ratio)
+		num_surface = math.floor(num_points * (1 - surface_uniform_ratio))
+		sample_points_list = []
+		sample_distances_list = []
 
 		for batch in range(batch_size):
-			# Select indices for near-surface points
-			mask = (abs(uniform_distances[batch]) <= sample_dist)
-			indices = mask.nonzero()
+			# Separate uniform and near-surface points
+			surface_mask = (abs(uniform_distances[batch]) <= sample_dist)
+			surface_indices = surface_mask.nonzero()
+			uniform_indices = (surface_mask == 0).nonzero()
 
-			# If there are too few near-surface points, mix in uniform points
-			if len(indices) < num_points:
-				# If there are insufficient surface points, return none
-				if not allow_uniform_points:
+			# Select the necessary number of points
+			if num_uniform == 0:
+				uniform_indices = None
+			else:
+				uniform_indices = uniform_indices[:num_uniform]
+
+			if num_surface == 0:
+				surface_indices = None
+			elif len(surface_indices) < num_surface:
+				if strict_ratio:
 					return None
 
-				num_uniform_indices = num_points - len(indices)
-				unifrom_indices = torch.randint(num_uniform_points, (num_uniform_indices, 1), device=self.device)
-				indices = torch.cat((indices, unifrom_indices))
-			# Otherwise slice the needed number of points
+				num_supplemental_indices = num_surface - len(surface_indices)
+				supplemental_indices = uniform_indices[num_uniform:num_uniform+num_supplemental_indices]
+				surface_indices = torch.cat((indices, supplemental_indices))
 			else:
-				indices = indices[:num_points]
+				surface_indices = surface_indices[:num_surface]
 
-			# Adjust index positions based on batch
-			indices = torch.add(indices, batch * num_points)
-
-			# Add indices to total
-			if all_indices is None:
-				all_indices = indices
+			# Save select points to list
+			if uniform_indices == None:
+				combined_indices = surface_indices
+			elif surface_indices == None:
+				combined_indices = uniform_indices
 			else:
-				all_indices = torch.cat((all_indices, indices))
+				combined_indices = torch.cat((uniform_indices, surface_indices))
 
-		# Flatten sample tensors
-		uniform_points = uniform_points.view(-1, 3)
-		uniform_distances = uniform_distances.view(-1, 1)
-		# Index flattened tensors
-		uniform_points = uniform_points[all_indices]
-		uniform_distances = uniform_distances[all_indices]
-		# Reshape
-		uniform_points = uniform_points.view(batch_size, num_points, 3)
-		uniform_distances = uniform_distances.view(batch_size, num_points)
+			sample_points_list.append(uniform_points[batch, combined_indices].squeeze())
+			sample_distances_list.append(uniform_distances[batch, combined_indices].squeeze())
 
-		return (uniform_points.detach(), uniform_distances.detach())
+		return (torch.stack(sample_points_list).detach(), torch.stack(sample_distances_list).detach())
 
 
 # Test SDFs
@@ -259,7 +260,7 @@ def test():
 	myModel = CSGModel()
 	myModel.add_command(shape_weights1, operation_weights1, translations1, rotations1, scales1, blending1, roundness1)
 	myModel.add_command(shape_weights2, operation_weights2, translations2, rotations2, scales2, blending2, roundness2)
-	(points, distances) = myModel.sample_csg_surface(batch_size, num_points, 0.1)
+	(points, distances) = myModel.gen_csg_samples(batch_size, num_points, 0.5, 0.1)
 
 	print('Sample points:')
 	print(points)
