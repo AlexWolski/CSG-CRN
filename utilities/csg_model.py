@@ -4,7 +4,8 @@ from torch.distributions.uniform import Uniform
 from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder
 
 
-# Supported bounds is a cube with length MAX_BOUND
+# Supported bounds is a cube with length MAX_BOUND - MIN_BOUND
+MIN_BOUND = -1
 MAX_BOUND = 1
 # Maximum SDF value is twice the radius
 MAX_SDF_VALUE = MAX_BOUND * 2
@@ -79,7 +80,7 @@ class CSGModel():
 
 	operation_functions = [
 		add_sdf,
-		subtract_sdf
+		# subtract_sdf
 	]
 
 	num_shapes = len(sdf_functions)
@@ -174,7 +175,7 @@ class CSGModel():
 		if not self.csg_commands:
 			return None
 
-		uniform_points = Uniform(-MAX_BOUND, MAX_BOUND).sample((batch_size, num_points, 3)).to(self.device)
+		uniform_points = Uniform(MIN_BOUND, MAX_BOUND).sample((batch_size, num_points, 3)).to(self.device)
 		uniform_distances = self.sample_csg(uniform_points, out_primitive_samples)
 
 		return (uniform_points.detach(), uniform_distances.detach())
