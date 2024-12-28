@@ -81,13 +81,13 @@ def scale_to_mat4_batch(scales):
 	new_col = torch.ones((batch_size, 1), dtype=torch.float, device=scales.device)
 	scales = torch.cat((scales, new_col), dim=1)
 
-	# Copy the scale tensor to the diagonal of a Bx4x4 tensor 
+	# Copy the scale tensor to the diagonal of a Bx4x4 tensor
 	scale_matrix = torch.diag_embed(scales)
 
 	return scale_matrix
 
 
-# Convert a point cloud from a BxNx3 cartesian coordinate system to a BxNx4 homogeneous coordinate system
+# Convert a point cloud from a BxNx3 Cartesian coordinate system to a BxNx4 homogeneous coordinate system
 def to_homogeneous_batch(point_clouds):
 	(batch_size, rows, cols) = point_clouds.size()
 
@@ -101,7 +101,7 @@ def to_homogeneous_batch(point_clouds):
 	return point_clouds_homo
 
 
-# Convert a point cloud from a BxNx4 homogeneous coordinate system to a BxNx3 cartesian coordinate system
+# Convert a point cloud from a BxNx4 homogeneous coordinate system to a BxNx3 Cartesian coordinate system
 def to_cartesian_batch(point_clouds):
 	point_clouds = point_clouds[:,:-1,:]
 	point_clouds = point_clouds.transpose(1,2)
@@ -145,16 +145,22 @@ def rotate_point_cloud(point_cloud, rotation):
 # Target space is defined by a Bx3 translation tensor and a Bx4 quaternion tensor
 # Rotations are quaternions of form [w, x, y, z]
 def transform_point_cloud_batch(point_clouds, translations, rotations):
-	# Convert data to matrices
+	# Convert points to matrices
 	point_clouds_homo = to_homogeneous_batch(point_clouds)
-	translation_matrices = translation_to_mat4_batch(translations)
-	rot_matrices = quat_to_mat4_batch(rotations)
 
-	# Transform points
+	# Translate
+	translation_matrices = translation_to_mat4_batch(translations)
 	transformed_points = torch.bmm(translation_matrices, point_clouds_homo)
+	del translation_matrices
+	del point_clouds_homo
+
+	# Rotate
+	rot_matrices = quat_to_mat4_batch(rotations)
 	transformed_points = torch.bmm(rot_matrices, transformed_points)
-	transformed_points = to_cartesian_batch(transformed_points)
-	return transformed_points
+	del rot_matrices
+
+	# Convert matrices back to points
+	return to_cartesian_batch(transformed_points)
 
 
 # Transforms a Nx3 point cloud tensor to a given space
@@ -166,7 +172,7 @@ def transform_point_cloud(point_cloud, translation, rotation):
 
 # Scale a given point cloud batch to fit within a unit sphere
 def scale_to_unit_sphere_batch(batch_points, batch_distances):
-	# Compute furthest point from orgin
+	# Compute furthest point from origin
 	squared_points = torch.square(batch_points)
 	squared_dist = torch.sum(squared_points, -1)
 	max_dist = torch.sqrt(torch.amax(squared_dist, -1))
