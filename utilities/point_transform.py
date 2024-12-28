@@ -113,7 +113,7 @@ def to_cartesian_batch(point_clouds):
 def translate_point_cloud_batch(point_clouds, translations):
 	point_clouds_homo = to_homogeneous_batch(point_clouds)
 	translation_matrices = translation_to_mat4_batch(translations)
-	translated_points = translation_matrices.matmul(point_clouds_homo)
+	translated_points = torch.bmm(translation_matrices, point_clouds_homo)
 	translated_points = to_cartesian_batch(translated_points)
 	return translated_points
 
@@ -129,7 +129,7 @@ def translate_point_cloud(point_cloud, translation):
 def rotate_point_cloud_batch(point_clouds, rotations):
 	point_clouds_homo = to_homogeneous_batch(point_clouds)
 	rot_matrices = quat_to_mat4_batch(rotations)
-	rotated_points = rot_matrices.matmul(point_clouds_homo)
+	rotated_points = torch.bmm(rot_matrices, point_clouds_homo)
 	rotated_points = to_cartesian_batch(rotated_points)
 	return rotated_points
 
@@ -151,8 +151,8 @@ def transform_point_cloud_batch(point_clouds, translations, rotations):
 	rot_matrices = quat_to_mat4_batch(rotations)
 
 	# Transform points
-	transformed_points = translation_matrices.matmul(point_clouds_homo)
-	transformed_points = rot_matrices.matmul(transformed_points)
+	transformed_points = torch.bmm(translation_matrices, point_clouds_homo)
+	transformed_points = torch.bmm(rot_matrices, transformed_points)
 	transformed_points = to_cartesian_batch(transformed_points)
 	return transformed_points
 
