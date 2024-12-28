@@ -14,8 +14,6 @@ def world_to_local_points(query_points, translations, rotations):
 
 
 def sdf_ellipsoid(query_points, translations, rotations, dimensions, roundness=None):
-	device = query_points.device
-
 	# Transform query points to primitive space
 	transformed_query_points = world_to_local_points(query_points, translations, rotations)
 	dimensions = dimensions.unsqueeze(1)
@@ -24,14 +22,12 @@ def sdf_ellipsoid(query_points, translations, rotations, dimensions, roundness=N
 	k0 = (transformed_query_points / dimensions).norm(dim=-1)
 	# Divide by gradient to minimize distortion
 	k1 = (transformed_query_points / (dimensions*dimensions)).norm(dim=-1)
-	distances = k0 * (k0 - torch.ones(1, device=device)) / k1
+	distances = k0 * (k0 - 1.0) / k1
 
 	return distances
 
 
 def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
-	device = query_points.device
-
 	# Transform query points to primitive space
 	transformed_query_points = world_to_local_points(query_points, translations, rotations)
 
@@ -46,20 +42,18 @@ def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
 	transformed_query_points = transformed_query_points.abs() - adjusted_dimensions
 
 	# Compute positive distances from outside the box
-	pos_distance = transformed_query_points.max(torch.zeros(1, device=device)).norm(dim=-1)
+	pos_distance = transformed_query_points.clamp(min=0.0).norm(dim=-1)
 
 	# Compute negative distances from inside the box
 	qx = transformed_query_points[..., 0]
 	qy = transformed_query_points[..., 1]
 	qz = transformed_query_points[..., 2]
-	neg_distance = qy.max(qz).max(qx).min(torch.zeros(1, device=device))
+	neg_distance = qy.max(qz).max(qx).clamp(max=0.0)
 
 	return pos_distance + neg_distance - adjusted_roundness
 
 
 def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
-	device = query_points.device
-
 	# Transform query points to primitive space
 	transformed_query_points = world_to_local_points(query_points, translations, rotations)
 	dimensions = dimensions.unsqueeze(1)
@@ -77,7 +71,7 @@ def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
 	k0 = (qxy / sxy).norm(dim=-1)
 	# Divide by gradient to minimize distortion
 	k1 = (qxy / (sxy*sxy)).norm(dim=-1)
-	ellipse_distance = k0 * (k0 - torch.ones(1, device=device)) / k1 + adjusted_roundness
+	ellipse_distance = k0 * (k0 - 1.0) / k1 + adjusted_roundness
 
 	# Compute distance to ends of cylinder
 	cap_distance = qz.abs() - adjusted_height
@@ -86,8 +80,8 @@ def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
 	dx = distance[..., 0]
 	dy = distance[..., 1]
 
-	pos_distance = torch.max(distance, torch.zeros(1, device=device)).norm(dim=-1)
-	neg_distance = torch.min(torch.max(dx, dy), torch.zeros(1, device=device))
+	pos_distance = torch.clamp(distance, min=0.0).norm(dim=-1)
+	neg_distance = torch.clamp(torch.max(dx, dy), max=0.0)
 
 	return pos_distance + neg_distance - adjusted_roundness
 
