@@ -13,24 +13,29 @@ def world_to_local_points(query_points, translations, rotations):
 # https://iquilezles.org/articles/distfunctions/
 
 
-def sdf_ellipsoid(query_points, translations, rotations, dimensions, roundness=None):
-	# Transform query points to primitive space
+def sdf_ellipsoid_transformed(query_points, translations, rotations, dimensions, *_):
 	transformed_query_points = world_to_local_points(query_points, translations, rotations)
+	return sdf_ellipsoid(query_points, dimensions)
+
+
+def sdf_ellipsoid(query_points, dimensions, *_):
 	dimensions = dimensions.unsqueeze(1)
 
 	# Scale sphere to approximate ellipsoid
-	k0 = (transformed_query_points / dimensions).norm(dim=-1)
+	k0 = (query_points / dimensions).norm(dim=-1)
 	# Divide by gradient to minimize distortion
-	k1 = (transformed_query_points / (dimensions*dimensions)).norm(dim=-1)
+	k1 = (query_points / (dimensions*dimensions)).norm(dim=-1)
 	distances = k0 * (k0 - 1.0) / k1
 
 	return distances
 
 
-def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
-	# Transform query points to primitive space
+def sdf_cuboid_transformed(query_points, dimensions, roundness):
 	transformed_query_points = world_to_local_points(query_points, translations, rotations)
+	return sdf_cuboid(transformed_query_points, dimensions, roundness)
 
+
+def sdf_cuboid(query_points, dimensions, roundness):
 	# Adjust roundness value per dimension to keep the rounding effect uniform
 	(min_dims, _) = torch.min(dimensions, dim=-1, keepdim=True)
 	adjusted_roundness = roundness * min_dims
@@ -39,27 +44,30 @@ def sdf_cuboid(query_points, translations, rotations, dimensions, roundness):
 	adjusted_dimensions = adjusted_dimensions.unsqueeze(1)
 
 	# Reflect query point in all quadrants and translate relative to the box surface
-	transformed_query_points = transformed_query_points.abs() - adjusted_dimensions
+	query_points = query_points.abs() - adjusted_dimensions
 
 	# Compute positive distances from outside the box
-	pos_distance = transformed_query_points.clamp(min=0.0).norm(dim=-1)
+	pos_distance = query_points.clamp(min=0.0).norm(dim=-1)
 
 	# Compute negative distances from inside the box
-	qx = transformed_query_points[..., 0]
-	qy = transformed_query_points[..., 1]
-	qz = transformed_query_points[..., 2]
+	qx = query_points[..., 0]
+	qy = query_points[..., 1]
+	qz = query_points[..., 2]
 	neg_distance = qy.max(qz).max(qx).clamp(max=0.0)
 
 	return pos_distance + neg_distance - adjusted_roundness
 
 
-def sdf_cylinder(query_points, translations, rotations, dimensions, roundness):
-	# Transform query points to primitive space
+def sdf_cylinder_transformed(query_points, translations, rotations, dimensions, roundness):
 	transformed_query_points = world_to_local_points(query_points, translations, rotations)
+	return sdf_cylinder(transformed_query_points, dimensions, roundness)
+
+
+def sdf_cylinder(query_points, dimensions, roundness):
 	dimensions = dimensions.unsqueeze(1)
 
-	qxy = transformed_query_points[..., :2]
-	qz = transformed_query_points[..., 2]
+	qxy = query_points[..., :2]
+	qz = query_points[..., 2]
 	sxy = dimensions[..., :2]
 	sz = dimensions[..., 2]
 

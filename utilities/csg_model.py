@@ -1,7 +1,7 @@
 import math
 import torch
 from torch.distributions.uniform import Uniform
-from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder
+from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder, world_to_local_points
 
 
 # Supported bounds is a cube with length MAX_BOUND - MIN_BOUND
@@ -113,10 +113,14 @@ class CSGModel():
 		else:
 			roundness = command['roundness']
 
-		# Compute weighted averge distance
+		# Transform query points
+		(translations, rotations, dimensions) = command['transforms']
+		transformed_query_points = world_to_local_points(query_points, translations, rotations)
+
+		# Compute weighted average distance
 		for shape in range(command['shape weights'].size(dim=-1)):
 			weight = command['shape weights'][:,shape].unsqueeze(-1)
-			distances += weight * CSGModel.sdf_functions[shape](query_points, *command['transforms'], roundness)
+			distances += weight * CSGModel.sdf_functions[shape](transformed_query_points, dimensions, roundness)
 
 		return distances
 
@@ -125,7 +129,7 @@ class CSGModel():
 	def apply_operation(distances, new_distances, command):
 		final_distance = 0
 
-		# Compute weighted averge result
+		# Compute weighted average result
 		for operation in range(command['operation weights'].size(dim=-1)):
 			weight = command['operation weights'][:,operation].unsqueeze(-1)
 			final_distance += weight * CSGModel.operation_functions[operation](distances, new_distances, command['blending'])
