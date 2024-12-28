@@ -18,11 +18,13 @@ SURFACE_SAMPLE_RATIO = 5
 
 
 def smooth_min(a, b, blending):
+	device = a.device
+
 	if blending is None:
 		smooth_factor = 0
 	else:
 		absolute_diff = (a-b).abs()
-		h = torch.max(blending - absolute_diff, torch.zeros_like(a)) / blending
+		h = torch.max(blending - absolute_diff, torch.zeros(1, device=device)) / blending
 		smooth_factor = h * h * blending * 0.25
 
 	return torch.min(a, b) - smooth_factor
