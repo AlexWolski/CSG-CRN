@@ -87,9 +87,9 @@ def command_to_json(command):
 	command_dict = {}
 	command_dict['type'] = export_primitive(command['shape weights'])
 	command_dict['mode'] = export_operation(command['operation weights'])
-	command_dict['t'] = export_position(command['transforms'][0])
-	command_dict['r'] = export_quaternion(command['transforms'][1])
-	command_dict['s'] = export_scale(command['transforms'][2])
+	command_dict['t'] = export_position(command['translations'])
+	command_dict['r'] = export_quaternion(command['rotations'])
+	command_dict['s'] = export_scale(command['scales'])
 
 	if command['blending'] is not None:
 		command_dict['blend'] = export_blending(command['blending'])
