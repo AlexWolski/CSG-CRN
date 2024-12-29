@@ -9,6 +9,14 @@
 # MagicaCSG output files
 *.mcsg
 
+# 3D mesh files
+*.glb
+*.gltf
+*.obj
+*.off
+*.ply
+*.stl
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,5 +1,6 @@
 import torch
 import trimesh
+from tkinter import filedialog
 from skimage import measure
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
 
@@ -96,3 +97,32 @@ def sample_csg_surface(csg_model, resolution, num_samples):
 	mesh = csg_to_mesh(csg_model, resolution)
 	samples = trimesh.sample_surface(mesh, num_samples)
 	return torch.from_numpy(samples).detach()
+
+
+def prompt_and_export_to_mesh(csg_model, resolution):
+	"""
+	Use the marching cubes algorithm to extract a mesh from the given CSG Model save it to user-specified file.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+	"""
+	output_file = filedialog.asksaveasfilename(filetypes=[
+		('GLB File', '.glb'),
+		('GLTF File', '.gltf'),
+		('OBJ File', '.obj'),
+		('OFF File', '.off'),
+		('PLY File', '.ply'),
+		('STL File', '.stl'),
+	])
+
+	if not output_file:
+		return
+
+	with torch.no_grad():
+		mesh = csg_to_mesh(csg_model, resolution)
+		file_extention = output_file.split('.')[-1]
+		trimesh.exchange.export.export_mesh(mesh, output_file, file_extention)

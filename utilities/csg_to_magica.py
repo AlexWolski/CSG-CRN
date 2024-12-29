@@ -1,6 +1,5 @@
 import copy
 import json
-import tkinter as tk
 from tkinter import filedialog
 from scipy.spatial.transform import Rotation
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
