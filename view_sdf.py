@@ -8,6 +8,7 @@ import tkinter
 from utilities.file_loader import FileLoader
 from utilities.csg_model import add_sdf
 from utilities.csg_to_magica import prompt_and_export_to_magica
+from utilities.sdf_to_mesh import csg_to_mesh
 
 import pyglet
 from pyglet.gl import *
@@ -25,6 +26,7 @@ class Button():
 		self.pressed_color = pressed_color
 		self.callback = callback
 		self.pressed = False
+		self.focused = False
 
 
 	def draw(self):
@@ -51,17 +53,19 @@ class Button():
 	def on_mouse_press(self, mouse_x, mouse_y):
 		if self.is_over_button(mouse_x, mouse_y):
 			self.pressed = True
+			self.focused = True
 
 
 	def on_mouse_drag(self, mouse_x, mouse_y):
-		self.pressed = self.is_over_button(mouse_x, mouse_y)
+		self.pressed = self.focused and self.is_over_button(mouse_x, mouse_y)
 
 
 	def on_mouse_release(self, mouse_x, mouse_y):
-		if self.is_over_button(mouse_x, mouse_y) and self.callback:
+		if self.focused and self.is_over_button(mouse_x, mouse_y) and self.callback:
 			self.callback()
 
 		self.pressed = False
+		self.focused = False
 
 
 
