@@ -122,9 +122,9 @@ def print_csg_commands(csg_model):
 		print(f'Command {count}:')
 		print(f'Shape:\t\t{get_primitive_name(shape_weights)}')
 		print(f'Operation:\t{get_operation_name(operation_weights)}')
-		pretty_print_tensor('Translation:\t', command['transforms'][0])
-		pretty_print_tensor('Rotation:\t', command['transforms'][1])
-		pretty_print_tensor('Scale:\t\t', command['transforms'][2])
+		pretty_print_tensor('Translation:\t', command['translations'])
+		pretty_print_tensor('Rotation:\t', command['rotations'])
+		pretty_print_tensor('Scale:\t\t', command['scales'])
 
 		if command['blending'] is not None:
 			pretty_print_tensor('Blending:\t', command['blending'])

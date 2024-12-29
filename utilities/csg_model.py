@@ -98,7 +98,9 @@ class CSGModel():
 		self.csg_commands.append({
 			'shape weights': shape_weights,
 			'operation weights': operation_weights,
-			'transforms': (translations, rotations, scales),
+			'translations': translations,
+			'rotations': rotations,
+			'scales': scales,
 			'blending': blending,
 			'roundness': roundness
 		})
@@ -114,13 +116,12 @@ class CSGModel():
 			roundness = command['roundness']
 
 		# Transform query points
-		(translations, rotations, dimensions) = command['transforms']
-		transformed_query_points = world_to_local_points(query_points, translations, rotations)
+		transformed_query_points = world_to_local_points(query_points, command['translations'], command['rotations'])
 
 		# Compute weighted average distance
 		for shape in range(command['shape weights'].size(dim=-1)):
 			weight = command['shape weights'][:,shape].unsqueeze(-1)
-			distances += weight * CSGModel.sdf_functions[shape](transformed_query_points, dimensions, roundness)
+			distances += weight * CSGModel.sdf_functions[shape](transformed_query_points, command['scales'], roundness)
 
 		return distances
 
