@@ -146,13 +146,12 @@ class CSGModel():
 			return None
 
 		(batch_size, num_points, _) = query_points.size()
-		device = query_points.get_device()
 
 		# Set initial SDF to a set maximum value instead of float('inf')
 		if initial_distances is not None:
 			distances = initial_distances
 		else:
-			distances = torch.full((batch_size, num_points), MAX_SDF_VALUE, device=device)
+			distances = torch.full((batch_size, num_points), MAX_SDF_VALUE, device=query_points.device)
 
 		# Compute combined SDF
 		for command in csg_commands:
