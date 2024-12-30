@@ -27,6 +27,7 @@ class Button():
 		self.callback = callback
 		self.pressed = False
 		self.focused = False
+		self.disabled = False
 
 
 	def draw(self):
@@ -45,28 +46,96 @@ class Button():
 		text.draw()
 
 
+	def disable(self):
+		self.disabled = True
+		self.pressed = True
+
+
+	def enable(self):
+		self.disabled = False
+		self.pressed = False
+
+
 	def is_over_button(self, mouse_x, mouse_y):
 		return (self.x < mouse_x < self.x + self.width and
 				self.y < mouse_y < self.y + self.height)
 
 
 	def on_mouse_press(self, mouse_x, mouse_y):
+		if self.disabled:
+			return
+
 		if self.is_over_button(mouse_x, mouse_y):
 			self.pressed = True
 			self.focused = True
 
 
 	def on_mouse_drag(self, mouse_x, mouse_y):
+		if self.disabled:
+			return
+
 		self.pressed = self.focused and self.is_over_button(mouse_x, mouse_y)
 
 
 	def on_mouse_release(self, mouse_x, mouse_y):
+		if self.disabled:
+			return
+
 		if self.focused and self.is_over_button(mouse_x, mouse_y) and self.callback:
 			self.callback()
 
 		self.pressed = False
 		self.focused = False
 
+
+class ToggleButtons():
+	def __init__(self, buttons, default_button):
+		if default_button not in set(buttons):
+			raise Exception('The provided buttons list must contain default_button')
+
+		self.buttons = buttons
+
+		for button in self.buttons:
+			if button == default_button:
+				button.disable()
+			else:
+				button.enable()
+
+
+	def draw(self):
+		for button in self.buttons:
+			button.draw()
+
+
+	def on_mouse_press(self, mouse_x, mouse_y):
+		for button in self.buttons:
+			button.on_mouse_press(mouse_x, mouse_y)
+
+
+	def on_mouse_drag(self, mouse_x, mouse_y):
+		for button in self.buttons:
+			button.on_mouse_drag(mouse_x, mouse_y)
+
+
+	def on_mouse_release(self, mouse_x, mouse_y):
+		pressed_button = None
+
+		# Find button that was pressed
+		for button in self.buttons:
+			if button.is_over_button(mouse_x, mouse_y):
+				pressed_button = button
+
+		# No action if the button is already depressed
+		if pressed_button is None or pressed_button.disabled:
+			return
+
+		# Unpress all buttons
+		for button in self.buttons:
+			button.enable()
+
+		# Trigger clicked button
+		pressed_button.callback()
+		pressed_button.disable()
 
 
 class _SdfViewer(pyrender.Viewer):
@@ -240,9 +309,20 @@ class SdfModelViewer(_SdfViewer):
 		recon_y = padding
 		combined_y = recon_y + height + padding
 		original_y = combined_y + height + padding
-		self.add_button(Button(padding, original_y, width, height, 'View Original', callback=lambda: self.set_view_mode(self.ORIGINAL_VIEW)))
-		self.add_button(Button(padding, combined_y, width, height, 'View Combined', callback=lambda: self.set_view_mode(self.COMBINED_VIEW)))
-		self.add_button(Button(padding, padding, width, height, 'View Reconstruction', callback=lambda: self.set_view_mode(self.RECON_VIEW)))
+		original_button = Button(padding, original_y, width, height, 'View Original', callback=lambda: self.set_view_mode(self.ORIGINAL_VIEW))
+		combined_button = Button(padding, combined_y, width, height, 'View Combined', callback=lambda: self.set_view_mode(self.COMBINED_VIEW))
+		reconstr_button = Button(padding, padding, width, height, 'View Reconstruction', callback=lambda: self.set_view_mode(self.RECON_VIEW))
+
+		# Find default button based on current view mode
+		if self.view_mode is self.ORIGINAL_VIEW:
+			default_button = original_button
+		elif self.view_mode is self.COMBINED_VIEW:
+			default_button = combined_button
+		elif self.view_mode is self.RECON_VIEW:
+			default_button = reconstr_button
+
+		# Create toggle button array
+		self.add_button(ToggleButtons([original_button, combined_button, reconstr_button], default_button))
 
 		export_x = self.viewport_size[0] - width - padding
 		export_magica_y = padding
