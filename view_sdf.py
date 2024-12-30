@@ -247,7 +247,7 @@ class SdfModelViewer(_SdfViewer):
 		export_x = self.viewport_size[0] - width - padding
 		export_magica_y = padding
 		export_mesh_y = export_magica_y + height + padding
-		self.add_button(Button(export_x, export_mesh_y, width, height, 'Export to Mesh', callback=lambda: prompt_and_export_to_mesh(self.csg_model, 400)))
+		self.add_button(Button(export_x, export_mesh_y, width, height, 'Export to Mesh', callback=lambda: prompt_and_export_to_mesh(self.csg_model)))
 		self.add_button(Button(export_x, export_magica_y, width, height, 'Export to MagicaCSG', callback=lambda: prompt_and_export_to_magica(self.csg_model)))
 
 

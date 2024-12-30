@@ -1,6 +1,8 @@
+import os
 import torch
 import trimesh
-from tkinter import filedialog
+import tkinter as tk
+from tkinter import filedialog, simpledialog, StringVar
 from skimage import measure
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
 
@@ -99,7 +101,81 @@ def sample_csg_surface(csg_model, resolution, num_samples):
 	return torch.from_numpy(samples).detach()
 
 
-def prompt_and_export_to_mesh(csg_model, resolution):
+def export_to_mesh(csg_model, resolution, output_file):
+	"""
+	Use the marching cubes algorithm to extract a mesh from a CSG Model and save the result to file.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+	output_file: string
+		Path to save the exported mesh.
+
+	"""
+	with torch.no_grad():
+		mesh = csg_to_mesh(csg_model, resolution)
+
+	file_extention = output_file.split('.')[-1]
+	trimesh.exchange.export.export_mesh(mesh, output_file, file_extention)
+
+
+def prompt_export_settings():
+	"""
+	Display a GUI to prompt the user for a marching cubes resolution and output file.
+
+	Returns
+	-------
+	file_path : string
+		Path to mesh output file.
+	resolution : int
+		Marching cubes resolution.
+
+	"""
+	export_dialog = tk.Tk()
+	export_dialog.title("Input Dialog Example")
+
+	res_label = tk.Label(export_dialog, text="Resolution:")
+	res_label.grid(column=0, row=0, padx=(20,0), pady=(20,0))
+
+	options = [
+		"64",
+		"128",
+		"256",
+		"512",
+	]
+
+	resolution_string = StringVar()
+	resolution_string.set( "256" )
+	file_path = StringVar()
+
+	res_option = tk.OptionMenu(export_dialog, resolution_string, *options)
+	res_option.grid(column=1, row=0, padx=(0,10), pady=(10,0))
+
+	filetypes = [
+		('GLB File', '.glb'),
+		('GLTF File', '.gltf'),
+		('OBJ File', '.obj'),
+		('OFF File', '.off'),
+		('PLY File', '.ply'),
+		('STL File', '.stl'),
+	]
+
+	export_mesh = lambda _=export_dialog: (
+		file_path.set(filedialog.asksaveasfilename(filetypes=filetypes)),
+		export_dialog.destroy(),
+	)
+
+	export_button = tk.Button(export_dialog, text="Export", command=export_mesh)
+	export_button.grid(column=0, row=2, columnspan=2, pady=(30, 10))
+
+	export_dialog.mainloop()
+	return (file_path.get(), int(resolution_string.get()))
+
+
+def prompt_and_export_to_mesh(csg_model):
 	"""
 	Use the marching cubes algorithm to extract a mesh from the given CSG Model save it to user-specified file.
 
@@ -109,20 +185,11 @@ def prompt_and_export_to_mesh(csg_model, resolution):
 		The CSG model to sample.
 	resolution : int
 		Voxel resolution to use for the marching cubes algorithm.
+
 	"""
-	output_file = filedialog.asksaveasfilename(filetypes=[
-		('GLB File', '.glb'),
-		('GLTF File', '.gltf'),
-		('OBJ File', '.obj'),
-		('OFF File', '.off'),
-		('PLY File', '.ply'),
-		('STL File', '.stl'),
-	])
+	(output_file, resolution) = prompt_export_settings()
 
 	if not output_file:
 		return
 
-	with torch.no_grad():
-		mesh = csg_to_mesh(csg_model, resolution)
-		file_extention = output_file.split('.')[-1]
-		trimesh.exchange.export.export_mesh(mesh, output_file, file_extention)
+	export_to_mesh(csg_model, resolution, output_file)
