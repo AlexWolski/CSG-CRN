@@ -9,7 +9,7 @@ import yaml
 
 from tqdm import tqdm
 from torch import autocast
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.distributions.uniform import Uniform
 from torch.optim import AdamW, lr_scheduler
@@ -19,7 +19,7 @@ from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
 from utilities.data_processing import *
 from utilities.datasets import PointDataset
-from utilities.data_augmentation import get_augment_parser
+from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.early_stopping import EarlyStopping
 from utilities.training_logger import TrainingLogger
 
@@ -62,7 +62,8 @@ def options():
 		data_args = args
 
 		# Load arguments from model file
-		args = torch.load(args.model_path)['args']
+		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis])
+		args = torch.load(args.model_path, weights_only=True)['args']
 
 		# Apply data settings
 		for data_arg_name in vars(data_args):
@@ -354,7 +355,8 @@ def main():
 
 	# Load saved settings if a model path is provided
 	if args.model_path:
-		saved_settings_dict = torch.load(args.model_path)
+		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis])
+		saved_settings_dict = torch.load(args.model_path, weights_only=True)
 		model_params = saved_settings_dict['model']
 
 	# Load settings from file if resuming training. Otherwise, initialize output directories and training split

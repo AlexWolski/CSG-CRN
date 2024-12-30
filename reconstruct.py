@@ -7,11 +7,13 @@ import numpy as np
 import torch
 import time
 
+from torch.utils.data import Subset
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
 from utilities.file_loader import FileLoader
+from utilities.data_augmentation import RotationAxis
 from utilities.data_processing import split_uniform_surface_samples
 
 
@@ -36,7 +38,8 @@ def get_device():
 
 def load_model(args):
 	# Load model parameters and arguments
-	save_data = torch.load(args.model_params)
+	torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis])
+	save_data = torch.load(args.model_params, weights_only=True)
 	state_dict = save_data['model']
 	saved_args = save_data['args']
 
