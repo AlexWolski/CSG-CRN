@@ -1,10 +1,15 @@
 import os
+import math
 import torch
 import trimesh
 import tkinter as tk
 from tkinter import filedialog, simpledialog, StringVar
 from pytorch3d.ops.marching_cubes import marching_cubes
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
+
+
+# Estimated multiplicative memory usage factor to compute an SDF for any given input size
+SDF_MEMORY_USAGE_FACTOR = 5
 
 
 def get_grid_points(min_bound, max_bound, resolution, device=None):
@@ -58,10 +63,26 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 	voxel_size = abs(MAX_BOUND - MIN_BOUND) / resolution
 	grid_points = get_grid_points(MIN_BOUND, MAX_BOUND, resolution, csg_model.device)
 
+	# Calculate number of batches needed to compute SDF values considering memory restrictions
+	(free_memory, total_memory) = torch.cuda.mem_get_info(device=grid_points.device.index)
+	num_samples = resolution**3
+	est_comp_bytes = num_samples * SDF_MEMORY_USAGE_FACTOR * 3 * grid_points.element_size()
+	est_output_bytes = num_samples * grid_points.element_size()
+	total_req_bytes = est_comp_bytes + est_output_bytes
+	num_batches = math.ceil(est_comp_bytes / (free_memory - est_output_bytes))
+
 	# Reshape to (1, N, 3) where N=num_points
 	flat_points = grid_points.reshape(1, -1, 3)
+	# Split into multiple batches
+	points_list = torch.tensor_split(flat_points, num_batches, dim=1)
+	distances_list = []
+
 	# Sample SDF
-	flat_distances = csg_model.sample_csg(flat_points)
+	for points_tensor in points_list:
+		distances_list.append(csg_model.sample_csg(points_tensor))
+
+	# Reshape into grid
+	flat_distances = torch.cat(distances_list, dim=1)
 	grid_distances = flat_distances.reshape(1, resolution, resolution, resolution)
 
 	# Send distances tensor to CPU and convert to numpy
@@ -133,20 +154,20 @@ def prompt_export_settings():
 
 	"""
 	export_dialog = tk.Tk()
-	export_dialog.title("Input Dialog Example")
+	export_dialog.title('Input Dialog Example')
 
-	res_label = tk.Label(export_dialog, text="Resolution:")
+	res_label = tk.Label(export_dialog, text='Resolution:')
 	res_label.grid(column=0, row=0, padx=(20,0), pady=(20,0))
 
 	options = [
-		"64",
-		"128",
-		"256",
-		"512",
+		'64',
+		'128',
+		'256',
+		'512',
 	]
 
 	resolution_string = StringVar()
-	resolution_string.set( "256" )
+	resolution_string.set('256')
 	file_path = StringVar()
 
 	res_option = tk.OptionMenu(export_dialog, resolution_string, *options)
@@ -166,7 +187,7 @@ def prompt_export_settings():
 		export_dialog.destroy(),
 	)
 
-	export_button = tk.Button(export_dialog, text="Export", command=export_mesh)
+	export_button = tk.Button(export_dialog, text='Export', command=export_mesh)
 	export_button.grid(column=0, row=2, columnspan=2, pady=(30, 10))
 
 	export_dialog.mainloop()
@@ -190,4 +211,9 @@ def prompt_and_export_to_mesh(csg_model):
 	if not output_file:
 		return
 
-	export_to_mesh(csg_model, resolution, output_file)
+	try:
+		export_to_mesh(csg_model, resolution, output_file)
+	except torch.OutOfMemoryError as e:
+		print('Insufficient memory on target device. Try selecting a lower resolution or changing compute device.')
+		print(e)
+		return
