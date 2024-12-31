@@ -3,7 +3,7 @@ import torch
 import trimesh
 import tkinter as tk
 from tkinter import filedialog, simpledialog, StringVar
-from skimage import measure
+from pytorch3d.ops.marching_cubes import marching_cubes
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
 
 
@@ -54,24 +54,22 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 		Converted mesh object.
 
 	"""
+	# Generate grid points
 	voxel_size = abs(MAX_BOUND - MIN_BOUND) / resolution
 	grid_points = get_grid_points(MIN_BOUND, MAX_BOUND, resolution, csg_model.device)
 
-	# Reshape to (B, N, 3) where B=batch_size and N=num_points
+	# Reshape to (1, N, 3) where N=num_points
 	flat_points = grid_points.reshape(1, -1, 3)
+	# Sample SDF
 	flat_distances = csg_model.sample_csg(flat_points)
-	grid_distances = flat_distances.reshape(resolution, resolution, resolution)
+	grid_distances = flat_distances.reshape(1, resolution, resolution, resolution)
 
 	# Send distances tensor to CPU and convert to numpy
-	grid_distances = grid_distances.cpu().detach().numpy()
-	verts, faces, normals, values = measure.marching_cubes(grid_distances, level=0.0, spacing=[voxel_size] * 3)
-
-	# Transform vertices from voxel space to object space
-	offset = abs(MAX_BOUND - MIN_BOUND) / 2.0
-	verts = verts - offset
+	verts, faces = marching_cubes(grid_distances, isolevel=0.0, return_local_coords=True)
 
 	# Generate mesh
-	mesh = trimesh.Trimesh(verts, faces, normals, vertex_colors=values)
+	mesh = trimesh.Trimesh(verts[0].cpu(), faces[0].cpu())
+	torch.cuda.empty_cache()
 	return mesh
 
 
