@@ -9,12 +9,13 @@ from utilities.csg_model import MIN_BOUND, MAX_BOUND
 
 
 # Estimated multiplicative memory usage factor to compute an SDF for any given input size
-SDF_MEMORY_USAGE_FACTOR = 5
+SDF_MEMORY_USAGE_FACTOR = 6
 
 
 def get_grid_points(min_bound, max_bound, resolution, device=None):
 	"""
-	Generates a (N,N,N,3) grid of points where each point represents the position of a voxel.
+	Generates a tuple of there tensors with size (N,N,N). The three tensors represent X, Y, and Z axis values respectively.
+	Each point represents a voxel position in a voxel grid. Note that the tensors are non-contiguous to save memory.
 
 	Parameters
 	----------
@@ -29,69 +30,89 @@ def get_grid_points(min_bound, max_bound, resolution, device=None):
 
 	Returns
 	-------
-	torch.Tensor
-		Tensor of size (N, N, N, 3) where N=`resolution`.
-		Represents a voxel grid where each of the N^3 points represents the position of a voxel.
+	Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+		Three tensors of size (N, N, N) where N=`resolution`.
+		Each tensor represents an axis of a voxel grid.
 
 	"""
-	axis_values = torch.linspace(min_bound, max_bound, resolution, device=device)
-	grid_axes = torch.meshgrid(axis_values, axis_values, axis_values, indexing='ij')
-	grid_points = torch.stack(grid_axes, dim=-1)
-	return grid_points.detach()
+	values = torch.linspace(min_bound, max_bound, resolution, device=device)
+	x = values.expand([resolution, resolution, resolution])
+	y = x.transpose(1,2)
+	z = x.transpose(0,2)
+	return (x, y, z)
 
 
 def csg_to_mesh(csg_model, resolution, iso_level=0.0):
-	"""
-	Use the marching cubes algorithm to extract a mesh representation of a given implicit CSG model.
-
-	Parameters
-	----------
-	csg_model : utilities.csg_model.CSGModel
-		CSG model object to convert to a mesh.
-	resolution : int
-		Voxel resolution to use for the marching cubes algorithm.
-	iso_level : float, optional
-		The distance from the  isosurface. Default is 0.
-
-	Returns
-	-------
-	trimesh.Trimesh
-		Converted mesh object.
-
-	"""
-	# Generate grid points
-	voxel_size = abs(MAX_BOUND - MIN_BOUND) / resolution
-	grid_points = get_grid_points(MIN_BOUND, MAX_BOUND, resolution, csg_model.device)
-
-	# Calculate number of batches needed to compute SDF values considering memory restrictions
-	(free_memory, total_memory) = torch.cuda.mem_get_info(device=grid_points.device.index)
-	num_samples = resolution**3
-	est_comp_bytes = num_samples * SDF_MEMORY_USAGE_FACTOR * 3 * grid_points.element_size()
-	est_output_bytes = num_samples * grid_points.element_size()
-	total_req_bytes = est_comp_bytes + est_output_bytes
-	num_batches = math.ceil(est_comp_bytes / (free_memory - est_output_bytes))
-
-	# Reshape to (1, N, 3) where N=num_points
-	flat_points = grid_points.reshape(1, -1, 3)
-	# Split into multiple batches
-	points_list = torch.tensor_split(flat_points, num_batches, dim=1)
-	distances_list = []
-
-	# Sample SDF
-	for points_tensor in points_list:
-		distances_list.append(csg_model.sample_csg(points_tensor))
-
-	# Reshape into grid
-	flat_distances = torch.cat(distances_list, dim=1)
-	grid_distances = flat_distances.reshape(1, resolution, resolution, resolution)
-
-	# Send distances tensor to CPU and convert to numpy
-	verts, faces = marching_cubes(grid_distances, isolevel=0.0, return_local_coords=True)
-
-	# Generate mesh
-	mesh = trimesh.Trimesh(verts[0].cpu(), faces[0].cpu())
 	torch.cuda.empty_cache()
-	return mesh
+
+	with torch.no_grad():
+		"""
+		Use the marching cubes algorithm to extract a mesh representation of a given implicit CSG model.
+
+		Parameters
+		----------
+		csg_model : utilities.csg_model.CSGModel
+			CSG model object to convert to a mesh.
+		resolution : int
+			Voxel resolution to use for the marching cubes algorithm.
+		iso_level : float, optional
+			The distance from the  isosurface. Default is 0.
+
+		Returns
+		-------
+		trimesh.Trimesh
+			Converted mesh object.
+
+		"""
+		# Generate grid points
+		voxel_size = abs(MAX_BOUND - MIN_BOUND) / resolution
+		(x, y, z) = get_grid_points(MIN_BOUND, MAX_BOUND, resolution, csg_model.device)
+
+		# Calculate number of batches needed to compute SDF values given memory restrictions
+		(free_memory, total_memory) = torch.cuda.mem_get_info(device=x.device.index)
+		num_samples = resolution**3
+		input_bytes = num_samples * 3 * x.element_size()
+		output_bytes = num_samples * x.element_size()
+		comp_bytes = input_bytes * SDF_MEMORY_USAGE_FACTOR
+		total_req_bytes = input_bytes + comp_bytes
+		num_batches = math.ceil(total_req_bytes / (free_memory - output_bytes))
+
+		# Quantize batch size to be divisible by grid layer size
+		layers_per_batch = resolution // num_batches
+
+		distances_list = []
+
+		# Sample SDF
+		for layer in range(0, resolution, layers_per_batch):
+			start_layer = layer
+			end_layer = layer + layers_per_batch if layer + layers_per_batch < resolution else resolution
+
+			# Slice query points in current batch
+			x_slice = x[start_layer:end_layer,...]
+			y_slice = y[start_layer:end_layer,...]
+			z_slice = z[start_layer:end_layer,...]
+			# Combine query points into single tensor
+			points_slice = torch.stack((x_slice, y_slice, z_slice), dim=-1)
+			# Reshape query points to (1, N, 3) where N=num_points
+			points_slice = points_slice.reshape(1,-1,3)
+			# Sample SDF
+			distances_list.append(csg_model.sample_csg(points_slice))
+
+		# Reshape into grid
+		distances = torch.cat(distances_list, dim=-1)
+		distances = distances.reshape(1, resolution, resolution, resolution)
+
+		del x, y ,z, distances_list
+
+		try:
+			verts, faces = marching_cubes(distances, isolevel=0.0, return_local_coords=True)
+			mesh = trimesh.Trimesh(verts[0].cpu(), faces[0].cpu())
+		except torch.OutOfMemoryError:
+			verts, faces = marching_cubes(distances.cpu(), isolevel=0.0, return_local_coords=True)
+			mesh = trimesh.Trimesh(verts[0].cpu(), faces[0].cpu())
+		finally:
+			torch.cuda.empty_cache()
+			return mesh
 
 
 def sample_csg_surface(csg_model, resolution, num_samples):
@@ -134,8 +155,7 @@ def export_to_mesh(csg_model, resolution, output_file):
 		Path to save the exported mesh.
 
 	"""
-	with torch.no_grad():
-		mesh = csg_to_mesh(csg_model, resolution)
+	mesh = csg_to_mesh(csg_model, resolution)
 
 	file_extention = output_file.split('.')[-1]
 	trimesh.exchange.export.export_mesh(mesh, output_file, file_extention)
@@ -164,6 +184,7 @@ def prompt_export_settings():
 		'128',
 		'256',
 		'512',
+		'1024',
 	]
 
 	resolution_string = StringVar()
@@ -216,4 +237,8 @@ def prompt_and_export_to_mesh(csg_model):
 	except torch.OutOfMemoryError as e:
 		print('Insufficient memory on target device. Try selecting a lower resolution or changing compute device.')
 		print(e)
-		return
+	except Exception as e:
+		print('Unexpected Error:')
+		print(e)
+	finally:
+		torch.cuda.empty_cache()
