@@ -72,7 +72,6 @@ def get_augment_parser(group_name='AUGMENT SETTINGS', suppress_default=False):
 	parser_group.add_argument('--augment_data', default=False, action='store_true', help='Enable augmentation of object samples with random rotation, scaling, and noise')
 	parser_group.add_argument('--augment_copies', type=int, default=1, help='Number of augmented copies of each object to create')
 	parser_group.add_argument('--no_rotation', default=False, action='store_true', help='Disable rotations in data augmentation')
-	parser_group.add_argument('--no_scale', default=False, action='store_true', help='Disable scaling in data augmentation')
 	parser_group.add_argument('--no_noise', default=False, action='store_true', help='Disable gaussian noise for sample points and distances')
 	parser_group.add_argument('--rotate_axis', default='ALL', type=RotationAxis, choices=list(RotationAxis), help='Axis to rotate around')
 	parser_group.add_argument('--noise_variance', type=float, default=1e-10, help='The variance of the gaussian noise aded to each sample point and distance')
