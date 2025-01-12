@@ -3,7 +3,7 @@ import trimesh
 import point_cloud_utils as pcu
 from os import cpu_count
 from multiprocessing.pool import ThreadPool
-from utilities.file_utils import create_output_dir, create_output_subdir, get_mesh_files
+from utilities.file_utils import *
 
 
 # Subdirectory names
@@ -26,7 +26,7 @@ def options():
 	data_group.add_argument('--data_dir', type=str, required=True, help='Parent directory containing input 3D data files (3mf, obj, off, glb, gltf, ply, stl, 3dxml)')
 	data_group.add_argument('--output_dir', type=str, default='./data/output', help='Output directory to store manifold meshes')
 	data_group.add_argument('--resolution', type=int, default=20000, help='Resolution for the marching cubes algorithm (target number of leaf nodes in the octree)')
-	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
+	data_group.add_argument('--overwrite', default=False, action='store_true', help='If true, overwrite existing files in output directory. If false, skip files that exist in output directory.')
 
 
 	# Parse and handle Help argument
@@ -102,7 +102,12 @@ def file_to_manifold(data_dir, output_dir, mesh_path, resolution):
 		Resolution for the marching cubes algorithm (target number of leaf nodes in the octree).
 
 	"""
-	mesh = trimesh.util.concatenate(trimesh.load(mesh_path).dump())
+	mesh = trimesh.load(mesh_path)
+
+	# If the loaded object is a Scene, combine all the nested meshes into one mesh.
+	if isinstance(mesh, trimesh.Scene):
+		mesh = trimesh.util.concatenate(mesh.dump())
+
 	manifold_path = create_output_subdir(data_dir, output_dir, mesh_path)
 	manifold_mesh = mesh_to_manifold(mesh, resolution)
 	file_extention = manifold_path.split('.')[-1]
@@ -128,12 +133,21 @@ def process_dataset(data_dir, output_dir, resolution, overwrite):
 	# Get all mesh files in the data directory
 	mesh_paths = get_mesh_files(args.data_dir)
 
+	# Filter for files that haven't been processed yet
+	if not args.overwrite:
+		num_original = len(mesh_paths)
+		mesh_paths = filter_existing_paths(args.data_dir, args.output_dir, mesh_paths)
+		num_skipped = num_original - len(mesh_paths)
+
+		if num_skipped:
+			print(f'Skipped {num_skipped} files already in the output directory')
+
 	# Check that the data directory contains mesh files
 	if len(mesh_paths) == 0:
 		print(f'No 3D data files found in directory "{data_dir}.\nUse one of the following data types: (3mf, obj, off, glb, gltf, ply, stl, 3dxml)"')
 		return
 
-	create_output_dir(output_dir, overwrite)
+	create_output_dir(output_dir, allow_existing_dir=True)
 	print(f'Processing {len(mesh_paths)} files...')
 
 	# Convert a mesh file to manifold and save to file on each CPU core
