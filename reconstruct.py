@@ -176,8 +176,13 @@ def main():
 	get_csg_model = lambda input_file: construct_csg_model(model, input_file, args)
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
 
-	viewer = SdfModelViewer("Reconstructed SDF", args.point_size, False, args.num_view_points, args.input_file, csg_model, args.sample_dist, get_csg_model)
-	await_viewer(viewer)
+	try:
+		viewer = SdfModelViewer("Reconstructed SDF", args.point_size, False, args.num_view_points, args.input_file, csg_model, args.sample_dist, get_csg_model)
+		await_viewer(viewer)
+	except FileNotFoundError as fileError:
+		print(fileError)
+	except Exception:
+		print(traceback.format_exc())
 
 
 # Wait for the viewer to be closed

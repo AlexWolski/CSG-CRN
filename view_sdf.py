@@ -1,17 +1,15 @@
 import argparse
 import numpy as np
+import pyglet
+import pyrender
 import torch
 import trimesh
-import pyrender
-import numpy as np
 import tkinter
-from utilities.file_loader import FileLoader
+from pyglet.gl import *
 from utilities.csg_model import add_sdf
 from utilities.csg_to_magica import prompt_and_export_to_magica
 from utilities.csg_to_mesh import prompt_and_export_to_mesh
-
-import pyglet
-from pyglet.gl import *
+from utilities.file_loader import FileLoader
 
 
 class Button():
@@ -189,8 +187,8 @@ class _SdfViewer(pyrender.Viewer):
 		self.mesh_node.mesh = cloud
 
 
-	def load_samples(self, input_file):
-		samples = np.load(input_file).astype(np.float32)
+	def load_samples(self, samples_file):
+		samples = np.load(samples_file).astype(np.float32)
 
 		if self.num_view_points > 0:
 			samples = samples[:self.num_view_points,:]
@@ -250,7 +248,7 @@ class SdfFileViewer(_SdfViewer):
 	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file):
 		self.num_view_points = num_view_points
 		self.file_loader = FileLoader(input_file)
-		self.load_file(input_file)
+		self.load_file(self.file_loader.get_file())
 
 		super(SdfFileViewer, self).__init__(
 			window_title,
@@ -259,9 +257,8 @@ class SdfFileViewer(_SdfViewer):
 			num_view_points)
 
 
-	def load_file(self, input_file):
-		self.input_file = input_file
-		self.load_samples(input_file)
+	def load_file(self, samples_file):
+		self.load_samples(samples_file)
 		print(f'Point samples: {self.points.shape[0]}')
 
 
@@ -289,7 +286,7 @@ class SdfModelViewer(_SdfViewer):
 		self.sample_dist = sample_dist
 		self.get_csg_model = get_csg_model
 		self.file_loader = FileLoader(input_file)
-		self.load_samples(input_file)
+		self.load_samples(self.file_loader.get_file())
 		self.view_mode = self.COMBINED_VIEW
 
 		super(SdfModelViewer, self).__init__(
@@ -407,34 +404,36 @@ class SdfModelViewer(_SdfViewer):
 		self.mesh_node.mesh = cloud
 
 
+	def load_samples(self, samples_file):
+		self.csg_model = self.get_csg_model(samples_file)
+		super(_SdfViewer, self).load_samples(samples_file)
+		self.update_mesh_node()
+
+
 	def view_prev(self):
 		if self.get_csg_model == None:
 			return
 
-		input_file = self.file_loader.prev_file()
-		self.csg_model = self.get_csg_model(input_file)
-		self.load_samples(input_file)
-		self.update_mesh_node()
+		samples_file = self.file_loader.prev_file()
+		load_samples(samples_file)
 
 
 	def view_next(self):
 		if self.get_csg_model == None:
 			return
 
-		input_file = self.file_loader.next_file()
-		self.csg_model = self.get_csg_model(input_file)
-		self.load_samples(input_file)
-		self.update_mesh_node()
+		samples_file = self.file_loader.next_file()
+		load_samples(samples_file)
 
 
 # Parse commandline arguments
 def options():
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--input_file', required=True, type=str, help='Numpy file containing sample points and SDF values of input shape')
-	parser.add_argument('--num_view_points', type=int, default=-1, help='Number of points to display. Set to -1 to display all points')
-	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='View points outside of the object')
-	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud')
+	parser.add_argument('--input_file', required=True, type=str, help='Directory or Numpy file of sample points and distance values.')
+	parser.add_argument('--num_view_points', type=int, default=-1, help='Number of points to display. Set to -1 to display all points.')
+	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='View points outside of the object.')
+	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud.')
 
 	args = parser.parse_args()
 	return args
@@ -443,7 +442,14 @@ def options():
 def main():
 	args = options()
 	print('')
-	viewer = SdfFileViewer("View SDF", args.point_size, args.show_exterior_points, args.num_view_points, args.input_file)
+
+	try:
+		viewer = SdfFileViewer("View SDF", args.point_size, args.show_exterior_points, args.num_view_points, args.input_file)
+	except FileNotFoundError as fileError:
+		print(fileError)
+	except Exception:
+		print(traceback.format_exc())
+
 
 
 if __name__ == '__main__':
