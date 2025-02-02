@@ -1,6 +1,5 @@
 import os
 import glob
-import math
 import numpy as np
 from tqdm import tqdm
 

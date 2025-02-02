@@ -128,7 +128,6 @@ def get_data_parser():
 	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Provided arguments overwrite all the saved arguments except for network model settings')
 	data_group.add_argument('--resume_training', default=False, action='store_true', help='If a model path is supplied, resume training of the model with the original training data')
 	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
-	data_group.add_argument('--skip_preprocess', default=False, action='store_true', help='Skip the pre-processing step if the provided data_dir already contains samples of the proper length and sampling method')
 
 	return data_parser
 
@@ -139,7 +138,8 @@ def get_model_parser():
 
 	# Model settings
 	model_group.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
-	model_group.add_argument('--num_loss_points', type=int, default=20000, help='Number of points to use when computing the loss')
+	model_group.add_argument('--num_loss_points', type=int, default=2048, help='Number of points to use when computing the loss')
+	model_group.add_argument('--num_val_points', type=int, default=2048, help='Number of points to use when computing validation accuracy')
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
 	model_group.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
