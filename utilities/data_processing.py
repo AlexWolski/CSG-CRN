@@ -5,6 +5,15 @@ import numpy as np
 from tqdm import tqdm
 
 
+# Subdirectory names
+UNIFORM_FOLDER = 'uniform'
+SURFACE_FOLDER = 'surface'
+NEAR_SURFACE_FOLDER = 'near-surface'
+
+# Dataset metadata filename
+META_DATA_FILE = 'metadata.yml'
+
+
 # Create output directory for trained model and temporary files
 def create_out_dir(args):
 	# Use parent directory name as dataset name
@@ -70,34 +79,3 @@ def load_list(file_path):
 			list_data.append(item.rstrip('\n'))
 
 	return list_data
-
-
-# Separate uniform and near-surface points and return in tuple
-def split_uniform_surface_samples(samples, sample_dist):
-	# Separate near-surface and uniform points
-	uniform_sample_rows = np.where(abs(samples[:,3]) > sample_dist)
-	uniform_samples = samples[uniform_sample_rows]
-	surface_samples = np.delete(samples, uniform_sample_rows, axis=0)
-	return (uniform_samples, surface_samples)
-
-
-# Select near-surface point samples and consolidate sample length
-def pre_process_sample(args, data_sample):
-	total_points = args.num_input_points + args.num_loss_points
-	num_uniform = math.ceil(total_points * args.surface_uniform_ratio)
-	num_surface = math.floor(total_points * (1 - args.surface_uniform_ratio))
-
-	# Separate near-surface and uniform points
-	(uniform_samples, surface_samples) = split_uniform_surface_samples(data_sample, args.sample_dist)
-
-	# Skip samples that don't contain enough points
-	if uniform_samples.shape[0] < num_uniform or surface_samples.shape[0] < num_surface:
-		return None
-
-	# Randomly select the required number of points
-	select_uniform_rows = np.random.choice(uniform_samples.shape[0], num_uniform, replace=False)
-	uniform_samples = uniform_samples[select_uniform_rows]
-	select_surface_rows = np.random.choice(surface_samples.shape[0], num_surface, replace=False)
-	surface_samples = surface_samples[select_surface_rows]
-
-	return np.concatenate((uniform_samples, surface_samples), axis=0)

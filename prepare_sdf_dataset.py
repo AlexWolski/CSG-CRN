@@ -7,17 +7,9 @@ import yaml
 from mesh_to_sdf import BadMeshException
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from tqdm import tqdm
+from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER, META_DATA_FILE
 from utilities.file_utils import create_output_dir, create_output_subdir, get_mesh_files
 from utilities.sampler_utils import sample_points_mesh_surface, sample_sdf_near_surface, sample_sdf_unit_sphere
-
-
-# Subdirectory names
-UNIFORM_FOLDER = 'uniform'
-SURFACE_FOLDER = 'surface'
-NEAR_SURFACE_FOLDER = 'near-surface'
-
-# Dataset metadata filename
-META_DATA_FILE = 'metadata.yml'
 
 
 # Parse command-line arguments

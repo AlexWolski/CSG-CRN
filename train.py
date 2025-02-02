@@ -94,7 +94,7 @@ def options():
 	# Disable batch norm for SGD
 	args.no_batch_norm = True if args.batch_size == 1 else args.no_batch_norm
 
-    # Print arguments
+	# Print arguments
 	print('\nArguments:')
 	print('----------')
 

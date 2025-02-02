@@ -25,8 +25,6 @@ class PointDataset(Dataset):
 
 			# Preprocess sample if needed
 			if not args.skip_preprocess:
-				sdf_sample = pre_process_sample(args, sdf_sample)
-
 				if sdf_sample is None:
 					skipped_samples += 1
 					continue
