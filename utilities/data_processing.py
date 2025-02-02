@@ -10,8 +10,9 @@ UNIFORM_FOLDER = 'uniform'
 SURFACE_FOLDER = 'surface'
 NEAR_SURFACE_FOLDER = 'near-surface'
 
-# Dataset metadata filename
-META_DATA_FILE = 'metadata.yml'
+# Dataset metadata filenames
+SETTINGS_FILE = 'settings.yml'
+FILE_LIST_FILE = 'files.txt'
 
 
 # Create output directory for trained model and temporary files

@@ -7,7 +7,7 @@ import yaml
 from mesh_to_sdf import BadMeshException
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from tqdm import tqdm
-from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER, META_DATA_FILE
+from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER, SETTINGS_FILE, FILE_LIST_FILE
 from utilities.file_utils import create_output_dir, create_output_subdir, get_mesh_files
 from utilities.sampler_utils import sample_points_mesh_surface, sample_sdf_near_surface, sample_sdf_unit_sphere
 
@@ -59,7 +59,7 @@ def init_dataset(args):
 	uniform_dir = os.path.join(args.output_dir, UNIFORM_FOLDER)
 	surface_dir = os.path.join(args.output_dir, SURFACE_FOLDER)
 	near_surface_dir = os.path.join(args.output_dir, NEAR_SURFACE_FOLDER)
-	metadata_path = os.path.join(args.output_dir, META_DATA_FILE)
+	metadata_path = os.path.join(args.output_dir, SETTINGS_FILE)
 
 	create_output_dir(args.output_dir, args.overwrite)
 	create_output_dir(uniform_dir, args.overwrite)
@@ -106,9 +106,10 @@ def prepare_mesh(mesh_file_path, uniform_dir, surface_dir, near_surface_dir, arg
 
 
 # Compute SDF samples for all 3D files in given directory
-def prepare_dataset(data_dir, output_dir, args):
+def prepare_dataset(args):
 	# Convert all meshes
 	mesh_file_paths = get_mesh_files(args.data_dir)
+	sample_paths = []
 	(uniform_dir, surface_dir, near_surface_dir) = init_dataset(args)
 	print(f'Processing {len(mesh_file_paths)} files...')
 
@@ -119,14 +120,24 @@ def prepare_dataset(data_dir, output_dir, args):
 			mesh = trimesh.load(mesh_file_path)
 			mesh = scale_to_unit_sphere(mesh)
 			prepare_mesh(mesh_file_path, uniform_dir, surface_dir, near_surface_dir, args)
+
+			# Save path to sample
+			rel_path = os.path.relpath(mesh_file_path, args.data_dir)
+			rel_path = os.path.splitext(rel_path)[0] + '.npy'
+			sample_paths.append(rel_path)
 		# Skip meshes that raise an error
 		except BadMeshException:
 			tqdm.write(f'Skipping Bad Mesh\n: {mesh_file_path}')
 			continue
+
+	file_list_path = os.path.join(args.output_dir, FILE_LIST_FILE)
+
+	with open(file_list_path, 'w') as f:
+		f.write('\n'.join(sample_paths))
 
 	print(f'Processing complete! Dataset saved to:\n{os.path.abspath(args.output_dir)}')
 
 
 if __name__ == '__main__':
 	args = options()
-	prepare_dataset(args.data_dir, args.output_dir, args)
+	prepare_dataset(args)
