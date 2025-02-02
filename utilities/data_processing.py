@@ -65,10 +65,9 @@ def get_data_files(data_dir):
 
 
 # Write each item of a list to a new line in a file
-def save_list(file_path, list):
+def save_list(file_path, output_list):
 	with open(file_path, 'w') as f:
-		for item in list:
-			f.write(f"{item}\n")
+		f.write('\n'.join(output_list))
 
 
 # Read all the lines of a file to a list
