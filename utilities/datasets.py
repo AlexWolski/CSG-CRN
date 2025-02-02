@@ -4,6 +4,7 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from utilities.data_augmentation import augment_sample_batch
+from utilities.data_processing import UNIFORM_FOLDER
 
 
 class PointDataset(Dataset):
@@ -19,7 +20,7 @@ class PointDataset(Dataset):
 		total_points = args.num_input_points + args.num_loss_points
 
 		for file_rel_path in tqdm(file_rel_paths, desc=f'Loading {dataset_name}'):
-			sample_path = os.path.join(self.args.data_dir, file_rel_path)
+			sample_path = os.path.join(self.args.data_dir, UNIFORM_FOLDER, file_rel_path)
 			sdf_sample = np.load(sample_path).astype(np.float32)
 
 			# Preprocess sample if needed

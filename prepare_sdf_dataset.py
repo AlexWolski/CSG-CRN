@@ -7,7 +7,7 @@ import yaml
 from mesh_to_sdf import BadMeshException
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from tqdm import tqdm
-from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER, SETTINGS_FILE, FILE_LIST_FILE, save_list
+from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER, SETTINGS_FILE, SAMPLE_LIST_FILE, save_list
 from utilities.file_utils import create_output_dir, create_output_subdir, get_mesh_files
 from utilities.sampler_utils import sample_points_mesh_surface, sample_sdf_near_surface, sample_sdf_unit_sphere
 
@@ -132,7 +132,7 @@ def prepare_dataset(args):
 			continue
 
 	# Save paths for each sample in the dataset
-	file_list_path = os.path.join(args.output_dir, FILE_LIST_FILE)
+	file_list_path = os.path.join(args.output_dir, SAMPLE_LIST_FILE)
 	save_list(file_list_path, sample_paths)
 
 	print(f'Processing complete! Dataset saved to:\n{os.path.abspath(args.output_dir)}')

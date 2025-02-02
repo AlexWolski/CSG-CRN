@@ -12,7 +12,7 @@ NEAR_SURFACE_FOLDER = 'near-surface'
 
 # Dataset metadata filenames
 SETTINGS_FILE = 'settings.yml'
-FILE_LIST_FILE = 'files.txt'
+SAMPLE_LIST_FILE = 'files.txt'
 
 
 # Create output directory for trained model and temporary files
@@ -51,17 +51,14 @@ def get_checkpoint_dir(output_dir):
 	return os.path.join(output_dir, 'checkpoints')
 
 
-# Find all data files in a given directory
+# Read file list from a dataset directory
 def get_data_files(data_dir):
-	# Find all npy files in parent directory
-	file_paths = glob.glob(os.path.join(data_dir, '**', '*.npy'), recursive=True)
-	file_rel_paths = [os.path.relpath(file_path, data_dir) for file_path in file_paths]
+	sample_list_path = os.path.join(data_dir, SAMPLE_LIST_FILE)
 
-	if len(file_rel_paths) == 0:
-		err_msg = f'No .npy data files found in directory "{data_dir}"'
-		raise Exception(err_msg)
-
-	return file_rel_paths
+	if os.path.isfile(sample_list_path):
+		return load_list(sample_list_path)
+	else:
+		raise FileNotFoundError(f'Unable to find dataset settings file: {sample_list_path}')
 
 
 # Write each item of a list to a new line in a file
