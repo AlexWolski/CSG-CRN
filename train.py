@@ -34,15 +34,15 @@ DATA_SPLIT = [0.8, 0.1, 0.1]
 def options():
 	# Parse and handle Help argument
 	help_parser = get_help_parser()
-	args, remaining_args = help_parser.parse_known_args()
+	help_arg, remaining_args = help_parser.parse_known_args()
 
-	if args.help or not remaining_args:
+	if help_arg.help or not remaining_args:
 		print_help()
 		exit()
 
 	# Parse data settings
 	data_parser = get_data_parser()
-	args, remaining_args = data_parser.parse_known_args(args=remaining_args, namespace=args)
+	args, remaining_args = data_parser.parse_known_args(args=remaining_args)
 
 	# Enforce prerequisites
 	if args.resume_training and not args.model_path:

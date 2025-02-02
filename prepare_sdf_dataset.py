@@ -32,15 +32,16 @@ def options():
 
 
 	# Parse and handle Help argument
-	args, remaining_args = help_parser.parse_known_args()
+	help_arg, remaining_args = help_parser.parse_known_args()
 
-	if args.help or not remaining_args:
+	if help_arg.help or not remaining_args:
 		print()
 		data_parser.print_help()
 
 		exit()
+
 	# Parse data settings
-	args, remaining_args = data_parser.parse_known_args(args=remaining_args, namespace=args)
+	args, remaining_args = data_parser.parse_known_args(args=remaining_args)
 
 	return args
 
