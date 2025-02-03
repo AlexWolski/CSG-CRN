@@ -41,7 +41,7 @@ class FileLoader:
 		self.file_index -= 1
 
 		if self.file_index < 0:
-			self.file_index = len(self.file_list) - 1;
+			self.file_index = len(self.file_list) - 1
 
 		return self.get_file()
 
@@ -50,6 +50,6 @@ class FileLoader:
 		self.file_index += 1
 
 		if self.file_index >= len(self.file_list):
-			self.file_index = 0;
+			self.file_index = 0
 
 		return self.get_file()

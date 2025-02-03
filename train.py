@@ -139,7 +139,7 @@ def get_model_parser():
 	# Model settings
 	model_group.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
 	model_group.add_argument('--num_loss_points', type=int, default=2048, help='Number of points to use when computing the loss')
-	model_group.add_argument('--num_val_points', type=int, default=2048, help='Number of points to use when computing validation accuracy')
+	model_group.add_argument('--num_acc_points', type=int, default=2048, help='Number of points to use when computing accuracy')
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
 	model_group.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
@@ -163,10 +163,10 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_factor', type=float, default=0.1, help='Learning rate reduction factor')
-	training_group.add_argument('--lr_patience', type=int, default=10, help='Number of training epochs without improvement before the learning rate is adjusted')
-	training_group.add_argument('--lr_threshold', type=float, default=0.05, help='Minimum recognized percentage of improvement over previous loss')
-	training_group.add_argument('--early_stop_patience', type=int, default=20, help='Number of training epochs without improvement before training terminates')
-	training_group.add_argument('--early_stop_threshold', type=float, default=0.05, help='Minimum recognized percentage of improvement over previous loss')
+	training_group.add_argument('--lr_patience', type=int, default=20, help='Number of training epochs without improvement before the learning rate is adjusted')
+	training_group.add_argument('--lr_threshold', type=float, default=0.001, help='Minimum recognized percentage of improvement over previous loss')
+	training_group.add_argument('--early_stop_patience', type=int, default=40, help='Number of training epochs without improvement before training terminates')
+	training_group.add_argument('--early_stop_threshold', type=float, default=0.001, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
 	training_group.add_argument('--disable_amp', default=False, action='store_true', help='Disable Automatic Mixed Precision')
@@ -253,16 +253,24 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, r
 	# Compute loss
 	loss = loss_func(target_loss_samples, recon_loss_samples, csg_model)
 
-	return loss
+	return (csg_model, loss)
 
 
 # Iteratively predict primitives and propagate average loss
 def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc=''):
 	total_train_loss = 0
 
-	for (target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples) in tqdm(train_loader, desc=desc):
+	for data_sample in tqdm(train_loader, desc=desc):
+		(
+			target_input_samples,
+			target_loss_samples,
+			target_surface_samples,
+			recon_input_samples,
+			recon_loss_samples
+		) = data_sample
+
 		# Forward pass
-		batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
+		(_, batch_loss) = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
 		total_train_loss += batch_loss.item()
 
 		# Back propagate
@@ -277,14 +285,26 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 
 def validate(model, loss_func, val_loader, args, device):
 	total_val_loss = 0
+	total_val_acc = 0
 
 	with torch.no_grad():
-		for (target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples) in val_loader:
-			batch_loss = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
+		for data_sample in val_loader:
+			(
+				target_input_samples,
+				target_loss_samples,
+				target_surface_samples,
+				recon_input_samples,
+				recon_loss_samples
+			) = data_sample
+
+			(csg_model, batch_loss) = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
 			total_val_loss += batch_loss.item()
+			# TODO: Implement accuracy computation
+			total_val_acc += 0
 
 	total_val_loss /= val_loader.__len__()
-	return total_val_loss
+	total_val_acc /= val_loader.__len__()
+	return (total_val_loss, total_val_acc)
 
 
 # Save the model and settings to file
@@ -316,20 +336,21 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
-		val_loss = validate(model, loss_func, val_loader, args, device)
+		(val_loss, val_acc) = validate(model, loss_func, val_loader, args, device)
 		learning_rate = optimizer.param_groups[0]['lr']
 		scheduler.step(val_loss)
 
-		training_logger.add_result(epoch, train_loss, val_loss, learning_rate)
+		training_logger.add_result(epoch, train_loss, val_loss, val_acc, learning_rate)
 		early_stopping(val_loss)
 
 		# Print and save epoch training results
-		print(f"Training Loss:   {train_loss}")
-		print(f"Validation Loss: {val_loss}")
-		print(f"Best Val Loss:   {scheduler.best}")
-		print(f"Learning Rate:   {learning_rate}")
-		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
-		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
+		print(f"Training Loss:       {train_loss}")
+		print(f"Validation Loss:     {val_loss}")
+		print(f"Best Val Loss:       {scheduler.best}")
+		print(f"Validation Accuracy: {val_acc}")
+		print(f"Learning Rate:       {learning_rate}")
+		print(f"LR Patience:         {scheduler.num_bad_epochs}/{scheduler.patience}")
+		print(f"Early Stop:          {early_stopping.counter}/{early_stopping.patience}\n")
 
 		# Check for early stopping
 		if early_stopping.early_stop:
@@ -383,10 +404,10 @@ def main():
 	(train_split, val_split, test_split) = data_splits
 	checkpoint_dir = get_checkpoint_dir(args.output_dir)
 
-	if not (train_dataset := PointDataset(train_split, device, args, "Training Set")):
+	if not (train_dataset := PointDataset(train_split, device, args, include_surface_samples=False, dataset_name="Training Set")):
 		return
 
-	if not (val_dataset := PointDataset(val_split, device, args, "Validation Set")):
+	if not (val_dataset := PointDataset(val_split, device, args, include_surface_samples=True, dataset_name="Validation Set")):
 		return
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
