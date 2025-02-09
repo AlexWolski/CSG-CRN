@@ -172,8 +172,8 @@ def print_recon_loss(input_samples, csg_model, args):
 
 
 def print_chamfer_dist(mesh, csg_model, args):
-	target_points = sample_points_mesh_surface(mesh, args.num_acc_points).unsqueeze(0)
-	recon_points = sample_csg_surface(csg_model, args.recon_resolution, args.num_acc_points)
+	target_points = sample_points_mesh_surface(mesh, args.num_acc_points).unsqueeze(0).to(args.device)
+	recon_points = sample_csg_surface(csg_model, args.recon_resolution, args.num_acc_points).to(args.device)
 	accuracy = compute_chamfer_distance(target_points, recon_points)
 	print('Chamfer Distance:')
 	print(accuracy)
