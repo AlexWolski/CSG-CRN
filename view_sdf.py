@@ -1,15 +1,19 @@
 import argparse
 import numpy as np
 import pyglet
-import pyrender
 import torch
 import trimesh
 import tkinter
+
 from pyglet.gl import *
 from utilities.csg_model import add_sdf
 from utilities.csg_to_magica import prompt_and_export_to_magica
 from utilities.csg_to_mesh import prompt_and_export_to_mesh
 from utilities.file_loader import FileLoader
+from utilities.sampler_utils import sample_sdf_from_mesh_unit_sphere
+from utilities.file_utils import MESH_FILE_TYPES
+
+import pyrender
 
 
 class Button():
@@ -187,8 +191,9 @@ class _SdfViewer(pyrender.Viewer):
 		self.mesh_node.mesh = cloud
 
 
-	def load_samples(self, samples_file):
-		samples = np.load(samples_file).astype(np.float32)
+	def load_samples(self, samples):
+		if len(samples.size()) > 2:
+			raise Exception(f'Expected SDF sample tensor with two dimensions but got {len(samples.size())}.')
 
 		if self.num_view_points > 0:
 			samples = samples[:self.num_view_points,:]
@@ -247,7 +252,7 @@ class _SdfViewer(pyrender.Viewer):
 class SdfFileViewer(_SdfViewer):
 	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file):
 		self.num_view_points = num_view_points
-		self.file_loader = FileLoader(input_file)
+		self.file_loader = FileLoader(input_file, ['*.npy'])
 		self.load_file(self.file_loader.get_file())
 
 		super(SdfFileViewer, self).__init__(
@@ -258,8 +263,10 @@ class SdfFileViewer(_SdfViewer):
 
 
 	def load_file(self, samples_file):
-		self.load_samples(samples_file)
-		print(f'Point samples: {self.points.shape[0]}')
+		samples_numpy = np.load(samples_file).astype(np.float32)
+		samples = torch.from_numpy(samples_numpy)
+		self.load_samples(samples)
+		print(f'Point samples: {self.points.size(0)}')
 
 
 	def view_prev(self):
@@ -280,14 +287,13 @@ class SdfModelViewer(_SdfViewer):
 	RECON_VIEW = "Reconstruction View"
 
 
-	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file, csg_model, sample_dist, get_csg_model=None):
-		self.csg_model = csg_model
-		self.num_view_points = num_view_points
-		self.sample_dist = sample_dist
-		self.get_csg_model = get_csg_model
-		self.file_loader = FileLoader(input_file)
-		self.load_samples(self.file_loader.get_file())
+	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file, sample_dist, get_mesh_and_csg_model=None):
 		self.view_mode = self.COMBINED_VIEW
+		self.num_view_points = num_view_points
+		self.get_mesh_and_csg_model = get_mesh_and_csg_model
+		self.file_loader = FileLoader(input_file, MESH_FILE_TYPES)
+		self.sample_dist = sample_dist
+		self.load_file(input_file)
 
 		super(SdfModelViewer, self).__init__(
 			window_title,
@@ -349,15 +355,11 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def view_combined(self):
-		# Convert numpy arrays to torch tensors
-		torch_points = torch.from_numpy(self.points).to(self.csg_model.device)
-		torch_distances = torch.from_numpy(self.distances).to(self.csg_model.device)
-
 		# Get distances from sample points to csg model
-		csg_distances = self.csg_model.sample_csg(torch_points.unsqueeze(0)).squeeze(0)
+		csg_distances = self.csg_model.sample_csg(self.points.unsqueeze(0)).squeeze(0)
 
 		# Apply union on distances of original shape and reconstruction
-		combined_sdf = add_sdf(torch_distances, csg_distances, None).squeeze(0)
+		combined_sdf = add_sdf(self.distances, csg_distances, None).squeeze(0)
 
 		# Convert to numpy again
 		csg_distances = csg_distances.cpu().numpy()
@@ -369,11 +371,11 @@ class SdfModelViewer(_SdfViewer):
 		csg_distances = csg_distances[combined_sdf <= 0]
 
 		# Original shape is red, reconstruction is blue, and the intersection is purple
-		colors = np.zeros(internal_points.shape)
+		colors = torch.zeros(internal_points.size())
 		colors[internal_distances < 0, 0] = 1
 		colors[csg_distances < 0, 2] = 1
 
-		cloud = pyrender.Mesh.from_points(internal_points, colors=colors)
+		cloud = pyrender.Mesh.from_points(internal_points.cpu().numpy(), colors=colors.cpu().numpy())
 		self.mesh_node.mesh = cloud
 
 
@@ -404,26 +406,29 @@ class SdfModelViewer(_SdfViewer):
 		self.mesh_node.mesh = cloud
 
 
-	def load_samples(self, samples_file):
-		self.csg_model = self.get_csg_model(samples_file)
-		super(_SdfViewer, self).load_samples(samples_file)
-		self.update_mesh_node()
+	def load_file(self, samples_file):
+		mesh, self.csg_model = self.get_mesh_and_csg_model(samples_file)
+		points, distances = sample_sdf_from_mesh_unit_sphere(mesh, self.num_view_points)
+		samples = torch.cat((points, distances.unsqueeze(-1)), dim=-1).to(self.csg_model.device)
+		self.load_samples(samples)
 
 
 	def view_prev(self):
-		if self.get_csg_model == None:
+		if self.get_mesh_and_csg_model == None:
 			return
 
 		samples_file = self.file_loader.prev_file()
-		load_samples(samples_file)
+		self.load_file(samples_file)
+		self.update_mesh_node()
 
 
 	def view_next(self):
-		if self.get_csg_model == None:
+		if self.get_mesh_and_csg_model == None:
 			return
 
 		samples_file = self.file_loader.next_file()
-		load_samples(samples_file)
+		self.load_file(samples_file)
+		self.update_mesh_node()
 
 
 # Parse commandline arguments

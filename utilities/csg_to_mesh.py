@@ -60,8 +60,8 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 
 		Returns
 		-------
-		trimesh.Trimesh
-			Converted mesh object.
+		[trimesh.Trimesh]
+			List containing B converted mesh objects, where B is the batch size of `csg_model`.
 
 		"""
 		# Generate grid points
@@ -70,15 +70,16 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 
 		# Calculate number of batches needed to compute SDF values given memory restrictions
 		(free_memory, total_memory) = torch.cuda.mem_get_info(device=x.device.index)
+		csg_batch_size = csg_model.batch_size
 		num_samples = resolution**3
 		input_bytes = num_samples * 3 * x.element_size()
-		output_bytes = num_samples * x.element_size()
-		comp_bytes = input_bytes * SDF_MEMORY_USAGE_FACTOR
-		total_req_bytes = input_bytes + comp_bytes
-		num_batches = math.ceil(total_req_bytes / (free_memory - output_bytes))
+		output_bytes = num_samples * x.element_size() * csg_batch_size
+		comp_bytes = input_bytes * SDF_MEMORY_USAGE_FACTOR * csg_batch_size
+		total_req_bytes = input_bytes + output_bytes + comp_bytes
+		num_comp_batches = math.ceil(total_req_bytes / free_memory)
 
-		# Quantize batch size to be divisible by grid layer size
-		layers_per_batch = resolution // num_batches
+		# Quantize computation batch size to be divisible by grid layer size
+		layers_per_batch = resolution // num_comp_batches
 
 		distances_list = []
 
@@ -104,15 +105,25 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 
 		del x, y ,z, distances_list
 
+		mesh_list = []
+
 		try:
+			# Run the marching cubes algorithm
 			verts, faces = marching_cubes(distances, isolevel=0.0, return_local_coords=True)
-			mesh = trimesh.Trimesh(verts[0].cpu(), faces[0].cpu())
-		except torch.OutOfMemoryError:
-			verts, faces = marching_cubes(distances.cpu(), isolevel=0.0, return_local_coords=True)
-			mesh = trimesh.Trimesh(verts[0].cpu(), faces[0].cpu())
+			# Convert the lists of vertices and faces to mesh objects
+			for i in range(csg_batch_size):
+				mesh_list.append(trimesh.Trimesh(verts[i].cpu(), faces[i].cpu()))
+
+		except torch.OutOfMemoryError as e:
+			raise torch.OutOfMemoryError(
+				f'Ran out of memory while running marching cubes on device: {csg_model.device}. '
+				'Free more memory, change the device, or lower the resolution.'
+				) from e
+
 		finally:
 			torch.cuda.empty_cache()
-			return mesh
+
+		return mesh_list
 
 
 def sample_csg_surface(csg_model, resolution, num_samples):
@@ -136,8 +147,8 @@ def sample_csg_surface(csg_model, resolution, num_samples):
 		Each point in the tensor is approximately on the surface of the given CSG model.
 
 	"""
-	mesh = csg_to_mesh(csg_model, resolution)
-	samples = trimesh.sample_surface(mesh, num_samples)
+	mesh_list = csg_to_mesh(csg_model, resolution)
+	samples = trimesh.sample_surface(mesh[0], num_samples)
 	return torch.from_numpy(samples).detach()
 
 

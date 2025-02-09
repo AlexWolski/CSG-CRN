@@ -22,6 +22,9 @@ class PointDataset(Dataset):
 		self.dataset_name = dataset_name
 		self.__load_data_set()
 
+		if self.args.augment_data and include_surface_samples:
+			print('WARNING: include_surface_samples should be disabled when augment_data is enabled')
+
 
 	# Load all samples into system memory
 	def __load_data_set(self):
@@ -120,7 +123,7 @@ class PointDataset(Dataset):
 			batch_sdf_distances = batch_sdf_distances.unsqueeze(2)
 
 			augmented_points, augmented_distances = augment_sample_batch(batch_sdf_points, batch_sdf_distances, self.args)
-			batch_sdf_samples = torch.cat((augmented_points, augmented_distances), dim=2)
+			batch_sdf_samples = torch.cat((augmented_points, augmented_distances), dim=-1)
 
 		# Shuffle the data samples
 		total_points = self.args.num_input_points + self.args.num_loss_points

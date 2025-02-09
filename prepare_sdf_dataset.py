@@ -91,9 +91,11 @@ def prepare_mesh(mesh_file_path, uniform_dir, surface_dir, near_surface_dir, arg
 	mesh = scale_to_unit_sphere(mesh)
 
 	# Compute samples
-	(uniform_points, uniform_distances) = sample_sdf_unit_sphere(mesh, args.num_sdf_samples)
-	(near_surface_points, near_surface_distances) = sample_sdf_near_surface(mesh, args.num_sdf_samples, args.sample_dist)
-	surface_points = sample_points_mesh_surface(mesh, args.num_surface_samples)
+	(
+		uniform_points, uniform_distances,
+		near_surface_points, near_surface_distances,
+		surface_points
+	) = sample_from_mesh(mesh, args.num_sdf_samples, args.num_sdf_samples, args.num_sdf_samples, args.sample_dist)
 
 	# Create output path for each model
 	uniform_path = create_output_subdir(args.data_dir, uniform_dir, mesh_file_path)

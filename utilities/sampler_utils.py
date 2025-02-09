@@ -1,4 +1,5 @@
 import mesh_to_sdf
+import numpy
 import point_cloud_utils as pcu
 import trimesh
 import torch
@@ -19,11 +20,13 @@ def sample_uniform_points_cube(num_points, side_length):
 	Returns
 	-------
 	torch.Tensor
-		Tensor of size (N, N, N) where N=`num_points`.
+		Float Tensor of size (N, N, N) where N=`num_points`.
 		Points uniformly sampled from a cube with side length `side_length`.
 
 	"""
-	return Uniform(-side_length/2, side_length/2).sample((num_points, 3)).detach()
+	low = torch.tensor(-side_length/2, dtype=torch.float32)
+	high = torch.tensor(side_length/2, dtype=torch.float32)
+	return Uniform(low, high).sample((num_points, 3)).detach()
 
 
 def sample_uniform_points_sphere(num_points, radius=1):
@@ -80,9 +83,9 @@ def distance_to_mesh_surface(mesh, sample_points):
 		Signed distance between each sample point and the closest point on the given mesh.
 
 	"""
-	sdf_points_numpy = sample_points.detach().numpy().astype(float)
-	distances_numpy, _, _ = pcu.signed_distance_to_mesh(sdf_points_numpy, mesh.vertices, mesh.faces)
-	return torch.from_numpy(distances_numpy)
+	sdf_points_numpy = sample_points.detach().numpy().astype(numpy.float32)
+	distances_numpy, _, _ = pcu.signed_distance_to_mesh(sdf_points_numpy, mesh.vertices.astype(numpy.float32), mesh.faces)
+	return torch.from_numpy(distances_numpy.astype(numpy.float32))
 
 
 def sample_points_mesh_surface(mesh, num_sample_points):
@@ -105,10 +108,10 @@ def sample_points_mesh_surface(mesh, num_sample_points):
 	"""
 	(face_ids, barycentric_coords) = pcu.sample_mesh_random(mesh.vertices, mesh.faces, num_sample_points)
 	surface_points = pcu.interpolate_barycentric_coords(mesh.faces, face_ids, barycentric_coords, mesh.vertices)
-	return torch.from_numpy(surface_points)
+	return torch.from_numpy(surface_points.astype(numpy.float32))
 
 
-def sample_sdf_near_surface(mesh, num_sample_points, sample_dist):
+def sample_sdf_near_mesh_surface(mesh, num_sample_points, sample_dist):
 	"""
 	Generate SDF samples of a mesh within a specified distance the mesh surface.
 
@@ -135,7 +138,7 @@ def sample_sdf_near_surface(mesh, num_sample_points, sample_dist):
 	return (near_surface_points, distances)
 
 
-def sample_sdf_unit_sphere(mesh, num_sample_points):
+def sample_sdf_from_mesh_unit_sphere(mesh, num_sample_points):
 	"""
 	Generate SDF samples of a mesh uniformly distributed in a unit sphere.
 
@@ -149,10 +152,49 @@ def sample_sdf_unit_sphere(mesh, num_sample_points):
 	Returns
 	-------
 	Tuple[torch.Tensor, torch.Tensor]
-		Two tensors of size (N, N, N) and (N) where N=`num_sample_points`.
+		Two float tensors of size (N, N, N) and (N) where N=`num_sample_points`.
 		SDF sample points and distances respectively.
 
 	"""
 	sample_points = sample_uniform_points_sphere(num_sample_points)
 	sample_distances = distance_to_mesh_surface(mesh, sample_points)
 	return (sample_points, sample_distances)
+
+
+def sample_from_mesh(mesh, num_uniform_samples, num_surface_samples, num_near_surface_samples, sample_dist):
+	"""
+	Generate SDF samples and surface point samples of a given mesh.
+
+	Parameters
+	----------
+	mesh : trimesh.Trimesh
+		Mesh object to sample from. The mesh is expected be scaled to a unit sphere.
+	num_uniform_samples : int
+		Number of SDF samples to generate in a unit sphere around the mesh.
+	num_surface_samples : int
+		Number of point samples to generate on the mesh surface.
+	num_near_surface_samples : int
+		Number of SDF samples to generate within a maximum distance of the mesh surface.
+	sample_dist : float
+		Maximum distance between each generated SDF sample and the mesh surface.
+
+	Returns
+	-------
+	Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+		Tuple of torch float tensors representing sampled points and distances:
+		1. Uniform Points
+		2. Uniform Distances
+		3. Near-Surface Points
+		4. Near-Surface Distances
+		5. Surface Points
+
+	"""
+	(uniform_points, uniform_distances) = sample_sdf_from_mesh_unit_sphere(mesh, num_uniform_samples)
+	(near_surface_points, near_surface_distances) = sample_sdf_near_mesh_surface(mesh, num_near_surface_samples, sample_dist)
+	surface_points = sample_points_mesh_surface(mesh, num_surface_samples)
+
+	return (
+		uniform_points, uniform_distances,
+		near_surface_points, near_surface_distances,
+		surface_points
+	)

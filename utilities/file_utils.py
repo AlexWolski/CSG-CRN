@@ -1,6 +1,8 @@
 import os
 import glob
 
+MESH_FILE_TYPES = ['*.3mf', '*.obj', '*.off', '*.glb', '*.gltf', '*.ply', '*.stl', '*.3dxml']
+
 
 def get_mesh_files(data_dir):
 	"""
@@ -17,11 +19,10 @@ def get_mesh_files(data_dir):
 		List of mesh file paths.
 
 	"""
-	mesh_file_types = ['*.3mf', '*.obj', '*.off', '*.glb', '*.gltf', '*.ply', '*.stl', '*.3dxml']
 	mesh_file_paths = []
 
 	# Find all 3D files in parent directory
-	for mesh_file_type in mesh_file_types:
+	for mesh_file_type in MESH_FILE_TYPES:
 		mesh_file_paths.extend(glob.glob(os.path.join(data_dir, '**', mesh_file_type), recursive=True))
 
 	return mesh_file_paths

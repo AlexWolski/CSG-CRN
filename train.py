@@ -22,6 +22,7 @@ from utilities.datasets import PointDataset
 from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.early_stopping import EarlyStopping
 from utilities.training_logger import TrainingLogger
+from utilities.accuracy_metrics import compute_chamfer_distance_csg
 
 
 # Weights for regularization loss
@@ -139,7 +140,7 @@ def get_model_parser():
 	# Model settings
 	model_group.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
 	model_group.add_argument('--num_loss_points', type=int, default=2048, help='Number of points to use when computing the loss')
-	model_group.add_argument('--num_acc_points', type=int, default=2048, help='Number of points to use when computing accuracy')
+	model_group.add_argument('--num_val_acc_points', type=int, default=2048, help='Number of points to use when computing validation accuracy')
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
 	model_group.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
@@ -299,8 +300,7 @@ def validate(model, loss_func, val_loader, args, device):
 
 			(csg_model, batch_loss) = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
 			total_val_loss += batch_loss.item()
-			# TODO: Implement accuracy computation
-			total_val_acc += 0
+			total_val_acc += compute_chamfer_distance_csg(target_surface_samples, csg_model)
 
 	total_val_loss /= val_loader.__len__()
 	total_val_acc /= val_loader.__len__()

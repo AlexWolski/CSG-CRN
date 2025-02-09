@@ -1,8 +1,10 @@
 import os
+import glob
 from pathlib import Path
 
+
 class FileLoader:
-	def __init__(self, input_file):
+	def __init__(self, input_file, file_type_list):
 		self.file_list = []
 
 		input_file_path = Path(input_file)
@@ -17,18 +19,15 @@ class FileLoader:
 		else:
 			raise FileNotFoundError(f'Provided input file is not a valid file or directory:\n{input_file}')
 
-		index = 0
+		# Find all valid files in parent directory
+		for mesh_file_type in file_type_list:
+			self.file_list.extend(glob.glob(os.path.join(self.parent_dir, '**', mesh_file_type), recursive=True))
 
-		for file in os.listdir(self.parent_dir):
-			if file.endswith('.npy'):
-				if file == input_file_name:
-					self.file_index = index
-
-				self.file_list.append(file)
-				index += 1
+		# TODO: File file index
+		self.file_index = 0
 
 		if len(self.file_list) == 0:
-			raise FileNotFoundError(f'No .npy files found in the directory:\n{self.parent_dir}')
+			raise FileNotFoundError(f'No model files found in the directory. Valid model file types are:\n{file_type_list}')
 
 
 	def get_file(self):

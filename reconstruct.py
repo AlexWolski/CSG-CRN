@@ -1,7 +1,11 @@
 import os
 import sys
+import math
 import signal
 import argparse
+import trimesh
+import traceback
+import mesh_to_sdf
 import pyrender
 import numpy as np
 import torch
@@ -9,23 +13,25 @@ import time
 
 from torch.utils.data import Subset
 from networks.csg_crn import CSG_CRN
-from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
+from mesh_to_sdf.utils import scale_to_unit_sphere
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
+from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
 from utilities.file_loader import FileLoader
 from utilities.data_augmentation import RotationAxis
-from utilities.data_processing import split_uniform_surface_samples
+from utilities.sampler_utils import sample_from_mesh
 
 
 # Parse commandline arguments
 def options():
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file')
-	parser.add_argument('--input_file', type=str, required=True, help='Numpy file containing sample points and SDF values of input shape')
-	parser.add_argument('--num_view_points', type=int, default=100000, help='Number of points to visualize the output')
-	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape')
-	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud')
+	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file.')
+	parser.add_argument('--input_file', type=str, required=True, help='Model file to reconstruct.')
+	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing validation accuracy.')
+	parser.add_argument('--num_view_points', type=int, default=100000, help='Number of points to visualize the output.')
+	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape.')
+	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud.')
 
 	args = parser.parse_args()
 	return args
@@ -65,23 +71,30 @@ def load_model(args):
 
 
 # Randomly sample input points
-def load_input_samples(input_file, args):
-	# Load all points from file
-	points = np.load(input_file).astype(np.float32)
+def load_mesh_and_samples(input_file, args):
+	mesh = trimesh.load(input_file)
+	mesh = scale_to_unit_sphere(mesh)
 
-	# Select required ratio of uniform and near-surface samples
-	(uniform_samples, surface_samples) = split_uniform_surface_samples(points, args.sample_dist)
-	points = np.concatenate((uniform_samples, surface_samples), axis=0)
+	num_uniform_samples = math.ceil(args.num_input_points * args.surface_uniform_ratio)
+	num_surface_samples = math.floor(args.num_input_points * (1 - args.surface_uniform_ratio))
 
-	# Randomly select needed number of input surface points
-	replace = (points.shape[0] < args.num_input_points)
-	select_rows = np.random.choice(points.shape[0], args.num_input_points, replace=replace)
-	select_input_points = points[select_rows]
+	# Compute samples
+	(
+		uniform_points, uniform_distances,
+		near_surface_points, near_surface_distances,
+		surface_points
+	) = sample_from_mesh(mesh, num_uniform_samples, args.num_acc_points, num_surface_samples, args.sample_dist)
 
-	# Convert to torch tensor
-	select_input_points = torch.from_numpy(select_input_points).to(args.device).unsqueeze(0)
-	
-	return select_input_points
+	# Combine samples
+	uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1)
+	surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1)
+	input_samples = torch.cat((uniform_samples, surface_samples))
+
+	# Shuffle data samples
+	input_samples = input_samples[torch.randperm(args.num_input_points)]
+
+	# Add batch dimension
+	return (mesh, input_samples.unsqueeze(0).to(args.device))
 
 
 def run_model(model, input_samples, args):
@@ -151,7 +164,7 @@ def print_recon_loss(input_samples, csg_model, args):
 
 
 def construct_csg_model(model, input_file, args):
-	input_samples = load_input_samples(input_file, args)
+	mesh, input_samples = load_mesh_and_samples(input_file, args)
 	csg_model = run_model(model, input_samples, args)
 
 	# Pretty print csg commands
@@ -160,7 +173,7 @@ def construct_csg_model(model, input_file, args):
 	print_recon_loss(input_samples, csg_model, args)
 	print('\n')
 
-	return csg_model
+	return (mesh, csg_model)
 
 
 def main():
@@ -170,14 +183,13 @@ def main():
 	# Run model
 	args.device = get_device()
 	model = load_model(args)
-	csg_model = construct_csg_model(model, args.input_file, args)
 
 	# View reconstruction
-	get_csg_model = lambda input_file: construct_csg_model(model, input_file, args)
+	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args)
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
 
 	try:
-		viewer = SdfModelViewer("Reconstructed SDF", args.point_size, False, args.num_view_points, args.input_file, csg_model, args.sample_dist, get_csg_model)
+		viewer = SdfModelViewer("Reconstructed SDF", args.point_size, False, args.num_view_points, args.input_file, args.sample_dist, get_mesh_and_csg_model)
 		await_viewer(viewer)
 	except FileNotFoundError as fileError:
 		print(fileError)

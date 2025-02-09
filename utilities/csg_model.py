@@ -90,12 +90,35 @@ class CSGModel():
 	def __init__(self, device=torch.device('cpu')):
 		# List of all primitives and operations to build CSG model
 		self.csg_commands = []
+		self.batch_size = 0
 		self.device = device
+
+
+	# Validate that the given command has the correct batch size
+	def _validate_batch_size(self, command):
+		batch_sizes_set = set()
+
+		for _key, value in command.items():
+			if value != None:
+				batch_sizes_set.add(value.size(0))
+
+		# Ensure that all the tensors in the command have the same batch size
+		if len(batch_sizes_set) > 1:
+			raise Exception(f'All tensors in a command must must have the same batch size. Found batch sizes: {batch_sizes_set}')
+
+		batch_size = batch_sizes_set.pop()
+
+		# Set the number of batches if this is the first command.
+		if self.batch_size == 0:
+			self.batch_size = batch_size
+		# Ensure that the batch size of the command matches the existing commands.
+		elif self.batch_size != batch_size:
+			raise Exception(f'Expected batch size of {self.batch_size} but was given a command with batch size of {batch_size}.')
 
 
 	# Add a primitive to the CSG model
 	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending=None, roundness=None):
-		self.csg_commands.append({
+		command = {
 			'shape weights': shape_weights,
 			'operation weights': operation_weights,
 			'translations': translations,
@@ -103,7 +126,10 @@ class CSGModel():
 			'scales': scales,
 			'blending': blending,
 			'roundness': roundness
-		})
+		}
+
+		self._validate_batch_size(command)
+		self.csg_commands.append(command)
 
 
 	# Compute blended SDF for all primitive types given primitive weights and a transform
