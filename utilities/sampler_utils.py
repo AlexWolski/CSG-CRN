@@ -4,6 +4,7 @@ import point_cloud_utils as pcu
 import trimesh
 import torch
 from torch.distributions.uniform import Uniform
+from utilities.csg_to_mesh import csg_to_mesh
 
 
 def sample_uniform_points_cube(num_points, side_length):
@@ -88,7 +89,7 @@ def distance_to_mesh_surface(mesh, sample_points):
 	return torch.from_numpy(distances_numpy.astype(numpy.float32))
 
 
-def sample_points_mesh_surface(mesh, num_sample_points):
+def sample_points_mesh_surface(mesh, num_point_samples):
 	"""
 	Uniformly sample points from the surface of a mesh.
 
@@ -96,22 +97,22 @@ def sample_points_mesh_surface(mesh, num_sample_points):
 	----------
 	mesh : trimesh.Trimesh
 		Mesh object to sample from.
-	num_sample_points : int
+	num_point_samples : int
 		Number of point samples to generate.
 
 	Returns
 	-------
 	torch.Tensor
-		Tensor of size (N, N, N) where N=`num_sample_points`.
+		Tensor of size (N, N, N) where N=`num_point_samples`.
 		Points uniformly samples from the surface of the given mesh.
 
 	"""
-	(face_ids, barycentric_coords) = pcu.sample_mesh_random(mesh.vertices, mesh.faces, num_sample_points)
+	(face_ids, barycentric_coords) = pcu.sample_mesh_random(mesh.vertices, mesh.faces, num_point_samples)
 	surface_points = pcu.interpolate_barycentric_coords(mesh.faces, face_ids, barycentric_coords, mesh.vertices)
 	return torch.from_numpy(surface_points.astype(numpy.float32))
 
 
-def sample_sdf_near_mesh_surface(mesh, num_sample_points, sample_dist):
+def sample_sdf_near_mesh_surface(mesh, num_sdf_samples, sample_dist):
 	"""
 	Generate SDF samples of a mesh within a specified distance the mesh surface.
 
@@ -119,7 +120,7 @@ def sample_sdf_near_mesh_surface(mesh, num_sample_points, sample_dist):
 	----------
 	mesh : trimesh.Trimesh
 		Mesh object to sample from.
-	num_sample_points : int
+	num_sdf_samples : int
 		Number of SDF samples to generate.
 	sample_dist : float
 		Maximum distance between each generated SDF sample and the mesh surface.
@@ -127,18 +128,18 @@ def sample_sdf_near_mesh_surface(mesh, num_sample_points, sample_dist):
 	Returns
 	-------
 	Tuple[torch.Tensor, torch.Tensor]
-		Two tensors of size (N, N, N) and (N) where N=`num_sample_points`.
+		Two tensors of size (N, N, N) and (N) where N=`num_sdf_samples`.
 		SDF sample points and distances respectively.
 
 	"""
-	surface_points = sample_points_mesh_surface(mesh, num_sample_points)
+	surface_points = sample_points_mesh_surface(mesh, num_sdf_samples)
 	gaussian_noise = torch.randn(surface_points.size(), dtype=surface_points.dtype, device=surface_points.device) * sample_dist
 	near_surface_points = surface_points + gaussian_noise
 	distances = distance_to_mesh_surface(mesh, near_surface_points)
 	return (near_surface_points, distances)
 
 
-def sample_sdf_from_mesh_unit_sphere(mesh, num_sample_points):
+def sample_sdf_from_mesh_unit_sphere(mesh, num_sdf_samples):
 	"""
 	Generate SDF samples of a mesh uniformly distributed in a unit sphere.
 
@@ -146,24 +147,24 @@ def sample_sdf_from_mesh_unit_sphere(mesh, num_sample_points):
 	----------
 	mesh : trimesh.Trimesh
 		Mesh object to sample from. The mesh is expected be scaled to a unit sphere.
-	num_sample_points : int
+	num_sdf_samples : int
 		Number of SDF samples to generate.
 
 	Returns
 	-------
 	Tuple[torch.Tensor, torch.Tensor]
-		Two float tensors of size (N, N, N) and (N) where N=`num_sample_points`.
+		Two float tensors of size (N, N, N) and (N) where N=`num_sdf_samples`.
 		SDF sample points and distances respectively.
 
 	"""
-	sample_points = sample_uniform_points_sphere(num_sample_points)
+	sample_points = sample_uniform_points_sphere(num_sdf_samples)
 	sample_distances = distance_to_mesh_surface(mesh, sample_points)
 	return (sample_points, sample_distances)
 
 
 def sample_from_mesh(mesh, num_uniform_samples, num_surface_samples, num_near_surface_samples, sample_dist):
 	"""
-	Generate SDF samples and surface point samples of a given mesh.
+	Generate uniform SDF samples, near-surface SDF samples, and surface point samples of a given mesh.
 
 	Parameters
 	----------
@@ -198,3 +199,48 @@ def sample_from_mesh(mesh, num_uniform_samples, num_surface_samples, num_near_su
 		near_surface_points, near_surface_distances,
 		surface_points
 	)
+
+
+def sample_csg_surface(csg_model, resolution, num_sdf_samples):
+	"""
+	Uniformly sample points on the surface of an implicit CSG model.
+	Uses the marching cubes algorithm to extract an isosurface mesh, then uniformly samples the mesh faces.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+	num_sdf_samples: int
+		Number of surface samples to generate.
+
+	Returns
+	-------
+	torch.Tensor
+		Tensor of size (N, 3) where N=`num_sdf_samples`.
+		Each point in the tensor is approximately on the surface of the given CSG model.
+
+	"""
+	mesh_list = csg_to_mesh(csg_model, resolution)
+	# TODO: Convert to batch operation
+	return sample_points_mesh_surface(mesh_list[0], num_sdf_samples).unsqueeze(0)
+
+
+def sample_sdf_near_csg_surface(csg_model, resolution, num_sdf_samples, sample_dist):
+	"""
+	Generate SDF samples of a CSG within a specified distance the isosurface.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+	num_sdf_samples: int
+		Number of surface samples to generate.
+
+	"""
+	mesh_list = csg_to_mesh(csg_model, resolution)
+	# TODO: Convert to batch operation
+	return sample_sdf_near_mesh_surface(mesh_list[0], num_sdf_samples, sample_dist).unsqueeze(0)

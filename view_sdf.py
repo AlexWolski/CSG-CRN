@@ -184,10 +184,10 @@ class _SdfViewer(pyrender.Viewer):
 			select_points = select_points[self.distances <= 0, :]
 			select_distances = select_distances[self.distances <= 0]
 
-		colors = np.zeros(select_points.shape)
+		colors = torch.zeros(select_points.size())
 		colors[select_distances < 0, 2] = 1
 		colors[select_distances > 0, 0] = 1
-		cloud = pyrender.Mesh.from_points(select_points, colors=colors)
+		cloud = pyrender.Mesh.from_points(select_points.cpu().numpy(), colors=colors)
 		self.mesh_node.mesh = cloud
 
 
@@ -389,8 +389,8 @@ class SdfModelViewer(_SdfViewer):
 		(csg_points, csg_distances) = self.csg_model.gen_csg_samples(1, csg_view_points)
 
 		# Convert to numpy
-		csg_points = csg_points.squeeze(0).cpu().numpy()
-		csg_distances = csg_distances.squeeze(0).cpu().numpy()
+		csg_points = csg_points.squeeze(0)
+		csg_distances = csg_distances.squeeze(0)
 
 		# Remove exterior points
 		if not self.show_exterior_points:
@@ -398,17 +398,17 @@ class SdfModelViewer(_SdfViewer):
 			csg_distances = csg_distances[csg_distances <= 0]
 
 		# Internal points are blue and external points are red
-		colors = np.zeros(csg_points.shape)
+		colors = torch.zeros(csg_points.size())
 		colors[csg_distances < 0, 2] = 1
 		colors[csg_distances > 0, 0] = 1
 
-		cloud = pyrender.Mesh.from_points(csg_points, colors=colors)
+		cloud = pyrender.Mesh.from_points(csg_points.cpu().numpy(), colors=colors)
 		self.mesh_node.mesh = cloud
 
 
 	def load_file(self, samples_file):
-		mesh, self.csg_model = self.get_mesh_and_csg_model(samples_file)
-		points, distances = sample_sdf_from_mesh_unit_sphere(mesh, self.num_view_points)
+		self.mesh, self.csg_model = self.get_mesh_and_csg_model(samples_file)
+		points, distances = sample_sdf_from_mesh_unit_sphere(self.mesh, self.num_view_points)
 		samples = torch.cat((points, distances.unsqueeze(-1)), dim=-1).to(self.csg_model.device)
 		self.load_samples(samples)
 

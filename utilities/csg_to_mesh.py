@@ -126,32 +126,6 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 		return mesh_list
 
 
-def sample_csg_surface(csg_model, resolution, num_samples):
-	"""
-	Uniformly sample points on the surface of an implicit CSG model.
-	Uses the marching cubes algorithm to extract an isosurface mesh, then uniformly samples the mesh faces.
-
-	Parameters
-	----------
-	csg_model : utilities.csg_model.CSGModel
-		The CSG model to sample.
-	resolution : int
-		Voxel resolution to use for the marching cubes algorithm.
-	num_samples: int
-		Number of surface samples to generate.
-
-	Returns
-	-------
-	torch.Tensor
-		Tensor of size (N, 3) where N=`num_samples`.
-		Each point in the tensor is approximately on the surface of the given CSG model.
-
-	"""
-	mesh_list = csg_to_mesh(csg_model, resolution)
-	samples = trimesh.sample_surface(mesh[0], num_samples)
-	return torch.from_numpy(samples).detach()
-
-
 def export_to_mesh(csg_model, resolution, output_file):
 	"""
 	Use the marching cubes algorithm to extract a mesh from a CSG Model and save the result to file.

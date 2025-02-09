@@ -19,7 +19,8 @@ from view_sdf import SdfModelViewer
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
 from utilities.file_loader import FileLoader
 from utilities.data_augmentation import RotationAxis
-from utilities.sampler_utils import sample_from_mesh
+from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface, sample_csg_surface
+from utilities.accuracy_metrics import compute_chamfer_distance
 
 
 # Parse commandline arguments
@@ -29,17 +30,24 @@ def options():
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file.')
 	parser.add_argument('--input_file', type=str, required=True, help='Model file to reconstruct.')
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing validation accuracy.')
+	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--num_view_points', type=int, default=100000, help='Number of points to visualize the output.')
 	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape.')
 	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud.')
+	parser.add_argument('--device', type=str, default='', help='Select preferred inference device')
 
 	args = parser.parse_args()
 	return args
 
 
 # Determine device to train on
-def get_device():
-	return torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu');
+def get_device(device=None):
+	if device:
+		return torch.device(device)
+	elif torch.cuda.is_available():
+		return torch.device('cuda')
+	else:
+		return torch.device('cpu')
 
 
 def load_model(args):
@@ -163,6 +171,14 @@ def print_recon_loss(input_samples, csg_model, args):
 	print(recon_loss.forward(input_sdf, csg_sdf))
 
 
+def print_chamfer_dist(mesh, csg_model, args):
+	target_points = sample_points_mesh_surface(mesh, args.num_acc_points).unsqueeze(0)
+	recon_points = sample_csg_surface(csg_model, args.recon_resolution, args.num_acc_points)
+	accuracy = compute_chamfer_distance(target_points, recon_points)
+	print('Chamfer Distance:')
+	print(accuracy)
+
+
 def construct_csg_model(model, input_file, args):
 	mesh, input_samples = load_mesh_and_samples(input_file, args)
 	csg_model = run_model(model, input_samples, args)
@@ -171,6 +187,8 @@ def construct_csg_model(model, input_file, args):
 	print_csg_commands(csg_model)
 	# Print reconstruction loss
 	print_recon_loss(input_samples, csg_model, args)
+	# Print reconstruction accuracy
+	print_chamfer_dist(mesh, csg_model, args)
 	print('\n')
 
 	return (mesh, csg_model)
@@ -181,7 +199,7 @@ def main():
 	print('')
 
 	# Run model
-	args.device = get_device()
+	args.device = get_device(args.device)
 	model = load_model(args)
 
 	# View reconstruction
