@@ -294,7 +294,7 @@ class SdfModelViewer(_SdfViewer):
 		self.get_mesh_and_csg_model = get_mesh_and_csg_model
 		self.file_loader = FileLoader(input_file, MESH_FILE_TYPES)
 		self.sample_dist = sample_dist
-		self.load_file(input_file)
+		self.load_file(self.file_loader.get_file())
 
 		super(SdfModelViewer, self).__init__(
 			window_title,

@@ -7,15 +7,14 @@ class FileLoader:
 	def __init__(self, input_file, file_type_list):
 		self.file_list = []
 
-		input_file_path = Path(input_file)
+		input_file_path = Path(input_file).absolute()
 
 		if os.path.isdir(input_file):
-			self.parent_dir = input_file_path.absolute()
+			self.parent_dir = input_file_path
 			self.file_index = 0
-			input_file_name = None
+			input_file_path = None
 		elif os.path.isfile(input_file):
-			self.parent_dir = input_file_path.parent.absolute()
-			input_file_name = input_file_path.name
+			self.parent_dir = input_file_path.parent
 		else:
 			raise FileNotFoundError(f'Provided input file is not a valid file or directory:\n{input_file}')
 
@@ -23,8 +22,9 @@ class FileLoader:
 		for mesh_file_type in file_type_list:
 			self.file_list.extend(glob.glob(os.path.join(self.parent_dir, '**', mesh_file_type), recursive=True))
 
-		# TODO: File file index
-		self.file_index = 0
+		# Get index of input file if one was provided
+		if str(input_file_path) in self.file_list:
+			self.file_index = self.file_list.index(str(input_file_path))
 
 		if len(self.file_list) == 0:
 			raise FileNotFoundError(f'No model files found in the directory. Valid model file types are:\n{file_type_list}')
