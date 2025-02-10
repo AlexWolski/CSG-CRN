@@ -343,7 +343,7 @@ class SdfModelViewer(_SdfViewer):
 	def update_mesh_node(self):
 		match self.view_mode:
 			case self.ORIGINAL_VIEW:
-				self.view_mesh(self.target_mesh)
+				self.view_mesh(self.target_surface_points)
 				return
 
 			case self.COMBINED_VIEW:
@@ -351,38 +351,33 @@ class SdfModelViewer(_SdfViewer):
 				return
 
 			case self.RECON_VIEW:
-				self.view_mesh(self.recon_mesh)
+				self.view_mesh(self.recon_surface_points)
 				return
 
 
 	def view_combined(self):
-		# Get distances from sample points to csg model
-		csg_distances = self.csg_model.sample_csg(self.points.unsqueeze(0)).squeeze(0)
+		# Compute distance from target surface points to CSG reconstruction
+		csg_distances = self.csg_model.sample_csg(self.target_surface_points.to(self.csg_model.device).unsqueeze(0)).squeeze(0)
 
-		# Apply union on distances of original shape and reconstruction
-		combined_sdf = add_sdf(self.distances, csg_distances, None).squeeze(0)
+		# Color overlapping points purple and target points outside of the CSG reconstruction blue
+		target_colors = torch.zeros(self.target_surface_points.size())
+		target_colors[csg_distances < 0, 0] = 1
+		target_colors[:,2] = 1
 
-		# Convert to numpy again
-		csg_distances = csg_distances.cpu().numpy()
-		combined_sdf = combined_sdf.cpu().numpy()
+		# Color all reconstruction points red
+		recon_colors = torch.zeros(self.recon_surface_points.size())
+		recon_colors[:,0] = 1
 
-		# Remove exterior points
-		internal_points = self.points[combined_sdf <= 0, :]
-		internal_distances = self.distances[combined_sdf <= 0]
-		csg_distances = csg_distances[combined_sdf <= 0]
+		# Combine target and reconstruction points
+		all_points = torch.cat((self.target_surface_points, self.recon_surface_points), dim=0)
+		all_colors = np.concatenate((target_colors, recon_colors), axis=0)
 
-		# Original shape is red, reconstruction is blue, and the intersection is purple
-		colors = torch.zeros(internal_points.size())
-		colors[internal_distances < 0, 0] = 1
-		colors[csg_distances < 0, 2] = 1
-
-		cloud = pyrender.Mesh.from_points(internal_points.cpu().numpy(), colors=colors.cpu().numpy())
+		cloud = pyrender.Mesh.from_points(all_points.cpu().numpy(), colors=all_colors)
 		self.mesh_node.mesh = cloud
 
 
-	def view_mesh(self, mesh):
+	def view_mesh(self, surface_points):
 		# Sample reconstructed CSG model
-		surface_points = sample_points_mesh_surface(mesh, self.num_view_points)
 		colors = np.array([[0, 0, 255]]).repeat(self.num_view_points, axis=0)
 		cloud = pyrender.Mesh.from_points(surface_points.squeeze(0).cpu().numpy(), colors=colors)
 		self.mesh_node.mesh = cloud
@@ -390,9 +385,8 @@ class SdfModelViewer(_SdfViewer):
 
 	def load_file(self, samples_file):
 		self.target_mesh, self.recon_mesh, self.csg_model = self.get_mesh_and_csg_model(samples_file)
-		points, distances = sample_sdf_from_mesh_unit_sphere(self.target_mesh, self.num_view_points)
-		samples = torch.cat((points, distances.unsqueeze(-1)), dim=-1).to(self.csg_model.device)
-		self.load_samples(samples)
+		self.target_surface_points = sample_points_mesh_surface(self.target_mesh, self.num_view_points)
+		self.recon_surface_points = sample_points_mesh_surface(self.recon_mesh, self.num_view_points)
 
 
 	def view_prev(self):
