@@ -21,6 +21,7 @@ from utilities.file_loader import FileLoader
 from utilities.data_augmentation import RotationAxis
 from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface, sample_csg_surface
 from utilities.accuracy_metrics import compute_chamfer_distance
+from utilities.csg_to_mesh import csg_to_mesh
 
 
 # Parse commandline arguments
@@ -31,7 +32,7 @@ def options():
 	parser.add_argument('--input_file', type=str, required=True, help='Model file to reconstruct.')
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing validation accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
-	parser.add_argument('--num_view_points', type=int, default=100000, help='Number of points to visualize the output.')
+	parser.add_argument('--num_view_points', type=int, default=10000, help='Number of points to visualize the output.')
 	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape.')
 	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud.')
 	parser.add_argument('--device', type=str, default='', help='Select preferred inference device')
@@ -105,20 +106,14 @@ def load_mesh_and_samples(input_file, args):
 	return (mesh, input_samples.unsqueeze(0).to(args.device))
 
 
+# TODO: Add support for iterative generation
 def run_model(model, input_samples, args):
 	with torch.no_grad():
 		# Initialize SDF CSG model
 		csg_model = CSGModel(args.device)
 
-		# Randomly sample initial reconstruction surface to generate input
-		initial_input_samples = csg_model.gen_csg_samples(1, args.num_input_points, args.surface_uniform_ratio, args.sample_dist)
-
-		if initial_input_samples is not None:
-			(initial_input_points, initial_input_distances) = initial_input_samples
-			initial_input_samples = torch.cat((initial_input_points, initial_input_distances.unsqueeze(2)), dim=-1)
-
 		# Predict next primitive
-		output_list = model(input_samples, initial_input_samples)
+		output_list = model(input_samples, None)
 
 		# Add primitives to CSG model
 		for output in output_list:
@@ -160,7 +155,7 @@ def print_csg_commands(csg_model):
 		count += 1
 
 
-def print_recon_loss(input_samples, csg_model, args):
+def print_recon_loss(input_samples, csg_model):
 	input_points = input_samples[:,:,:3]
 	input_sdf = input_samples[:,:,3]
 
@@ -171,27 +166,28 @@ def print_recon_loss(input_samples, csg_model, args):
 	print(recon_loss.forward(input_sdf, csg_sdf))
 
 
-def print_chamfer_dist(mesh, csg_model, args):
-	target_points = sample_points_mesh_surface(mesh, args.num_acc_points).unsqueeze(0).to(args.device)
-	recon_points = sample_csg_surface(csg_model, args.recon_resolution, args.num_acc_points).to(args.device)
+def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
+	target_points = sample_points_mesh_surface(target_mesh, num_acc_points).unsqueeze(0).to(device)
+	recon_points = sample_points_mesh_surface(recon_mesh, num_acc_points).unsqueeze(0).to(device)
 	accuracy = compute_chamfer_distance(target_points, recon_points)
 	print('Chamfer Distance:')
 	print(accuracy)
 
 
 def construct_csg_model(model, input_file, args):
-	mesh, input_samples = load_mesh_and_samples(input_file, args)
+	target_mesh, input_samples = load_mesh_and_samples(input_file, args)
 	csg_model = run_model(model, input_samples, args)
+	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
 	# Pretty print csg commands
 	print_csg_commands(csg_model)
 	# Print reconstruction loss
-	print_recon_loss(input_samples, csg_model, args)
+	print_recon_loss(input_samples, csg_model)
 	# Print reconstruction accuracy
-	print_chamfer_dist(mesh, csg_model, args)
+	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, args.device)
 	print('\n')
 
-	return (mesh, csg_model)
+	return (target_mesh, recon_mesh, csg_model)
 
 
 def main():

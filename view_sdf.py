@@ -12,6 +12,7 @@ from utilities.csg_to_mesh import prompt_and_export_to_mesh
 from utilities.file_loader import FileLoader
 from utilities.sampler_utils import sample_sdf_from_mesh_unit_sphere
 from utilities.file_utils import MESH_FILE_TYPES
+from utilities.sampler_utils import sample_points_mesh_surface
 
 import pyrender
 
@@ -342,7 +343,7 @@ class SdfModelViewer(_SdfViewer):
 	def update_mesh_node(self):
 		match self.view_mode:
 			case self.ORIGINAL_VIEW:
-				super(SdfModelViewer, self).update_mesh_node()
+				self.view_mesh(self.target_mesh)
 				return
 
 			case self.COMBINED_VIEW:
@@ -350,7 +351,7 @@ class SdfModelViewer(_SdfViewer):
 				return
 
 			case self.RECON_VIEW:
-				self.view_reconstruction()
+				self.view_mesh(self.recon_mesh)
 				return
 
 
@@ -379,36 +380,17 @@ class SdfModelViewer(_SdfViewer):
 		self.mesh_node.mesh = cloud
 
 
-	def view_reconstruction(self):
-		csg_view_points = self.num_view_points
-
-		if csg_view_points < 0:
-			csg_view_points = self.points.shape[0]
-
+	def view_mesh(self, mesh):
 		# Sample reconstructed CSG model
-		(csg_points, csg_distances) = self.csg_model.gen_csg_samples(1, csg_view_points)
-
-		# Convert to numpy
-		csg_points = csg_points.squeeze(0)
-		csg_distances = csg_distances.squeeze(0)
-
-		# Remove exterior points
-		if not self.show_exterior_points:
-			csg_points = csg_points[csg_distances <= 0, :]
-			csg_distances = csg_distances[csg_distances <= 0]
-
-		# Internal points are blue and external points are red
-		colors = torch.zeros(csg_points.size())
-		colors[csg_distances < 0, 2] = 1
-		colors[csg_distances > 0, 0] = 1
-
-		cloud = pyrender.Mesh.from_points(csg_points.cpu().numpy(), colors=colors)
+		surface_points = sample_points_mesh_surface(mesh, self.num_view_points)
+		colors = np.array([[0, 0, 255]]).repeat(self.num_view_points, axis=0)
+		cloud = pyrender.Mesh.from_points(surface_points.squeeze(0).cpu().numpy(), colors=colors)
 		self.mesh_node.mesh = cloud
 
 
 	def load_file(self, samples_file):
-		self.mesh, self.csg_model = self.get_mesh_and_csg_model(samples_file)
-		points, distances = sample_sdf_from_mesh_unit_sphere(self.mesh, self.num_view_points)
+		self.target_mesh, self.recon_mesh, self.csg_model = self.get_mesh_and_csg_model(samples_file)
+		points, distances = sample_sdf_from_mesh_unit_sphere(self.target_mesh, self.num_view_points)
 		samples = torch.cat((points, distances.unsqueeze(-1)), dim=-1).to(self.csg_model.device)
 		self.load_samples(samples)
 
