@@ -154,7 +154,7 @@ class _SdfViewer(pyrender.Viewer):
 		self.view_width = view_width
 		self.view_height = view_height
 
-		scene = pyrender.Scene()
+		scene = pyrender.Scene(ambient_light=np.array([50,50,50]))
 		scene.add_node(self.mesh_node)
 
 		super(_SdfViewer, self).__init__(
@@ -379,7 +379,8 @@ class SdfModelViewer(_SdfViewer):
 	def update_point_cloud(self):
 		match self.view_mode:
 			case self.ORIGINAL_VIEW:
-				self.view_point_cloud(self.target_surface_points)
+				color = np.array([0, 0, 255])
+				self.view_point_cloud(self.target_surface_points, color)
 				return
 
 			case self.COMBINED_VIEW:
@@ -387,21 +388,24 @@ class SdfModelViewer(_SdfViewer):
 				return
 
 			case self.RECON_VIEW:
-				self.view_point_cloud(self.recon_surface_points)
+				color = np.array([255, 0, 0])
+				self.view_point_cloud(self.recon_surface_points, color)
 				return
 
 
 	def update_mesh(self):
 		match self.view_mode:
 			case self.ORIGINAL_VIEW:
-				self.mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh)
+				material = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([0,0,255]))
+				self.mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh, material=material)
 				return
 
 			case self.COMBINED_VIEW:
 				return
 
 			case self.RECON_VIEW:
-				self.mesh_node.mesh = pyrender.Mesh.from_trimesh(self.recon_mesh)
+				material = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([255,0,0]))
+				self.mesh_node.mesh = pyrender.Mesh.from_trimesh(self.recon_mesh, material=material)
 				return
 
 
@@ -430,9 +434,11 @@ class SdfModelViewer(_SdfViewer):
 		self.mesh_node.mesh = cloud
 
 
-	def view_point_cloud(self, surface_points):
+	def view_point_cloud(self, surface_points, colors):
+		# Format colors array
+		colors = np.expand_dims(colors, axis=0).repeat(surface_points.shape[0], axis=0)
+
 		# Sample reconstructed CSG model
-		colors = np.array([[0, 0, 255]]).repeat(self.num_view_points, axis=0)
 		cloud = pyrender.Mesh.from_points(surface_points.squeeze(0).cpu().numpy(), colors=colors)
 		self.mesh_node.mesh = cloud
 
