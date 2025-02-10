@@ -12,7 +12,7 @@ from utilities.csg_to_mesh import prompt_and_export_to_mesh
 from utilities.file_loader import FileLoader
 from utilities.sampler_utils import sample_sdf_from_mesh_unit_sphere
 from utilities.file_utils import MESH_FILE_TYPES
-from utilities.sampler_utils import sample_points_mesh_surface
+from utilities.sampler_utils import sample_points_mesh_surface, distance_to_mesh_surface
 
 import pyrender
 
@@ -357,16 +357,20 @@ class SdfModelViewer(_SdfViewer):
 
 	def view_combined(self):
 		# Compute distance from target surface points to CSG reconstruction
-		csg_distances = self.csg_model.sample_csg(self.target_surface_points.to(self.csg_model.device).unsqueeze(0)).squeeze(0)
+		target_to_recon_distances = self.csg_model.sample_csg(self.target_surface_points.to(self.csg_model.device).unsqueeze(0)).squeeze(0)
 
 		# Color overlapping points purple and target points outside of the CSG reconstruction blue
 		target_colors = torch.zeros(self.target_surface_points.size())
-		target_colors[csg_distances < 0, 0] = 1
+		target_colors[target_to_recon_distances < 0, 0] = 1
 		target_colors[:,2] = 1
 
-		# Color all reconstruction points red
+		# Compute distance from reconstruction surface points to target mesh
+		recon_to_target_distances = distance_to_mesh_surface(self.target_mesh, self.recon_surface_points)
+
+		# Color overlapping points purple and reconstruction points outside of the target mesh red
 		recon_colors = torch.zeros(self.recon_surface_points.size())
 		recon_colors[:,0] = 1
+		recon_colors[recon_to_target_distances < 0, 2] = 1
 
 		# Combine target and reconstruction points
 		all_points = torch.cat((self.target_surface_points, self.recon_surface_points), dim=0)
@@ -414,7 +418,7 @@ def options():
 	parser.add_argument('--input_file', required=True, type=str, help='Directory or Numpy file of sample points and distance values.')
 	parser.add_argument('--num_view_points', type=int, default=-1, help='Number of points to display. Set to -1 to display all points.')
 	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='View points outside of the object.')
-	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud.')
+	parser.add_argument('--point_size', type=int, default=3, help='Size to render each point of the point cloud.')
 
 	args = parser.parse_args()
 	return args

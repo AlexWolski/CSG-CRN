@@ -33,8 +33,7 @@ def options():
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing validation accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--num_view_points', type=int, default=10000, help='Number of points to visualize the output.')
-	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='Show points outside of the represented shape.')
-	parser.add_argument('--point_size', type=int, default=2, help='Size to render each point of the point cloud.')
+	parser.add_argument('--point_size', type=int, default=3, help='Size to render each point of the point cloud.')
 	parser.add_argument('--device', type=str, default='', help='Select preferred inference device')
 
 	args = parser.parse_args()
@@ -164,6 +163,7 @@ def print_recon_loss(input_samples, csg_model):
 	recon_loss = ReconstructionLoss()
 	print('Reconstruction Loss:')
 	print(recon_loss.forward(input_sdf, csg_sdf))
+	print('')
 
 
 def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
@@ -172,6 +172,7 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 	accuracy = compute_chamfer_distance(target_points, recon_points)
 	print('Chamfer Distance:')
 	print(accuracy)
+	print('')
 
 
 def construct_csg_model(model, input_file, args):
@@ -185,7 +186,6 @@ def construct_csg_model(model, input_file, args):
 	print_recon_loss(input_samples, csg_model)
 	# Print reconstruction accuracy
 	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, args.device)
-	print('\n')
 
 	return (target_mesh, recon_mesh, csg_model)
 
