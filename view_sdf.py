@@ -146,8 +146,7 @@ class _SdfViewer(pyrender.Viewer):
 	RIGHT_KEY = 65363
 	buttons = []
 
-	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, view_width=1000, view_height=1000):
-		self.show_exterior_points = show_exterior_points
+	def __init__(self, window_title, point_size, num_view_points, view_width=1000, view_height=1000):
 		self.num_view_points = num_view_points
 		self.mesh_node = pyrender.Node()
 		self.update_mesh_node()
@@ -178,18 +177,7 @@ class _SdfViewer(pyrender.Viewer):
 
 
 	def update_mesh_node(self):
-		select_points = self.points
-		select_distances = self.distances
-
-		if not self.show_exterior_points:
-			select_points = select_points[self.distances <= 0, :]
-			select_distances = select_distances[self.distances <= 0]
-
-		colors = torch.zeros(select_points.size())
-		colors[select_distances < 0, 2] = 1
-		colors[select_distances > 0, 0] = 1
-		cloud = pyrender.Mesh.from_points(select_points.cpu().numpy(), colors=colors)
-		self.mesh_node.mesh = cloud
+		raise NotImplementedError("Implement method in inheriting class")
 
 
 	def load_samples(self, samples):
@@ -251,7 +239,7 @@ class _SdfViewer(pyrender.Viewer):
 
 
 class SdfFileViewer(_SdfViewer):
-	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file):
+	def __init__(self, window_title, point_size, num_view_points, input_file):
 		self.num_view_points = num_view_points
 		self.file_loader = FileLoader(input_file, ['*.npy'])
 		self.load_file(self.file_loader.get_file())
@@ -259,8 +247,17 @@ class SdfFileViewer(_SdfViewer):
 		super(SdfFileViewer, self).__init__(
 			window_title,
 			point_size,
-			show_exterior_points,
 			num_view_points)
+
+
+	def update_mesh_node(self):
+		select_points = self.points
+		select_distances = self.distances
+		colors = torch.zeros(select_points.size())
+		colors[select_distances < 0, 2] = 1
+		colors[select_distances > 0, 0] = 1
+		cloud = pyrender.Mesh.from_points(select_points.cpu().numpy(), colors=colors)
+		self.mesh_node.mesh = cloud
 
 
 	def load_file(self, samples_file):
@@ -291,7 +288,7 @@ class SdfModelViewer(_SdfViewer):
 	MESH_MODEL = "Mesh Model"
 
 
-	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file, sample_dist, get_mesh_and_csg_model=None):
+	def __init__(self, window_title, point_size, num_view_points, input_file, sample_dist, get_mesh_and_csg_model=None):
 		self.view_mode = self.COMBINED_VIEW
 		self.model_mode = self.POINT_MODEL
 		self.num_view_points = num_view_points
@@ -303,7 +300,6 @@ class SdfModelViewer(_SdfViewer):
 		super(SdfModelViewer, self).__init__(
 			window_title,
 			point_size,
-			show_exterior_points,
 			num_view_points)
 
 		self._init_buttons()
@@ -473,7 +469,6 @@ def options():
 
 	parser.add_argument('--input_file', required=True, type=str, help='Directory or Numpy file of sample points and distance values.')
 	parser.add_argument('--num_view_points', type=int, default=-1, help='Number of points to display. Set to -1 to display all points.')
-	parser.add_argument('--show_exterior_points', default=False, action='store_true', help='View points outside of the object.')
 	parser.add_argument('--point_size', type=int, default=3, help='Size to render each point of the point cloud.')
 
 	args = parser.parse_args()
@@ -485,7 +480,7 @@ def main():
 	print('')
 
 	try:
-		viewer = SdfFileViewer("View SDF", args.point_size, args.show_exterior_points, args.num_view_points, args.input_file)
+		viewer = SdfFileViewer("View SDF", args.point_size, args.num_view_points, args.input_file)
 	except FileNotFoundError as fileError:
 		print(fileError)
 	except Exception:
