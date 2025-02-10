@@ -287,9 +287,13 @@ class SdfModelViewer(_SdfViewer):
 	COMBINED_VIEW = "Combined View"
 	RECON_VIEW = "Reconstruction View"
 
+	POINT_MODEL = "Point Cloud Model"
+	MESH_MODEL = "Mesh Model"
+
 
 	def __init__(self, window_title, point_size, show_exterior_points, num_view_points, input_file, sample_dist, get_mesh_and_csg_model=None):
 		self.view_mode = self.COMBINED_VIEW
+		self.model_mode = self.POINT_MODEL
 		self.num_view_points = num_view_points
 		self.get_mesh_and_csg_model = get_mesh_and_csg_model
 		self.file_loader = FileLoader(input_file, MESH_FILE_TYPES)
@@ -313,21 +317,38 @@ class SdfModelViewer(_SdfViewer):
 		recon_y = padding
 		combined_y = recon_y + height + padding
 		original_y = combined_y + height + padding
+
 		original_button = Button(padding, original_y, width, height, 'View Original', callback=lambda: self.set_view_mode(self.ORIGINAL_VIEW))
 		combined_button = Button(padding, combined_y, width, height, 'View Combined', callback=lambda: self.set_view_mode(self.COMBINED_VIEW))
 		reconstr_button = Button(padding, padding, width, height, 'View Reconstruction', callback=lambda: self.set_view_mode(self.RECON_VIEW))
 
-		# Find default button based on current view mode
+		# Find default view button based on current view mode
 		if self.view_mode is self.ORIGINAL_VIEW:
-			default_button = original_button
+			default_view_button = original_button
 		elif self.view_mode is self.COMBINED_VIEW:
-			default_button = combined_button
+			default_view_button = combined_button
 		elif self.view_mode is self.RECON_VIEW:
-			default_button = reconstr_button
+			default_view_button = reconstr_button
 
-		# Create toggle button array
-		self.add_button(ToggleButtons([original_button, combined_button, reconstr_button], default_button))
+		# Create view button toggle array
+		self.add_button(ToggleButtons([original_button, combined_button, reconstr_button], default_view_button))
 
+		mesh_y = original_y + 120
+		point_y = mesh_y + height + padding
+
+		point_button = Button(padding, point_y, width, height, 'Point Cloud', callback=lambda: self.set_model_mode(self.POINT_MODEL))
+		mesh_button = Button(padding, mesh_y, width, height, 'Mesh', callback=lambda: self.set_model_mode(self.MESH_MODEL))
+
+		# Find default model button based on current model mode
+		if self.model_mode is self.MESH_MODEL:
+			default_model_button = mesh_button
+		elif self.model_mode is self.POINT_MODEL:
+			default_model_button = point_button
+
+		# Create model button toggle array
+		self.add_button(ToggleButtons([mesh_button, point_button], default_model_button))
+
+		# Create export buttons
 		export_x = self.viewport_size[0] - width - padding
 		export_magica_y = padding
 		export_mesh_y = export_magica_y + height + padding
@@ -340,22 +361,51 @@ class SdfModelViewer(_SdfViewer):
 		self.update_mesh_node()
 
 
+	def set_model_mode(self, mode):
+		self.model_mode = mode
+		self.update_mesh_node()
+
+
 	def update_mesh_node(self):
+		match self.model_mode:
+			case self.POINT_MODEL:
+				self.update_point_cloud()
+
+			case self.MESH_MODEL:
+				self.update_mesh()
+				return
+
+
+	def update_point_cloud(self):
 		match self.view_mode:
 			case self.ORIGINAL_VIEW:
-				self.view_mesh(self.target_surface_points)
+				self.view_point_cloud(self.target_surface_points)
 				return
 
 			case self.COMBINED_VIEW:
-				self.view_combined()
+				self.view_combined_point_cloud()
 				return
 
 			case self.RECON_VIEW:
-				self.view_mesh(self.recon_surface_points)
+				self.view_point_cloud(self.recon_surface_points)
 				return
 
 
-	def view_combined(self):
+	def update_mesh(self):
+		match self.view_mode:
+			case self.ORIGINAL_VIEW:
+				self.mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh)
+				return
+
+			case self.COMBINED_VIEW:
+				return
+
+			case self.RECON_VIEW:
+				self.mesh_node.mesh = pyrender.Mesh.from_trimesh(self.recon_mesh)
+				return
+
+
+	def view_combined_point_cloud(self):
 		# Compute distance from target surface points to CSG reconstruction
 		target_to_recon_distances = self.csg_model.sample_csg(self.target_surface_points.to(self.csg_model.device).unsqueeze(0)).squeeze(0)
 
@@ -380,7 +430,7 @@ class SdfModelViewer(_SdfViewer):
 		self.mesh_node.mesh = cloud
 
 
-	def view_mesh(self, surface_points):
+	def view_point_cloud(self, surface_points):
 		# Sample reconstructed CSG model
 		colors = np.array([[0, 0, 255]]).repeat(self.num_view_points, axis=0)
 		cloud = pyrender.Mesh.from_points(surface_points.squeeze(0).cpu().numpy(), colors=colors)
