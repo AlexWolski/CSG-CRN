@@ -146,15 +146,16 @@ class _SdfViewer(pyrender.Viewer):
 	RIGHT_KEY = 65363
 	buttons = []
 
-	def __init__(self, window_title, point_size, num_view_points, view_width=1000, view_height=1000):
+	def __init__(self, mesh_nodes, window_title, point_size, num_view_points, view_width=1000, view_height=1000):
 		self.num_view_points = num_view_points
-		self.mesh_node = pyrender.Node()
 		self.update_mesh_node()
 		self.view_width = view_width
 		self.view_height = view_height
 
 		scene = pyrender.Scene(ambient_light=np.array([50,50,50]))
-		scene.add_node(self.mesh_node)
+
+		for mesh_node in mesh_nodes:
+			scene.add_node(mesh_node)
 
 		super(_SdfViewer, self).__init__(
 			scene,
@@ -243,8 +244,10 @@ class SdfFileViewer(_SdfViewer):
 		self.num_view_points = num_view_points
 		self.file_loader = FileLoader(input_file, ['*.npy'])
 		self.load_file(self.file_loader.get_file())
+		self.point_cloud_node = pyrender.Node()
 
 		super(SdfFileViewer, self).__init__(
+			[self.point_cloud_node],
 			window_title,
 			point_size,
 			num_view_points)
@@ -257,7 +260,7 @@ class SdfFileViewer(_SdfViewer):
 		colors[select_distances < 0, 2] = 1
 		colors[select_distances > 0, 0] = 1
 		cloud = pyrender.Mesh.from_points(select_points.cpu().numpy(), colors=colors)
-		self.mesh_node.mesh = cloud
+		self.point_cloud_node.mesh = cloud
 
 
 	def load_file(self, samples_file):
@@ -297,7 +300,13 @@ class SdfModelViewer(_SdfViewer):
 		self.sample_dist = sample_dist
 		self.load_file(self.file_loader.get_file())
 
+		self.point_cloud_node = pyrender.Node()
+		self.original_mesh_node = pyrender.Node()
+		self.recon_mesh_node = pyrender.Node()
+		mesh_nodes = [self.point_cloud_node, self.original_mesh_node, self.recon_mesh_node]
+
 		super(SdfModelViewer, self).__init__(
+			mesh_nodes,
 			window_title,
 			point_size,
 			num_view_points)
@@ -390,18 +399,24 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def update_mesh(self):
+		blueMaterial = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([0,0,255]))
+		redMaterial = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([255,0,0]))
+		self.original_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh, material=blueMaterial)
+		self.recon_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.recon_mesh, material=redMaterial)
+
 		match self.view_mode:
 			case self.ORIGINAL_VIEW:
-				material = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([0,0,255]))
-				self.mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh, material=material)
+				self.original_mesh_node.mesh.is_visible = True
+				self.recon_mesh_node.mesh.is_visible = False
 				return
 
 			case self.COMBINED_VIEW:
-				return
+				self.original_mesh_node.mesh.is_visible = True
+				self.recon_mesh_node.mesh.is_visible = True
 
 			case self.RECON_VIEW:
-				material = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([255,0,0]))
-				self.mesh_node.mesh = pyrender.Mesh.from_trimesh(self.recon_mesh, material=material)
+				self.original_mesh_node.mesh.is_visible = False
+				self.recon_mesh_node.mesh.is_visible = True
 				return
 
 
@@ -427,7 +442,8 @@ class SdfModelViewer(_SdfViewer):
 		all_colors = np.concatenate((target_colors, recon_colors), axis=0)
 
 		cloud = pyrender.Mesh.from_points(all_points.cpu().numpy(), colors=all_colors)
-		self.mesh_node.mesh = cloud
+		self.original_mesh_node.mesh = cloud
+		self.recon_mesh_node.mesh = cloud
 
 
 	def view_point_cloud(self, surface_points, colors):
@@ -436,7 +452,8 @@ class SdfModelViewer(_SdfViewer):
 
 		# Sample reconstructed CSG model
 		cloud = pyrender.Mesh.from_points(surface_points.squeeze(0).cpu().numpy(), colors=colors)
-		self.mesh_node.mesh = cloud
+		self.original_mesh_node.mesh = cloud
+		self.recon_mesh_node.mesh = cloud
 
 
 	def load_file(self, samples_file):
