@@ -399,25 +399,26 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def update_mesh(self):
-		blueMaterial = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([0,0,255]))
-		redMaterial = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([255,0,0]))
-		self.original_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh, material=blueMaterial)
-		self.recon_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.recon_mesh, material=redMaterial)
+		display_original = True
+		display_recon = True
+		alpha = 255
 
 		match self.view_mode:
 			case self.ORIGINAL_VIEW:
-				self.original_mesh_node.mesh.is_visible = True
-				self.recon_mesh_node.mesh.is_visible = False
-				return
+				display_recon = False
 
 			case self.COMBINED_VIEW:
-				self.original_mesh_node.mesh.is_visible = True
-				self.recon_mesh_node.mesh.is_visible = True
+				alpha = 0.5
 
 			case self.RECON_VIEW:
-				self.original_mesh_node.mesh.is_visible = False
-				self.recon_mesh_node.mesh.is_visible = True
-				return
+				display_original = False
+
+		blueMaterial = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([0,0,255, alpha]), alphaMode="BLEND")
+		redMaterial = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([255,0,0, alpha]), alphaMode="BLEND")
+		self.original_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh, material=blueMaterial)
+		self.recon_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.recon_mesh, material=redMaterial)
+		self.original_mesh_node.mesh.is_visible = display_original
+		self.recon_mesh_node.mesh.is_visible = display_recon
 
 
 	def view_combined_point_cloud(self):
