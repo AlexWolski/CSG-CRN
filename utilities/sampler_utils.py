@@ -203,7 +203,7 @@ def sample_from_mesh(mesh, num_uniform_samples, num_surface_samples, num_near_su
 
 def sample_csg_surface(csg_model, resolution, num_sdf_samples):
 	"""
-	Uniformly sample points on the surface of an implicit CSG model.
+	Uniformly sample points on the surface of a batch of implicit CSG model.
 	Uses the marching cubes algorithm to extract an isosurface mesh, then uniformly samples the mesh faces.
 
 	Parameters
@@ -218,13 +218,21 @@ def sample_csg_surface(csg_model, resolution, num_sdf_samples):
 	Returns
 	-------
 	torch.Tensor
-		Tensor of size (N, 3) where N=`num_sdf_samples`.
+		Tensor of size (B, N, 3) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
 		Each point in the tensor is approximately on the surface of the given CSG model.
 
 	"""
+	# Extract meshes from CSG models
 	mesh_list = csg_to_mesh(csg_model, resolution)
-	# TODO: Convert to batch operation
-	return sample_points_mesh_surface(mesh_list[0], num_sdf_samples).unsqueeze(0)
+	surface_points_list = []
+
+	# Sample point clouds from meshes
+	for mesh in mesh_list:
+		surface_points = sample_points_mesh_surface(mesh, num_sdf_samples).to(csg_model.device)
+		surface_points_list.append(surface_points)
+
+	# Compute average Chamfer distance
+	return torch.stack(surface_points_list)
 
 
 def sample_sdf_near_csg_surface(csg_model, resolution, num_sdf_samples, sample_dist):

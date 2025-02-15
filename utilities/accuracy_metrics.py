@@ -1,7 +1,7 @@
 import torch
 from chamferdist import ChamferDistance
 from utilities.csg_to_mesh import csg_to_mesh
-from utilities.sampler_utils import sample_points_mesh_surface
+from utilities.sampler_utils import sample_points_mesh_surface, sample_csg_surface
 
 
 def compute_chamfer_distance(target_surface_samples, recon_surface_samples):
@@ -47,15 +47,7 @@ def compute_chamfer_distance_csg(target_surface_samples, csg_model, num_acc_poin
 		The average bidirectional Chamfer Distance accuracy metric between all batches of target and reconstruction shapes.
 
 	"""
-	# Extract meshes from CSG models
-	recon_mesh_list = csg_to_mesh(csg_model, recon_resolution)
-	recon_points_list = []
-
-	# Sample point clouds from meshes
-	for recon_mesh in recon_mesh_list:
-		recon_points = sample_points_mesh_surface(recon_mesh, num_acc_points).to(csg_model.device)
-		recon_points_list.append(recon_points)
-
+	# Sample CSG surface
+	recon_points_batch = sample_csg_surface(csg_model, recon_resolution, num_acc_points)
 	# Compute average Chamfer distance
-	recon_points_batch = torch.stack(recon_points_list)
 	return compute_chamfer_distance(target_surface_samples, recon_points_batch)

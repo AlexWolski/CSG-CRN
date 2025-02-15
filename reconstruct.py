@@ -19,7 +19,7 @@ from view_sdf import SdfModelViewer
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
 from utilities.file_loader import FileLoader
 from utilities.data_augmentation import RotationAxis
-from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface, sample_csg_surface
+from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface
 from utilities.accuracy_metrics import compute_chamfer_distance
 from utilities.csg_to_mesh import csg_to_mesh
 
