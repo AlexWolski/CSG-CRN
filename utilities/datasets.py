@@ -78,7 +78,7 @@ class PointDataset(Dataset):
 
 
 	def __load_surface_samples(self, file_rel_path):
-		return self.__load_point_samples(SURFACE_FOLDER, file_rel_path, self.args.num_acc_points)
+		return self.__load_point_samples(SURFACE_FOLDER, file_rel_path, self.args.num_val_acc_points)
 
 
 	# Load a specified number of point samples from a numpy file

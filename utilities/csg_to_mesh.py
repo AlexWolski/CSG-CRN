@@ -80,7 +80,7 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 
 		# Quantize computation batch size to be divisible by grid layer size
 		layers_per_batch = resolution // num_comp_batches
-
+		layers_per_batch = max(layers_per_batch, 1)
 		distances_list = []
 
 		# Sample SDF
@@ -96,12 +96,14 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 			points_slice = torch.stack((x_slice, y_slice, z_slice), dim=-1)
 			# Reshape query points to (1, N, 3) where N=num_points
 			points_slice = points_slice.reshape(1,-1,3)
+			# Expand for required number of batches
+			points_slice = points_slice.expand(csg_batch_size, -1, 3)
 			# Sample SDF
 			distances_list.append(csg_model.sample_csg(points_slice))
 
 		# Reshape into grid
 		distances = torch.cat(distances_list, dim=-1)
-		distances = distances.reshape(1, resolution, resolution, resolution)
+		distances = distances.reshape(csg_batch_size, resolution, resolution, resolution)
 
 		del x, y ,z, distances_list
 

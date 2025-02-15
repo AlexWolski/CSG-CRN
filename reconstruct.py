@@ -30,7 +30,7 @@ def options():
 
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file.')
 	parser.add_argument('--input_file', type=str, required=True, help='Model file to reconstruct.')
-	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing validation accuracy.')
+	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--num_view_points', type=int, default=10000, help='Number of points to visualize the output.')
 	parser.add_argument('--point_size', type=int, default=3, help='Size to render each point of the point cloud.')
