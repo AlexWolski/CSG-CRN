@@ -3,6 +3,7 @@ import numpy
 import point_cloud_utils as pcu
 import trimesh
 import torch
+import math
 from torch.distributions.uniform import Uniform
 from utilities.csg_to_mesh import csg_to_mesh
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
@@ -271,6 +272,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 	return _sample_sdf_near_csg_surface_helper(csg_model, num_sdf_samples, sample_dist, initial_sample_dist, sample_points, sample_distances)
 
 
+# TODO: Convert this to non-recursive so that it uses less memory and we can create more random points
 def _sample_sdf_near_csg_surface_helper(csg_model, num_sdf_samples, target_sample_dist, current_sample_dist, sample_points, sample_distances):
 	"""
 	Recursive helper function to generate SDF samples within a specified distance of the implicit surfaces of a batch of CSG models.
@@ -297,29 +299,34 @@ def _sample_sdf_near_csg_surface_helper(csg_model, num_sdf_samples, target_sampl
 		SDF sample points and distances respectively.
 
 	"""
-	# Base case is when the sample distance becomes sufficiently small
-	if current_sample_dist <= target_sample_dist:
-		return sample_points[:,:num_sdf_samples]
+	while True:
+		# Base case is when the sample distance becomes sufficiently small
+		if current_sample_dist <= target_sample_dist:
+			return sample_points[:,:num_sdf_samples]
 
-	# Reduce the sample distance
-	new_sample_dist = current_sample_dist / 5
-	(select_points, select_distances) = _select_samples_in_distance(csg_model, sample_points, sample_distances, new_sample_dist)
+		# Reduce the sample distance
+		current_sample_dist = max(target_sample_dist, current_sample_dist/5)
+		(select_points, select_distances) = _select_samples_in_distance(csg_model, sample_points, sample_distances, current_sample_dist)
 
-	# Generate new samples
-	while select_distances.size(dim=1) < num_sdf_samples:
-		# Generate new samples points by adding Gaussian noise
-		new_points = select_points.repeat(1, 10, 1)
-		gaussian_noise = torch.randn(new_points.size(), dtype=select_distances.dtype, device=csg_model.device) * new_sample_dist
-		new_points += gaussian_noise
-		new_distances = csg_model.sample_csg(new_points)
+		# Generate new samples
+		while select_distances.size(dim=1) < num_sdf_samples:
+			SAMPLE_MULTIPLE = 10
+			num_select_points = select_points.size(dim=1)
+			num_to_gen = (num_sdf_samples * SAMPLE_MULTIPLE) - num_select_points
+			multiple = math.ceil(num_to_gen / num_select_points)
+			# Generate new samples points by adding Gaussian noise
+			new_points = select_points.repeat(1, multiple, 1)
+			gaussian_noise = torch.randn(new_points.size(), dtype=select_distances.dtype, device=csg_model.device) * current_sample_dist
+			new_points += gaussian_noise
+			new_distances = csg_model.sample_csg(new_points)
 
-		# Select generated samples within the new sample distance
-		(new_select_points, new_select_distances) = _select_samples_in_distance(csg_model, new_points, new_distances, new_sample_dist)
-		select_points = torch.cat((select_points, new_select_points), dim=1)
-		select_distances = torch.cat((select_distances, new_select_distances), dim=1)
+			# Select generated samples within the new sample distance
+			(new_select_points, new_select_distances) = _select_samples_in_distance(csg_model, new_points, new_distances, current_sample_dist)
+			select_points = torch.cat((select_points, new_select_points), dim=1)
+			select_distances = torch.cat((select_distances, new_select_distances), dim=1)
 
-	# Repeat procedure with restricted sample distance
-	return _sample_sdf_near_csg_surface_helper(csg_model, num_sdf_samples, target_sample_dist, new_sample_dist, select_points, select_distances)
+		sample_points = select_points
+		sample_distances = select_distances
 
 
 def _select_samples_in_distance(csg_model, batch_sample_points, batch_sample_distances, min_dist):
