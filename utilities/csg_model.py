@@ -90,6 +90,7 @@ class CSGModel():
 	def __init__(self, device=torch.device('cpu')):
 		# List of all primitives and operations to build CSG model
 		self.csg_commands = []
+		self.num_commands = 0
 		self.batch_size = 0
 		self.device = device
 
@@ -130,6 +131,41 @@ class CSGModel():
 
 		self._validate_batch_size(command)
 		self.csg_commands.append(command)
+		self.num_commands += 1
+
+
+	# Add batches of commands form another other CSG model to this model
+	def add_batches_from_csg_model(self, other_csg_model):
+		if self.device != other_csg_model.device:
+			raise Exception(f'CSG Model devices do not match. Expected {self.device} but found {other_csg_model.device}')
+
+		if self.csg_commands and self.num_commands != other_csg_model.num_commands:
+			raise Exception(f'CSG Model command lengths do not match. Expected {self.num_commands} but found {other_csg_model.num_commands}')
+
+		# Copy commands if this model doesn't have any
+		if not self.csg_commands:
+			self.csg_commands = other_csg_model.csg_commands
+			self.batch_size = other_csg_model.batch_size
+			self.num_commands = other_csg_model.num_commands
+			return
+
+		# Combine CSG commands
+		for command_index in range(self.num_commands):
+			other_command_list = other_csg_model.csg_commands[command_index]
+
+			for command_key, other_command in other_command_list.items():
+				command = self.csg_commands[command_index][command_key]
+
+				# Handle case where one or both of the commands are None
+				if command == None and other_command == None:
+					self.csg_commands[command_index][command_key] = None
+				elif command == None or other_command == None:
+					raise Exception(f'Cannot combine command {command_key} with \'None\'')
+				# Concatenate commands if neither are None
+				else:
+					self.csg_commands[command_index][command_key] = torch.cat((command, other_command))
+
+		self.batch_size += other_csg_model.batch_size
 
 
 	# Compute blended SDF for all primitive types given primitive weights and a transform
