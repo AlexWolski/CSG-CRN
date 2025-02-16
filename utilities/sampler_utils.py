@@ -5,9 +5,10 @@ import trimesh
 import torch
 from torch.distributions.uniform import Uniform
 from utilities.csg_to_mesh import csg_to_mesh
+from utilities.csg_model import MIN_BOUND, MAX_BOUND
 
 
-def sample_uniform_points_cube(num_points, side_length):
+def sample_uniform_points_cube(num_points, side_length, batch_size=None):
 	"""
 	Uniformly sample points from a cube with given side length.
 
@@ -17,6 +18,8 @@ def sample_uniform_points_cube(num_points, side_length):
 		Number of point samples to generate.
 	side_length : float
 		Side length of the cube to sample points from.
+	batch_size : int
+		Number of batches to generate
 
 	Returns
 	-------
@@ -27,10 +30,15 @@ def sample_uniform_points_cube(num_points, side_length):
 	"""
 	low = torch.tensor(-side_length/2, dtype=torch.float32)
 	high = torch.tensor(side_length/2, dtype=torch.float32)
-	return Uniform(low, high).sample((num_points, 3)).detach()
+	uniform_sampler = Uniform(low, high)
+
+	if batch_size:
+		return uniform_sampler.sample((batch_size, num_points, 3)).detach()
+	else:
+		return uniform_sampler.sample((num_points, 3)).detach()
 
 
-def sample_uniform_points_sphere(num_points, radius=1):
+def sample_uniform_points_sphere(num_points, radius=1, batch_size=None):
 	"""
 	Uniformly sample points from a sphere with given radius.
 
@@ -53,7 +61,7 @@ def sample_uniform_points_sphere(num_points, radius=1):
 
 	while num_sphere_points < num_points:
 		# Generate points uniformly distributed in a cube circumscribed on the unit sphere
-		unit_cube_points = sample_uniform_points_cube(num_points*2, radius*2)
+		unit_cube_points = sample_uniform_points_cube(num_points*2, radius*2, batch_size)
 		# Select points encompassed by the unit sphere
 		square_dist = unit_cube_points.square().sum(dim=-1)
 		unit_sphere_points = unit_cube_points[square_dist <= 1]
@@ -212,14 +220,14 @@ def sample_csg_surface(csg_model, resolution, num_sdf_samples):
 		The CSG model to sample.
 	resolution : int
 		Voxel resolution to use for the marching cubes algorithm.
-	num_sdf_samples: int
+	num_sdf_samples : int
 		Number of surface samples to generate.
 
 	Returns
 	-------
 	torch.Tensor
 		Tensor of size (B, N, 3) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
-		Each point in the tensor is approximately on the surface of the given CSG model.
+		Each point in the tensor is on the surface of the given CSG model.
 
 	"""
 	# Extract meshes from CSG models
@@ -235,20 +243,130 @@ def sample_csg_surface(csg_model, resolution, num_sdf_samples):
 	return torch.stack(surface_points_list)
 
 
-def sample_sdf_near_csg_surface(csg_model, resolution, num_sdf_samples, sample_dist):
+def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 	"""
-	Generate SDF samples of a CSG within a specified distance the isosurface.
+	Generate SDF samples within a specified distance of the implicit surfaces of a batch of CSG models.
+	Uses a recursive heuristic method of selecting samples closer to the implicit surface and adding Gaussian noise to generate new samples.
 
 	Parameters
 	----------
 	csg_model : utilities.csg_model.CSGModel
 		The CSG model to sample.
-	resolution : int
-		Voxel resolution to use for the marching cubes algorithm.
-	num_sdf_samples: int
+	num_sdf_samples:  int
 		Number of surface samples to generate.
+	sample_dist : float
+		Maximum distance of each SDF sample to the surface of the corresponding CSG model surface.
+
+	Returns
+	-------
+	torch.Tensor
+		Tensors of size (B, N, 3) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
+		Each point in the tensor is within a distance `sample_dist` of the corresponding CSG model isosurface.
 
 	"""
-	mesh_list = csg_to_mesh(csg_model, resolution)
-	# TODO: Convert to batch operation
-	return sample_sdf_near_mesh_surface(mesh_list[0], num_sdf_samples, sample_dist).unsqueeze(0)
+	side_length = MAX_BOUND - MIN_BOUND
+	sample_points = sample_uniform_points_cube(num_sdf_samples, side_length, csg_model.batch_size).to(csg_model.device)
+	sample_distances = csg_model.sample_csg(sample_points)
+	initial_sample_dist = torch.mean(sample_distances).item()
+	return _sample_sdf_near_csg_surface_helper(csg_model, num_sdf_samples, sample_dist, initial_sample_dist, sample_points, sample_distances)
+
+
+def _sample_sdf_near_csg_surface_helper(csg_model, num_sdf_samples, target_sample_dist, current_sample_dist, sample_points, sample_distances):
+	"""
+	Recursive helper function to generate SDF samples within a specified distance of the implicit surfaces of a batch of CSG models.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	num_sdf_samples : int
+		Number of surface samples to generate.
+	target_sample_dist : float
+		Required sample distance for SDF samples.
+	current_sample_dist : float
+		Intermediate sample distance between `target_sample_dist` and `current_sample_dist`.
+	sample_points : torch.Tensor
+		Tensor of size (B, N, 3) containing N point samples with a maximum sample distance of `current_sample_dist`.
+	sample_distances : torch.Tensor
+		Tensor of size (B, N, 1) containing distances between point in `sample_points` and the corresponding CSG isosurface.
+
+	Returns
+	-------
+	Tuple[torch.Tensor, torch.Tensor]
+		Two float tensors of size (B, N, 3) and (B, N, 1) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
+		SDF sample points and distances respectively.
+
+	"""
+	# Base case is when the sample distance becomes sufficiently small
+	if current_sample_dist <= target_sample_dist:
+		return sample_points
+
+	# Reduce the sample distance
+	new_sample_dist = current_sample_dist / 10
+	(select_points, select_distances) = _select_samples_in_distance(csg_model, sample_points, sample_distances, new_sample_dist)
+
+	# Generate new samples
+	while select_distances.size(dim=1) < num_sdf_samples:
+		# Generate 100 points for each point in select_points and add Gaussian noise
+		new_points = select_points.repeat(1,100,1)
+		gaussian_noise = torch.randn(new_points.size(), dtype=select_distances.dtype, device=csg_model.device) * new_sample_dist
+		new_points += gaussian_noise
+		new_distances = csg_model.sample_csg(new_points)
+
+		# Select generated samples within the new sample distance
+		(new_select_points, new_select_distances) = _select_samples_in_distance(csg_model, new_points, new_distances, new_sample_dist)
+		select_points = torch.cat((select_points, new_select_points), dim=1)
+		select_distances = torch.cat((select_distances, new_select_distances), dim=1)
+
+	select_points = select_points[:num_sdf_samples]
+	select_distances = select_distances[:num_sdf_samples]
+
+	# Repeat procedure with restricted sample distance
+	return _sample_sdf_near_csg_surface_helper(csg_model, num_sdf_samples, target_sample_dist, new_sample_dist, select_points, select_distances)
+
+
+def _select_samples_in_distance(csg_model, batch_sample_points, batch_sample_distances, min_dist):
+	"""
+	Helper function to select SDF samples within a specified distance threshold.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	batch_sample_points : torch.Tensor
+		Tensor of size (B, N, 3) containing SDF sample points.
+	batch_sample_distances : torch.Tensor
+		Tensor of size (B, N, 1) containing SDf sample distances.
+	min_dist : float
+		Maximum allowed distance of SDF samples.
+
+	Returns
+	-------
+	Tuple[torch.Tensor, torch.Tensor]
+		Two float tensors of size (B, N, 3) and (B, N, 1) where B=`csg_model`.batch_size
+		and N is the number of SDF samples that have a distances less than or equal to `min_dist`.
+
+	"""
+	# Select SDF samples within the specified distance
+	batch_select_indices = batch_sample_distances < min_dist
+
+	# Find batch with the minimum number of select samples
+	num_select_samples = torch.sum(batch_select_indices, dim=1)
+	min_select_samples = torch.min(num_select_samples).item()
+
+	# Combine select points and distances into tensor with min_select_samples samples
+	select_points_list = []
+	select_distances_list = []
+
+	for batch in range(csg_model.batch_size):
+		select_indices = batch_select_indices[batch]
+		sample_points = batch_sample_points[batch]
+		sample_distances = batch_sample_distances[batch]
+		select_points = sample_points[select_indices]
+		select_distances = sample_distances[select_indices]
+		select_points_list.append(select_points[:min_select_samples])
+		select_distances_list.append(select_distances[:min_select_samples])
+
+	select_points = torch.stack(select_points_list)
+	select_distances = torch.stack(select_distances_list)
+	return (select_points, select_distances)

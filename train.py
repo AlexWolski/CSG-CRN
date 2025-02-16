@@ -22,7 +22,7 @@ from utilities.datasets import PointDataset
 from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.early_stopping import EarlyStopping
 from utilities.training_logger import TrainingLogger
-from utilities.accuracy_metrics import compute_chamfer_distance_csg
+from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
 
 
 # Weights for regularization loss
@@ -140,8 +140,8 @@ def get_model_parser():
 	# Model settings
 	model_group.add_argument('--num_input_points', type=int, default=1024, help='Number of points to use from each input sample (Memory requirement scales linearly with num_input_points)')
 	model_group.add_argument('--num_loss_points', type=int, default=2048, help='Number of points to use when computing the loss')
-	model_group.add_argument('--num_val_acc_points', type=int, default=1024, help='Number of points to use when computing validation accuracy')
-	model_group.add_argument('--val_recon_resolution', type=int, default=64, help='Voxel resolution to use for the marching cubes algorithm when computing validation accuracy.')
+	model_group.add_argument('--num_val_acc_points', type=int, default=1024, help='Number of points to use when computing validation metrics')
+	model_group.add_argument('--val_sample_dist', type=float, default=0.01, help='Maximum distance tolerance of approximate surface samples when computing validation metrics.')
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
 	model_group.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
@@ -287,7 +287,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 
 def validate(model, loss_func, val_loader, args, device):
 	total_val_loss = 0
-	total_val_acc = 0
+	total_chamfer_dist = 0
 
 	with torch.no_grad():
 		for data_sample in val_loader:
@@ -301,11 +301,11 @@ def validate(model, loss_func, val_loader, args, device):
 
 			(csg_model, batch_loss) = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
 			total_val_loss += batch_loss.item()
-			total_val_acc += compute_chamfer_distance_csg(target_surface_samples, csg_model, args.num_val_acc_points, args.val_recon_resolution)
+			total_chamfer_dist += compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
 
 	total_val_loss /= val_loader.__len__()
-	total_val_acc /= val_loader.__len__()
-	return (total_val_loss, total_val_acc)
+	total_chamfer_dist /= val_loader.__len__()
+	return (total_val_loss, total_chamfer_dist)
 
 
 # Save the model and settings to file
@@ -337,21 +337,21 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
-		(val_loss, val_acc) = validate(model, loss_func, val_loader, args, device)
+		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, args, device)
 		learning_rate = optimizer.param_groups[0]['lr']
 		scheduler.step(val_loss)
 
-		training_logger.add_result(epoch, train_loss, val_loss, val_acc, learning_rate)
+		training_logger.add_result(epoch, train_loss, val_loss, chamfer_dist, learning_rate)
 		early_stopping(val_loss)
 
 		# Print and save epoch training results
-		print(f"Training Loss:       {train_loss}")
-		print(f"Validation Loss:     {val_loss}")
-		print(f"Best Val Loss:       {scheduler.best}")
-		print(f"Validation Accuracy: {val_acc}")
-		print(f"Learning Rate:       {learning_rate}")
-		print(f"LR Patience:         {scheduler.num_bad_epochs}/{scheduler.patience}")
-		print(f"Early Stop:          {early_stopping.counter}/{early_stopping.patience}\n")
+		print(f"Training Loss:   {train_loss}")
+		print(f"Validation Loss: {val_loss}")
+		print(f"Best Val Loss:   {scheduler.best}")
+		print(f"Chamfer Dist:    {chamfer_dist}")
+		print(f"Learning Rate:   {learning_rate}")
+		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
+		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
 
 		# Check for early stopping
 		if early_stopping.early_stop:
