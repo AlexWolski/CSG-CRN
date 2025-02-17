@@ -78,8 +78,6 @@ def compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, num_acc
 
 	"""
 	# Sample CSG surface
-	torch.cuda.empty_cache()
 	recon_points_batch = sample_sdf_near_csg_surface(csg_model, num_acc_points, sample_dist)
 	# Compute average Chamfer distance
-	torch.cuda.empty_cache()
 	return compute_chamfer_distance(target_surface_samples, recon_points_batch)
