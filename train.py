@@ -288,8 +288,6 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 def validate(model, loss_func, val_loader, args, device):
 	total_val_loss = 0
 	total_chamfer_dist = 0
-	combined_csg_model = CSGModel(device)
-	surface_samples_list = []
 
 	with torch.no_grad():
 		for data_sample in val_loader:
@@ -301,19 +299,13 @@ def validate(model, loss_func, val_loader, args, device):
 				recon_loss_samples
 			) = data_sample
 
-			# Run model inference
 			(csg_model, batch_loss) = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
 			total_val_loss += batch_loss.item()
+			total_chamfer_dist += compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
 
-			# Save CSG model and target surface samples
-			surface_samples_list.append(target_surface_samples)
-			combined_csg_model.add_batches_from_csg_model(csg_model)
-
-	torch.cuda.empty_cache()
 	total_val_loss /= val_loader.__len__()
-	combined_surface_samples = torch.cat(surface_samples_list)
-	chamfer_dist = compute_chamfer_distance_csg_fast(combined_surface_samples, combined_csg_model, args.num_val_acc_points, args.val_sample_dist)
-	return (total_val_loss, chamfer_dist)
+	total_chamfer_dist /= val_loader.__len__()
+	return (total_val_loss, total_chamfer_dist)
 
 
 # Save the model and settings to file
