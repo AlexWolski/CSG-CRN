@@ -320,14 +320,11 @@ def _get_min_sample_dist(sample_distances, num_sdf_samples, current_sample_dist)
 	device = sample_distances.device
 	bin_bounds = torch.linspace(0, current_sample_dist, steps=NUM_BINS+1, device=device)
 	bin_indices = torch.bucketize(sample_distances, bin_bounds)
-	total_sample_count = torch.zeros((sample_distances.size(dim=0)), device=device)
-	min_sample_count = 0
 	min_sample_dist = current_sample_dist
 
 	for bin_index in range(0, NUM_BINS-1):
-		bucket_count = torch.count_nonzero(bin_indices == bin_index, dim=1)
-		total_sample_count += bucket_count
-		min_sample_count = torch.min(total_sample_count).item()
+		bucket_count = torch.count_nonzero(bin_indices <= bin_index, dim=1)
+		min_sample_count = torch.min(bucket_count).item()
 
 		if min_sample_count >= num_sdf_samples:
 			min_sample_dist = bin_bounds[bin_index+1]
