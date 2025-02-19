@@ -182,12 +182,14 @@ def get_online_augment_parser(suppress_default=False):
 
 # Determine device to train on
 def get_device(device=None):
-	if device:
+	if device == 'cpu':
+		raise Exception('Only CUDA devices are supported.')
+	elif device:
 		return torch.device(device)
 	elif torch.cuda.is_available():
 		return torch.device('cuda')
 	else:
-		return torch.device('cpu')
+		raise Exception('No CUDA devices are available.')
 
 
 # Prepare data files and load training dataset
