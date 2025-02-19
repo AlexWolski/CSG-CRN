@@ -291,90 +291,66 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 		sample_distances = torch.cat((sample_distances, new_distances), dim=1)
 
 		# Keep `num_sdf_samples` samples with the lowest sample distance
-		current_sample_dist = _get_min_sample_dist(sample_distances, num_sdf_samples, current_sample_dist)
-		(sample_points, sample_distances) = _select_samples_in_distance(csg_model, sample_points, sample_distances, current_sample_dist)
+		(current_sample_dist, sample_points, sample_distances) = _select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
 
 	return sample_points[:,:num_sdf_samples]
 
 
-def _get_min_sample_dist(sample_distances, num_sdf_samples, current_sample_dist):
+def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist):
 	"""
-	Helper function to find the minimum sample distance that includes the required number of samples.
+	Helper function to select `num_sdf_samples` samples with the smallest SDF distance.
 
 	Parameters
 	----------
-	sample_distances : torch.Tensor
+	batch_sample_points : torch.Tensor
+		Tensor of size (B, N, 1) containing point samples.
+	batch_sample_distances : torch.Tensor
 		Tensor of size (B, N, 1) containing SDF distance values.
 	num_sdf_samples : int
 		Required number of SDF samples.
 	current_sample_dist : float
-		Maximum sample distance of samples in `sample_distances`.
+		Maximum value of SDF distances in `batch_sample_distances`.
 
 	Returns
 	-------
-	float
-		An approximate minimum sample distance that encompasses at least `num_sdf_samples` samples in `sample_distances`.
+	Tuple[float, torch.Tensor, torch.Tensor]
+		1. The maximum sample distance of the return SDF samples.
+		2. Select point samples.
+		3. Select SDF distance values.
 
 	"""
-	NUM_BINS = 100
-	device = sample_distances.device
-	bin_bounds = torch.linspace(0, current_sample_dist, steps=NUM_BINS+1, device=device)
-	bin_indices = torch.bucketize(sample_distances, bin_bounds)
-	min_sample_dist = current_sample_dist
+	device = batch_sample_points.device
+	batch_size = batch_sample_points.size(dim=0)
 
+	NUM_BINS = 100
+	bin_bounds = torch.linspace(0, current_sample_dist, steps=NUM_BINS+1, device=device)
+	bin_indices = torch.bucketize(batch_sample_distances, bin_bounds)
+	min_sample_dist = current_sample_dist
+	min_bin_index = 0
+
+	# Find minimum bin that contains at least num_sdf_samples samples
 	for bin_index in range(0, NUM_BINS-1):
 		bucket_count = torch.count_nonzero(bin_indices <= bin_index, dim=1)
 		min_sample_count = torch.min(bucket_count).item()
 
 		if min_sample_count >= num_sdf_samples:
 			min_sample_dist = bin_bounds[bin_index+1]
+			min_bin_index = bin_index
 			break
 
-	return min_sample_dist
-
-
-def _select_samples_in_distance(csg_model, batch_sample_points, batch_sample_distances, max_dist):
-	"""
-	Helper function to select SDF samples within a specified distance threshold.
-
-	Parameters
-	----------
-	csg_model : utilities.csg_model.CSGModel
-		The CSG model to sample.
-	batch_sample_points : torch.Tensor
-		Tensor of size (B, N, 3) containing SDF sample points.
-	batch_sample_distances : torch.Tensor
-		Tensor of size (B, N, 1) containing SDf sample distances.
-	max_dist : float
-		Maximum allowed distance of SDF samples.
-
-	Returns
-	-------
-	Tuple[torch.Tensor, torch.Tensor]
-		Two float tensors of size (B, N, 3) and (B, N, 1) where B=`csg_model`.batch_size
-		and N is the number of SDF samples that have a distances less than or equal to `max_dist`.
-
-	"""
-	# Select SDF samples within the specified distance
-	batch_select_indices = batch_sample_distances < max_dist
-
-	# Find batch with the minimum number of select samples
-	num_select_samples = torch.sum(batch_select_indices, dim=1)
-	min_select_samples = torch.min(num_select_samples).item()
-
-	# Combine select points and distances into tensor with min_select_samples samples
+	# Select num_sdf_samples samples
+	batch_indices = bin_indices <= min_bin_index
 	select_points_list = []
 	select_distances_list = []
 
-	for batch in range(csg_model.batch_size):
-		select_indices = batch_select_indices[batch]
-		sample_points = batch_sample_points[batch]
-		sample_distances = batch_sample_distances[batch]
-		select_points = sample_points[select_indices]
-		select_distances = sample_distances[select_indices]
-		select_points_list.append(select_points[:min_select_samples])
-		select_distances_list.append(select_distances[:min_select_samples])
+	for batch in range(batch_size):
+		select_indices = batch_indices[batch]
+		select_points = batch_sample_points[batch][select_indices]
+		select_distances = batch_sample_distances[batch][select_indices]
+		select_points_list.append(select_points[:num_sdf_samples])
+		select_distances_list.append(select_distances[:num_sdf_samples])
 
 	select_points = torch.stack(select_points_list)
 	select_distances = torch.stack(select_distances_list)
-	return (select_points, select_distances)
+
+	return (min_sample_dist, select_points, select_distances)
