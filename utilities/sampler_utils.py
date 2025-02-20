@@ -291,7 +291,13 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 		sample_distances = torch.cat((sample_distances, new_distances), dim=1)
 
 		# Keep `num_sdf_samples` samples with the lowest sample distance
-		(current_sample_dist, sample_points, sample_distances) = _select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
+		(new_sample_dist, sample_points, sample_distances) = _select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
+
+		# No samples could be found within the unit sphere
+		if new_sample_dist == None:
+			break
+
+		current_sample_dist = new_sample_dist
 
 	return sample_points[:,:num_sdf_samples]
 
@@ -326,7 +332,7 @@ def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf
 	bin_bounds = torch.linspace(0, current_sample_dist, steps=NUM_BINS+1, device=device)
 	bin_indices = torch.bucketize(batch_sample_distances, bin_bounds)
 	min_sample_dist = current_sample_dist
-	min_bin_index = 0
+	min_bin_index = -1
 
 	# Find minimum bin that contains at least num_sdf_samples samples
 	for bin_index in range(0, NUM_BINS-1):
@@ -337,6 +343,10 @@ def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf
 			min_sample_dist = bin_bounds[bin_index+1]
 			min_bin_index = bin_index
 			break
+
+	# No samples were found
+	if min_bin_index == -1:
+		return (None, batch_sample_points, batch_sample_distances)
 
 	# Select num_sdf_samples samples
 	batch_indices = bin_indices <= min_bin_index
