@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 
 
-HEADERS = ['Epoch', 'Training Loss', 'Validation Loss', 'Validation Accuracy', 'Learning Rate']
+HEADERS = ['Epoch', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Learning Rate']
 
 
 class TrainingLogger():
@@ -64,7 +64,7 @@ class TrainingLogger():
 				epoch = self.training_results['Epoch'][index]
 				train_loss = self.training_results['Training Loss'][index]
 				val_loss = self.training_results['Validation Loss'][index]
-				val_acc = self.training_results['Validation Accuracy'][index]
+				val_acc = self.training_results['Chamfer Distance'][index]
 				learning_rate = self.training_results['Learning Rate'][index]
 				csv_writer.writerow([epoch, train_loss, val_loss, val_acc, learning_rate])
 
@@ -74,7 +74,7 @@ class TrainingLogger():
 		epoch = self.training_results['Epoch']
 		train_loss = self.training_results['Training Loss']
 		val_loss = self.training_results['Validation Loss']
-		val_acc = self.training_results['Validation Accuracy']
+		val_acc = self.training_results['Chamfer Distance']
 		learning_rate = self.training_results['Learning Rate']
 
 		fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(5,8))
@@ -86,10 +86,9 @@ class TrainingLogger():
 		ax1.set_yscale('log')
 		ax1.legend()
 
-		# ax2.plot(epoch, train_accuracy, color='blue', label='Training Accuracy')
-		ax2.plot(epoch, val_acc, color='red', label='Validation Accuracy')
+		ax2.plot(epoch, val_acc, color='red', label='Validation Chamfer Distance')
 		ax2.set_xlabel('Epoch')
-		ax2.set_ylabel('Accuracy')
+		ax2.set_ylabel('Chamfer Distance')
 		ax2.legend()
 
 		ax3.plot(epoch, learning_rate, color='black', label='Learning Rate')
@@ -105,7 +104,7 @@ class TrainingLogger():
 		self.training_results['Epoch'].append(epoch)
 		self.training_results['Training Loss'].append(train_loss)
 		self.training_results['Validation Loss'].append(val_loss)
-		self.training_results['Validation Accuracy'].append(val_acc)
+		self.training_results['Chamfer Distance'].append(val_acc)
 		self.training_results['Learning Rate'].append(learning_rate)
 
 
