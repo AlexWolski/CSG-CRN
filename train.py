@@ -23,6 +23,7 @@ from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.early_stopping import EarlyStopping
 from utilities.training_logger import TrainingLogger
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
+from utilities.sampler_utils import sample_sdf_from_csg_combined
 
 
 # Weights for regularization loss
@@ -142,13 +143,12 @@ def get_model_parser():
 	model_group.add_argument('--num_loss_points', type=int, default=2048, help='Number of points to use when computing the loss')
 	model_group.add_argument('--num_val_acc_points', type=int, default=1024, help='Number of points to use when computing validation metrics')
 	model_group.add_argument('--val_sample_dist', type=float, default=0.01, help='Maximum distance tolerance of approximate surface samples when computing validation metrics.')
-	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before computing loss (Memory requirement scales with num_prims)')
-	model_group.add_argument('--num_iters', type=int, default=10, help='Number of refinement iterations to train for (Total generated primitives = num_prims x num_iters)')
+	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before backpropagating (Memory requirement scales with num_prims)')
+	model_group.add_argument('--num_cascades', type=int, default=10, help='Number of refinement passes before backpropagating (Total generated primitives = num_prims * num_cascades)')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 	model_group.add_argument('--surface_uniform_ratio', type=float, default=0.5, help='Percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples')
-	model_group.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
 	model_group.add_argument('--decoder_layers', nargs='+', type=int, default=[], help='List of hidden layers to add to the decoder network')
 
 	return model_parser
@@ -246,13 +246,19 @@ def model_forward(model, loss_func, target_input_samples, target_loss_samples, r
 	# Initialize SDF CSG model
 	csg_model = CSGModel(device)
 
-	# Generate a set of primitives to add to the CSG model
-	with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-		output_list = model(target_input_samples, recon_input_samples)
+	for i in range(args.num_cascades):
+		# Generate a set of primitives to add to the CSG model
+		with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+			output_list = model(target_input_samples, recon_input_samples)
 
-	# Add primitive to CSG model
-	for output in output_list:
-		csg_model.add_command(*output)
+		# Add primitives to the CSG model
+		for output in output_list:
+			csg_model.add_command(*output)
+
+		# Sample CSG for next refinement loop
+		if i < args.num_cascades - 1:
+			(recon_input_points, recon_input_distances) = sample_sdf_from_csg_combined(csg_model, num_input_points, args.sample_dist, args.surface_uniform_ratio)
+			recon_input_samples = torch.cat((recon_input_points, recon_input_distances.unsqueeze(2)), dim=-1)
 
 	# Compute loss
 	loss = loss_func(target_loss_samples, recon_loss_samples, csg_model)
@@ -394,6 +400,10 @@ def main():
 		(args.output_dir, checkpoint_dir) = create_out_dir(args)
 		data_splits = load_data_splits(args, DATA_SPLIT, device)
 		training_logger = TrainingLogger(args.output_dir, 'training_results')
+
+	# Read settings from dataset
+	dataset_settings = read_dataset_settings(args.data_dir)
+	args.sample_dist = dataset_settings['sample_dist']
 
 	# Initialize model
 	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)

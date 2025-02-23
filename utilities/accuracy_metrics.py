@@ -1,7 +1,7 @@
 import torch
 from chamferdist import ChamferDistance
 from utilities.csg_to_mesh import csg_to_mesh
-from utilities.sampler_utils import sample_points_mesh_surface, sample_csg_surface, sample_sdf_near_csg_surface
+from utilities.sampler_utils import sample_points_mesh_surface, sample_points_csg_surface, sample_sdf_near_csg_surface
 
 
 def compute_chamfer_distance(target_surface_samples, recon_surface_samples):
@@ -50,7 +50,7 @@ def compute_chamfer_distance_csg(target_surface_samples, csg_model, num_acc_poin
 
 	"""
 	# Sample CSG surface
-	recon_points_batch = sample_csg_surface(csg_model, recon_resolution, num_acc_points)
+	recon_points_batch = sample_points_csg_surface(csg_model, recon_resolution, num_acc_points)
 	# Compute average Chamfer distance
 	return compute_chamfer_distance(target_surface_samples, recon_points_batch)
 
@@ -78,6 +78,6 @@ def compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, num_acc
 
 	"""
 	# Sample CSG surface
-	recon_points_batch = sample_sdf_near_csg_surface(csg_model, num_acc_points, sample_dist)
+	(recon_points_batch, _) = sample_sdf_near_csg_surface(csg_model, num_acc_points, sample_dist)
 	# Compute average Chamfer distance
 	return compute_chamfer_distance(target_surface_samples, recon_points_batch)

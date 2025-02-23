@@ -1,5 +1,6 @@
 import os
 import glob
+import yaml
 import numpy as np
 from tqdm import tqdm
 
@@ -20,7 +21,7 @@ def create_out_dir(args):
 	dataset_name = os.path.basename(os.path.normpath(args.data_dir))
 
 	# Create output folder name from settings
-	output_folder = dataset_name + '_' + str(args.sample_dist) + 'dist_' + str(args.num_input_points) +\
+	output_folder = dataset_name + '_' + str(args.num_input_points) +\
 	'input_points_' + str(args.num_loss_points) + 'loss_points_' + str(args.num_prims) + 'prims'
 
 	if args.no_blending:
@@ -57,7 +58,18 @@ def get_data_files(data_dir):
 	if os.path.isfile(sample_list_path):
 		return load_list(sample_list_path)
 	else:
-		raise FileNotFoundError(f'Unable to find dataset settings file: {sample_list_path}')
+		raise FileNotFoundError(f'Unable to find dataset file list: {sample_list_path}')
+
+
+# Read dataset settings from file
+def read_dataset_settings(data_dir):
+	settings_path = os.path.join(data_dir, SETTINGS_FILE)
+
+	if os.path.isfile(settings_path):
+		with open(settings_path, 'r') as f:
+			return yaml.safe_load(f.read())
+	else:
+		raise FileNotFoundError(f'Unable to find dataset settings file: {settings_path}')
 
 
 # Write each item of a list to a new line in a file

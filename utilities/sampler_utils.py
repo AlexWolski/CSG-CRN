@@ -219,9 +219,9 @@ def sample_from_mesh(mesh, num_uniform_samples, num_surface_samples, num_near_su
 	)
 
 
-def sample_csg_surface(csg_model, resolution, num_sdf_samples):
+def sample_points_csg_surface(csg_model, resolution, num_sdf_samples):
 	"""
-	Uniformly sample points on the surface of a batch of implicit CSG model.
+	Uniformly sample points on the surface of a batch of CSG models.
 	Uses the marching cubes algorithm to extract an isosurface mesh, then uniformly samples the mesh faces.
 
 	Parameters
@@ -253,6 +253,30 @@ def sample_csg_surface(csg_model, resolution, num_sdf_samples):
 	return torch.stack(surface_points_list).detach()
 
 
+def sample_sdf_from_csg_uniform_sphere(csg_model, num_sdf_samples):
+	"""
+	Generate SDF samples a batch of CSG models uniformly distributed in a unit sphere.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	num_sdf_samples:  int
+		Number of uniform SDF samples to generate.
+
+	Returns
+	-------
+	Tuple[torch.Tensor, torch.Tensor]
+		Tensors of size (B, N, 3) and (B, N, 1) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
+		The first tensor contains points uniformly distributed in a unit sphere.
+		The second tensor contains signed distances from each sample point to the CSG model isosurface.
+
+	"""
+	uniform_points = sample_uniform_points_sphere(num_sdf_samples, batch_size=csg_model.batch_size).to(csg_model.device)
+	uniform_distances = csg_model.sample_csg(uniform_points)
+	return (uniform_points, uniform_distances)
+
+
 def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 	"""
 	Generate SDF samples within a specified distance of the implicit surfaces of a batch of CSG models.
@@ -269,9 +293,10 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 
 	Returns
 	-------
-	torch.Tensor
-		Tensors of size (B, N, 3) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
-		Each point in the tensor is within a distance `sample_dist` of the corresponding CSG model isosurface.
+	Tuple[torch.Tensor, torch.Tensor]
+		Tensors of size (B, N, 3) and (B, N, 1) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
+		The first tensor contains points within a distance `sample_dist` of the corresponding CSG model isosurface.
+		The second tensor contains signed distances from each sample point to the CSG model isosurface.
 
 	"""
 	GEN_SAMPLE_MULTIPLE = 10
@@ -299,7 +324,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 
 		current_sample_dist = new_sample_dist
 
-	return sample_points[:,:num_sdf_samples]
+	return (sample_points[:,:num_sdf_samples], sample_distances[:,:num_sdf_samples])
 
 
 def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist):
@@ -364,3 +389,40 @@ def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf
 	select_distances = torch.stack(select_distances_list)
 
 	return (min_sample_dist, select_points, select_distances)
+
+
+def sample_sdf_from_csg_combined(csg_model, num_sdf_samples, sample_dist, surface_uniform_ratio):
+	"""
+	Generate a combination of uniform and near-surface  SDF samples for a batch of CSG models.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+	num_sdf_samples : int
+		Number of surface samples to generate.
+	surface_uniform_ratio : Percentage of near-surface samples to select.
+
+	Returns
+	-------
+	Tuple[torch.Tensor, torch.Tensor]
+		Two float tensors of size (B, N, 3) and (B, N, 1) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
+
+	"""
+	# Generate uniform and surface samples
+	num_uniform_samples = math.ceil(num_sdf_samples * surface_uniform_ratio)
+	num_surface_samples = math.floor(num_sdf_samples * (1 - surface_uniform_ratio))
+	(uniform_points, uniform_distances) = sample_sdf_from_csg_uniform_sphere(csg_model, num_uniform_samples)
+	(surface_points, surface_distances) = sample_sdf_near_csg_surface(csg_model, num_surface_samples, sample_dist)
+
+	# Combine samples
+	combined_points = torch.cat((uniform_points, surface_points), dim=1)
+	combined_distances = torch.cat((uniform_distances, surface_distances), dim=1)
+
+	# Shuffle samples
+	combined_points = combined_points[:, torch.randperm(num_sdf_samples)].detach()
+	combined_distances = combined_distances[:, torch.randperm(num_sdf_samples)].detach()
+
+	return (combined_points, combined_distances)
