@@ -13,8 +13,10 @@ class CSG_CRN(nn.Module):
 		self.num_prims = num_prims
 		self.num_shapes = num_shapes
 		self.num_operations = num_operations
+		self.decoder_layers = decoder_layers
 		self.predict_blending = predict_blending
 		self.predict_roundness = predict_roundness
+		self.no_batch_norm = no_batch_norm
 
 		self.point_encoder = PointNetfeat(global_feat=True, no_batch_norm=no_batch_norm)
 		self.siamese_encoder = SiameseEncoder(self.point_encoder, POINTNET_FEAT_OUTPUT_SIZE, no_batch_norm)
@@ -22,8 +24,16 @@ class CSG_CRN(nn.Module):
 
 		# Initialize a separate decoder for each primitive
 		for i in range(self.num_prims):
-			regressor_decoder = PrimitiveRegressor(SIAMEZE_ENCODER_OUTPUT_SIZE, self.num_shapes, self.num_operations,
-				layer_sizes=decoder_layers, predict_blending=self.predict_blending, predict_roundness=self.predict_roundness, no_batch_norm=no_batch_norm)
+			regressor_decoder = PrimitiveRegressor(
+				SIAMEZE_ENCODER_OUTPUT_SIZE,
+				self.num_shapes,
+				self.num_operations,
+				layer_sizes=self.decoder_layers,
+				predict_blending=self.predict_blending,
+				predict_roundness=self.predict_roundness,
+				no_batch_norm=self.no_batch_norm
+			)
+
 			self.regressor_decoder_list.append(regressor_decoder)
 
 
