@@ -9,8 +9,6 @@ MIN_BOUND = -1
 MAX_BOUND = 1
 # Maximum SDF value is twice the radius
 MAX_SDF_VALUE = MAX_BOUND * 2
-# Multiplier to estimate number of uniform points needed to sample near-surface points
-SURFACE_SAMPLE_RATIO = 5
 
 
 # Smooth minimum and maximum borrowed from iquilezles.org
@@ -80,7 +78,7 @@ class CSGModel():
 
 	operation_functions = [
 		add_sdf,
-		# subtract_sdf
+		subtract_sdf
 	]
 
 	num_shapes = len(sdf_functions)
@@ -234,75 +232,6 @@ class CSGModel():
 		return CSGModel.sample_csg_commands(query_points, self.csg_commands, initial_distances=initial_distances, out_primitive_samples=out_primitive_samples)
 
 
-	# Sample a given number of signed distances at uniformly distributed points
-	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
-	def gen_uniform_csg_samples(self, batch_size, num_points, out_primitive_samples=None):
-		# Return None if there are no csg commands
-		if not self.csg_commands:
-			return None
-
-		uniform_points = Uniform(MIN_BOUND, MAX_BOUND).sample((batch_size, num_points, 3)).to(self.device)
-		uniform_distances = self.sample_csg(uniform_points, out_primitive_samples)
-
-		return (uniform_points.detach(), uniform_distances.detach())
-
-
-	# Sample a given number of signed distances at near-surface points
-	# surface_uniform_ratio controls percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples
-	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
-	def gen_csg_samples(self, batch_size, num_points, surface_uniform_ratio=0, sample_dist=0.1, strict_ratio=True, out_primitive_samples=None):
-		# Return None if there are no csg commands
-		if not self.csg_commands:
-			return None
-
-		# Generate uniform samples
-		num_generate = math.ceil(num_points / sample_dist) * SURFACE_SAMPLE_RATIO
-		(uniform_points, uniform_distances) = self.gen_uniform_csg_samples(batch_size, num_generate, out_primitive_samples=out_primitive_samples)
-
-		# Separate uniform and near-surface samples
-		num_uniform = math.ceil(num_points * surface_uniform_ratio)
-		num_surface = math.floor(num_points * (1 - surface_uniform_ratio))
-		sample_points_list = []
-		sample_distances_list = []
-
-		for batch in range(batch_size):
-			# Separate uniform and near-surface points
-			surface_mask = (abs(uniform_distances[batch]) <= sample_dist)
-			surface_indices = surface_mask.nonzero()
-			uniform_indices = (surface_mask == 0).nonzero()
-
-			# Select the necessary number of points
-			if num_uniform == 0:
-				uniform_indices = None
-			else:
-				uniform_indices = uniform_indices[:num_uniform]
-
-			if num_surface == 0:
-				surface_indices = None
-			elif len(surface_indices) < num_surface:
-				if strict_ratio:
-					return None
-
-				num_supplemental_indices = num_surface - len(surface_indices)
-				supplemental_indices = uniform_indices[num_uniform:num_uniform+num_supplemental_indices]
-				surface_indices = torch.cat((indices, supplemental_indices))
-			else:
-				surface_indices = surface_indices[:num_surface]
-
-			# Save select points to list
-			if uniform_indices == None:
-				combined_indices = surface_indices
-			elif surface_indices == None:
-				combined_indices = uniform_indices
-			else:
-				combined_indices = torch.cat((uniform_indices, surface_indices))
-
-			sample_points_list.append(uniform_points[batch, combined_indices].squeeze())
-			sample_distances_list.append(uniform_distances[batch, combined_indices].squeeze())
-
-		return (torch.stack(sample_points_list).detach(), torch.stack(sample_distances_list).detach())
-
-
 # Test SDFs
 def test():
 	batch_size = 2
@@ -327,7 +256,9 @@ def test():
 	myModel = CSGModel()
 	myModel.add_command(shape_weights1, operation_weights1, translations1, rotations1, scales1, blending1, roundness1)
 	myModel.add_command(shape_weights2, operation_weights2, translations2, rotations2, scales2, blending2, roundness2)
-	(points, distances) = myModel.gen_csg_samples(batch_size, num_points, 0.5, 0.1)
+
+	points = Uniform(MIN_BOUND, MAX_BOUND).sample((batch_size, num_points, 3)).to(myModel.device)
+	distances = myModel.sample_csg(points)
 
 	print('Sample points:')
 	print(points)

@@ -250,7 +250,7 @@ def sample_csg_surface(csg_model, resolution, num_sdf_samples):
 		surface_points_list.append(surface_points)
 
 	# Compute average Chamfer distance
-	return torch.stack(surface_points_list)
+	return torch.stack(surface_points_list).detach()
 
 
 def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
