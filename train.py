@@ -144,7 +144,7 @@ def get_model_parser():
 	model_group.add_argument('--num_val_acc_points', type=int, default=1024, help='Number of points to use when computing validation metrics')
 	model_group.add_argument('--val_sample_dist', type=float, default=0.01, help='Maximum distance tolerance of approximate surface samples when computing validation metrics.')
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before backpropagating (Memory requirement scales with num_prims)')
-	model_group.add_argument('--num_cascades', type=int, default=10, help='Number of refinement passes before backpropagating (Total generated primitives = num_prims * num_cascades)')
+	model_group.add_argument('--num_cascades', type=int, default=1, help='Number of refinement passes before backpropagating (Total generated primitives = num_prims * num_cascades)')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
