@@ -30,6 +30,7 @@ def options():
 
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file.')
 	parser.add_argument('--input_file', type=str, required=True, help='Model file to reconstruct.')
+	parser.add_argument('--num_cascades', type=int, help='Number of refinement passes before back-propagating (Total generated primitives = num_prims * num_cascades)')
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--num_view_points', type=int, default=10000, help='Number of points to visualize the output.')
@@ -59,19 +60,30 @@ def load_model(args):
 
 	# Load training args
 	args.num_input_points = saved_args.num_input_points
-	args.num_prims = saved_args.num_prims
-	args.surface_uniform_ratio = saved_args.surface_uniform_ratio
 	args.sample_dist = saved_args.sample_dist
-	args.decoder_layers = saved_args.decoder_layers
-	args.no_blending = saved_args.no_blending
-	args.no_roundness = saved_args.no_roundness
-	args.no_batch_norm = saved_args.no_batch_norm
+	args.surface_uniform_ratio = saved_args.surface_uniform_ratio
 
-	predict_blending = not args.no_blending
-	predict_roundness = not args.no_roundness
+	if not args.num_cascades:
+		args.num_cascades = saved_args.num_cascades
+
+	predict_blending = not saved_args.no_blending
+	predict_roundness = not saved_args.no_roundness
 
 	# Initialize model
-	model = CSG_CRN(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, args.decoder_layers, predict_blending, predict_roundness, args.no_batch_norm).to(args.device)
+	model = CSG_CRN(
+		saved_args.num_prims,
+		CSGModel.num_shapes,
+		CSGModel.num_operations,
+		args.num_cascades,
+		args.sample_dist,
+		saved_args.surface_uniform_ratio,
+		args.device,
+		saved_args.decoder_layers,
+		predict_blending,
+		predict_roundness,
+		saved_args.no_batch_norm
+	)
+
 	model.load_state_dict(state_dict, strict=False)
 	model.eval()
 
@@ -103,22 +115,6 @@ def load_mesh_and_samples(input_file, args):
 
 	# Add batch dimension
 	return (mesh, input_samples.unsqueeze(0).to(args.device))
-
-
-# TODO: Add support for iterative generation
-def run_model(model, input_samples, args):
-	with torch.no_grad():
-		# Initialize SDF CSG model
-		csg_model = CSGModel(args.device)
-
-		# Predict next primitive
-		output_list = model(input_samples, None)
-
-		# Add primitives to CSG model
-		for output in output_list:
-			csg_model.add_command(*output)
-
-	return csg_model
 
 
 def pretty_print_tensor(message, tensor):
@@ -177,7 +173,7 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 
 def construct_csg_model(model, input_file, args):
 	target_mesh, input_samples = load_mesh_and_samples(input_file, args)
-	csg_model = run_model(model, input_samples, args)
+	csg_model = model.forward_cascade(input_samples, None)
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
 	# Pretty print csg commands

@@ -23,7 +23,6 @@ from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.early_stopping import EarlyStopping
 from utilities.training_logger import TrainingLogger
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
-from utilities.sampler_utils import sample_sdf_from_csg_combined
 
 
 # Weights for regularization loss
@@ -144,7 +143,7 @@ def get_model_parser():
 	model_group.add_argument('--num_val_acc_points', type=int, default=1024, help='Number of points to use when computing validation metrics')
 	model_group.add_argument('--val_sample_dist', type=float, default=0.01, help='Maximum distance tolerance of approximate surface samples when computing validation metrics.')
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before backpropagating (Memory requirement scales with num_prims)')
-	model_group.add_argument('--num_cascades', type=int, default=1, help='Number of refinement passes before backpropagating (Total generated primitives = num_prims * num_cascades)')
+	model_group.add_argument('--num_cascades', type=int, default=1, help='Number of refinement passes before back-propagating (Total generated primitives = num_prims * num_cascades)')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
@@ -229,41 +228,25 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 	predict_roundness = not args.no_roundness
 
 	# Initialize model
-	model = CSG_CRN(num_prims, num_shapes, num_operations, args.decoder_layers, predict_blending, predict_roundness, args.no_batch_norm).to(device)
+	model = CSG_CRN(
+		num_prims,
+		num_shapes,
+		num_operations,
+		args.num_cascades,
+		args.sample_dist,
+		args.surface_uniform_ratio,
+		device,
+		args.decoder_layers,
+		predict_blending,
+		predict_roundness,
+		args.no_batch_norm
+	)
 
 	# Load model parameters if available
 	if model_params:
 		model.load_state_dict(model_params)
 
 	return model
-
-
-# Run a forwards pass of the network model
-def model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device):
-	# Load data
-	(batch_size, num_input_points, _) = target_input_samples.size()
-
-	# Initialize SDF CSG model
-	csg_model = CSGModel(device)
-
-	for i in range(args.num_cascades):
-		# Generate a set of primitives to add to the CSG model
-		with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-			output_list = model(target_input_samples, recon_input_samples)
-
-		# Add primitives to the CSG model
-		for output in output_list:
-			csg_model.add_command(*output)
-
-		# Sample CSG for next refinement loop
-		if i < args.num_cascades - 1:
-			(recon_input_points, recon_input_distances) = sample_sdf_from_csg_combined(csg_model, num_input_points, args.sample_dist, args.surface_uniform_ratio)
-			recon_input_samples = torch.cat((recon_input_points, recon_input_distances.unsqueeze(2)), dim=-1)
-
-	# Compute loss
-	loss = loss_func(target_loss_samples, recon_loss_samples, csg_model)
-
-	return (csg_model, loss)
 
 
 # Iteratively predict primitives and propagate average loss
@@ -280,7 +263,10 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 		) = data_sample
 
 		# Forward pass
-		(_, batch_loss) = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
+		with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+			csg_model = model.forward_cascade(target_input_samples, recon_input_samples)
+
+		batch_loss = loss_func(target_loss_samples, recon_loss_samples, csg_model)
 		total_train_loss += batch_loss.item()
 
 		# Back propagate
@@ -307,7 +293,10 @@ def validate(model, loss_func, val_loader, args, device):
 				recon_loss_samples
 			) = data_sample
 
-			(csg_model, batch_loss) = model_forward(model, loss_func, target_input_samples, target_loss_samples, recon_input_samples, recon_loss_samples, args, device)
+			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+				csg_model = model.forward_cascade(target_input_samples, recon_input_samples)
+
+			batch_loss = loss_func(target_loss_samples, recon_loss_samples, csg_model)
 			total_val_loss += batch_loss.item()
 			total_chamfer_dist += compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
 
