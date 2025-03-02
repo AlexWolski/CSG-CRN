@@ -66,10 +66,11 @@ class CSG_CRN(nn.Module):
 		return output_list
 
 
-	def forward_cascade(self, target_input_samples, recon_input_samples):
+	def forward_cascade(self, target_input_samples):
 		# Initialize SDF CSG model
-		csg_model = CSGModel(self.device)
 		(batch_size, num_input_points, _) = target_input_samples.size()
+		csg_model = CSGModel(self.device)
+		recon_input_samples = None
 
 		for i in range(self.num_cascades):
 			output_list = self(target_input_samples, recon_input_samples)

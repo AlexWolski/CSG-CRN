@@ -257,16 +257,14 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 		(
 			target_input_samples,
 			target_loss_samples,
-			target_surface_samples,
-			recon_input_samples,
-			recon_loss_samples
+			target_surface_samples
 		) = data_sample
 
 		# Forward pass
 		with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-			csg_model = model.forward_cascade(target_input_samples, recon_input_samples)
+			csg_model = model.forward_cascade(target_input_samples)
 
-		batch_loss = loss_func(target_loss_samples, recon_loss_samples, csg_model)
+		batch_loss = loss_func(target_loss_samples, csg_model)
 		total_train_loss += batch_loss.item()
 
 		# Back propagate
@@ -288,15 +286,13 @@ def validate(model, loss_func, val_loader, args, device):
 			(
 				target_input_samples,
 				target_loss_samples,
-				target_surface_samples,
-				recon_input_samples,
-				recon_loss_samples
+				target_surface_samples
 			) = data_sample
 
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-				csg_model = model.forward_cascade(target_input_samples, recon_input_samples)
+				csg_model = model.forward_cascade(target_input_samples)
 
-			batch_loss = loss_func(target_loss_samples, recon_loss_samples, csg_model)
+			batch_loss = loss_func(target_loss_samples, csg_model)
 			total_val_loss += batch_loss.item()
 			total_chamfer_dist += compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
 
