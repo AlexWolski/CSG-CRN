@@ -165,7 +165,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_factor', type=float, default=0.1, help='Learning rate reduction factor')
 	training_group.add_argument('--lr_patience', type=int, default=20, help='Number of training epochs without improvement before the learning rate is adjusted')
-	training_group.add_argument('--lr_threshold', type=float, default=0.001, help='Minimum recognized percentage of improvement over previous loss')
+	training_group.add_argument('--lr_threshold', type=float, default=0.01, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--early_stop_patience', type=int, default=40, help='Number of training epochs without improvement before training terminates')
 	training_group.add_argument('--early_stop_threshold', type=float, default=0.001, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
