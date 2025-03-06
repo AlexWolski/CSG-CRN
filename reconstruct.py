@@ -62,6 +62,7 @@ def load_model(args):
 	args.num_input_points = saved_args.num_input_points
 	args.sample_dist = saved_args.sample_dist
 	args.surface_uniform_ratio = saved_args.surface_uniform_ratio
+	args.loss_metric = saved_args.loss_metric
 
 	if not args.num_cascades:
 		args.num_cascades = saved_args.num_cascades
@@ -150,14 +151,14 @@ def print_csg_commands(csg_model):
 		count += 1
 
 
-def print_recon_loss(input_samples, csg_model):
+def print_recon_loss(input_samples, csg_model, loss_metric):
 	input_points = input_samples[:,:,:3]
 	input_sdf = input_samples[:,:,3]
 
 	csg_sdf = csg_model.sample_csg(input_points)
 
-	recon_loss = ReconstructionLoss()
-	print('Reconstruction Loss:')
+	recon_loss = ReconstructionLoss(loss_metric)
+	print(f'Reconstruction {loss_metric} Loss:')
 	print(recon_loss.forward(input_sdf, csg_sdf))
 	print('')
 
@@ -179,7 +180,7 @@ def construct_csg_model(model, input_file, args):
 	# Pretty print csg commands
 	print_csg_commands(csg_model)
 	# Print reconstruction loss
-	print_recon_loss(input_samples, csg_model)
+	print_recon_loss(input_samples, csg_model, args.loss_metric)
 	# Print reconstruction accuracy
 	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, args.device)
 

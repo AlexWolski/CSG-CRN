@@ -5,11 +5,11 @@ from losses.reconstruction_loss import ReconstructionLoss
 
 
 class Loss(nn.Module):
-	def __init__(self, proximity_loss_weight=0):
+	def __init__(self, loss_metric, proximity_loss_weight=0):
 		super(Loss, self).__init__()
 
 		self.proximity_loss_weight = proximity_loss_weight
-		self.recon_loss = ReconstructionLoss()
+		self.recon_loss = ReconstructionLoss(loss_metric)
 		self.proximity_loss = ProximityLoss()
 
 

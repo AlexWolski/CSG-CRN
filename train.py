@@ -15,6 +15,7 @@ from torch.distributions.uniform import Uniform
 from torch.optim import AdamW, lr_scheduler
 
 from losses.loss import Loss
+from losses.reconstruction_loss import ReconstructionLoss
 from networks.csg_crn import CSG_CRN
 from utilities.csg_model import CSGModel
 from utilities.data_processing import *
@@ -95,6 +96,9 @@ def options():
 	# Disable batch norm for SGD
 	args.no_batch_norm = True if args.batch_size == 1 else args.no_batch_norm
 
+	# Retrieve loss metric
+	args.loss_metric = args.loss_metric[0] if len(args.loss_metric) > 0 else None
+
 	# Print arguments
 	print('\nArguments:')
 	print('----------')
@@ -157,11 +161,13 @@ def get_training_parser(suppress_default=False):
 	argument_default = argparse.SUPPRESS if suppress_default else None
 	training_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, argument_default=argument_default)
 	training_group = training_parser.add_argument_group('TRAINING SETTINGS')
+	loss_metrics = [ReconstructionLoss.L1_LOSS_FUNC, ReconstructionLoss.MSE_LOSS_FUNC, ReconstructionLoss.LOG_LOSS_FUNC]
 
 	# Training settings
 	training_group.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
 	training_group.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
+	training_group.add_argument('--loss_metric', type=str, default=[ReconstructionLoss.L1_LOSS_FUNC], choices=loss_metrics, nargs=1, help='Reconstruction loss metric to use when training')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_factor', type=float, default=0.1, help='Learning rate reduction factor')
 	training_group.add_argument('--lr_patience', type=int, default=20, help='Number of training epochs without improvement before the learning rate is adjusted')
@@ -392,7 +398,7 @@ def main():
 
 	# Initialize model
 	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
-	loss_func = Loss(PROXIMITY_LOSS_WEIGHT).to(device)
+	loss_func = Loss(args.loss_metric, PROXIMITY_LOSS_WEIGHT).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = AdamW(model.parameters(), lr=current_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
