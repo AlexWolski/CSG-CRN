@@ -87,6 +87,12 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
+	# Set which operations to scale and by how much
+	def set_operation_scale(self, scale_op, replace_op, operation_scale):
+		for regressor_decoder in self.regressor_decoder_list:
+			regressor_decoder.set_operation_scale(scale_op, replace_op, operation_scale)
+
+
 # Test network
 def test():
 	# Input Dimension: BxFxP

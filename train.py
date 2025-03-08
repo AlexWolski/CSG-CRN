@@ -17,7 +17,7 @@ from torch.optim import AdamW, lr_scheduler
 from losses.loss import Loss
 from losses.reconstruction_loss import ReconstructionLoss
 from networks.csg_crn import CSG_CRN
-from utilities.csg_model import CSGModel
+from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
 from utilities.data_processing import *
 from utilities.datasets import PointDataset
 from utilities.data_augmentation import get_augment_parser, RotationAxis
@@ -258,6 +258,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 # Iteratively predict primitives and propagate average loss
 def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc=''):
 	total_train_loss = 0
+	model.set_operation_scale(subtract_sdf, add_sdf, 0)
 
 	for data_sample in tqdm(train_loader, desc=desc):
 		(
