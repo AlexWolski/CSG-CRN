@@ -20,7 +20,7 @@ class ReconstructionLoss(nn.Module):
 			case self.MSE_LOSS_FUNC:
 				self.loss_func = torch.nn.MSELoss(reduction='mean')
 			case self.LOG_LOSS_FUNC:
-				self.loss_func = log_loss
+				self.loss_func = ReconstructionLoss.log_loss
 			case None:
 				raise Exception("A loss function must be provided")
 			case _:
