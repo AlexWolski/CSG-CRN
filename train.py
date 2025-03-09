@@ -418,11 +418,11 @@ def main():
 		args.output_dir = saved_settings_dict['output_dir']
 		data_splits = saved_settings_dict['data_splits']
 		training_results = saved_settings_dict['training_results']
-		training_logger = TrainingLogger(args.output_dir, 'training_results', training_results)
+		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric, training_results)
 	else:
 		(args.output_dir, checkpoint_dir) = create_out_dir(args)
 		data_splits = load_data_splits(args, DATA_SPLIT, device)
-		training_logger = TrainingLogger(args.output_dir, 'training_results')
+		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric)
 
 	# Read settings from dataset
 	dataset_settings = read_dataset_settings(args.data_dir)

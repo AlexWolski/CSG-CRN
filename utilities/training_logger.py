@@ -7,10 +7,11 @@ HEADERS = ['Epoch', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Lea
 
 
 class TrainingLogger():
-	def __init__(self, output_folder, filename, initial_results=None):
+	def __init__(self, output_folder, filename, loss_metric='', initial_results=None):
 		self.csv_output_file = os.path.join(output_folder, filename + '.csv')
 		self.plot_output_file = os.path.join(output_folder, filename + '.png')
 		self.training_results = initial_results if initial_results else {}
+		self.loss_metric = loss_metric
 
 		# Initialize results structure
 		if not self.training_results:
@@ -82,18 +83,20 @@ class TrainingLogger():
 		ax1.plot(epoch, train_loss, color='blue', label='Training Loss')
 		ax1.plot(epoch, val_loss, color='red', label='Validation Loss')
 		ax1.set_xlabel('Epoch')
-		ax1.set_ylabel('Loss')
+		ax1.set_ylabel(f'{self.loss_metric} Loss')
 		ax1.set_yscale('log')
 		ax1.legend()
 
 		ax2.plot(epoch, val_acc, color='red', label='Validation Chamfer Distance')
 		ax2.set_xlabel('Epoch')
 		ax2.set_ylabel('Chamfer Distance')
+		ax2.set_yscale('log')
 		ax2.legend()
 
 		ax3.plot(epoch, learning_rate, color='black', label='Learning Rate')
 		ax3.set_xlabel('Epoch')
 		ax3.set_ylabel('Learning Rate')
+		ax3.set_yscale('log')
 
 		fig.savefig(self.plot_output_file, bbox_inches="tight", dpi=300)
 		plt.close()
