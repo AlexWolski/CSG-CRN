@@ -177,7 +177,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--lr_patience', type=int, default=20, help='Number of training epochs without improvement before the learning rate is adjusted')
 	training_group.add_argument('--lr_threshold', type=float, default=0.01, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--early_stop_patience', type=int, default=40, help='Number of training epochs without improvement before training terminates')
-	training_group.add_argument('--early_stop_threshold', type=float, default=0.001, help='Minimum recognized percentage of improvement over previous loss')
+	training_group.add_argument('--early_stop_threshold', type=float, default=0.01, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--disable_sub_operation', default=False, action='store_true', help='Disable the subtract operation by setting the weight to 0')
 	training_group.add_argument('--schedule_sub_weight', default=False, action='store_true', help='Start the subtract operation weight at 0 and gradually increase it to 1')
 	training_group.add_argument('--sub_schedule_start_epoch', type=int, default=10, help='Epoch to start the subtract operation weight scheduler')
