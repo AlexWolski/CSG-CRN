@@ -359,19 +359,32 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
 		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, args, device)
 		learning_rate = optimizer.param_groups[0]['lr']
-		scheduler.step(val_loss)
 
-		training_logger.add_result(epoch, train_loss, val_loss, chamfer_dist, learning_rate)
-		early_stopping(val_loss)
+		# Record epoch training results
+		training_logger.add_result(epoch, train_loss, val_loss, chamfer_dist, learning_rate)\
+
+		# Update learning rate scheduler and early stopping
+		if not args.schedule_sub_weight or args.sub_weight == 1:
+			scheduler.step(val_loss)
+			early_stopping(val_loss)
 
 		# Print and save epoch training results
-		print(f"Training Loss:   {train_loss}")
-		print(f"Validation Loss: {val_loss}")
-		print(f"Best Val Loss:   {scheduler.best}")
-		print(f"Chamfer Dist:    {chamfer_dist}")
-		print(f"Learning Rate:   {learning_rate}")
-		print(f"LR Patience:     {scheduler.num_bad_epochs}/{scheduler.patience}")
-		print(f"Early Stop:      {early_stopping.counter}/{early_stopping.patience}\n")
+		print(f"Learning Rate:     {learning_rate}")
+		print(f"Training Loss:     {train_loss}")
+		print(f"Validation Loss:   {val_loss}")
+		print(f"Chamfer Dist:      {chamfer_dist}")
+
+		# Subtract weight scheduler runs first
+		if args.schedule_sub_weight and args.sub_weight < 1:
+			print(f"Subtract Weight:   {args.sub_weight}")
+			print(f"Weight Scheduler:  {epoch}/{args.sub_schedule_end_epoch}")
+		# Once subtract weight scheduling is completed, run learning rate scheduling and early stopping
+		else:
+			print(f"Best Val Loss:     {scheduler.best}")
+			print(f"LR Patience:       {scheduler.num_bad_epochs}/{scheduler.patience}")
+			print(f"Early Stop:        {early_stopping.counter}/{early_stopping.patience}")
+
+		print()
 
 		# Check for early stopping
 		if early_stopping.early_stop:
