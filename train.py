@@ -99,6 +99,12 @@ def options():
 	# Retrieve loss metric
 	args.loss_metric = args.loss_metric[0] if len(args.loss_metric) > 0 else None
 
+	# Configure subtract operation
+	if args.disable_sub_operation or args.schedule_sub_weight:
+		args.sub_weight = 0
+	else:
+		args.sub_weight = 1
+
 	# Print arguments
 	print('\nArguments:')
 	print('----------')
@@ -174,6 +180,10 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--lr_threshold', type=float, default=0.01, help='Minimum recognized percentage of improvement over previous loss')
 	training_group.add_argument('--early_stop_patience', type=int, default=40, help='Number of training epochs without improvement before training terminates')
 	training_group.add_argument('--early_stop_threshold', type=float, default=0.001, help='Minimum recognized percentage of improvement over previous loss')
+	training_group.add_argument('--disable_sub_operation', default=False, action='store_true', help='Disable the subtract operation by setting the weight to 0')
+	training_group.add_argument('--schedule_sub_weight', default=False, action='store_true', help='Start the subtract operation weight at 0 and gradually increase it to 1')
+	training_group.add_argument('--sub_schedule_start_epoch', type=int, default=10, help='Epoch to start the subtract operation weight scheduler')
+	training_group.add_argument('--sub_schedule_end_epoch', type=int, default=30, help='Epoch to complete the subtract operation weight scheduler')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
 	training_group.add_argument('--disable_amp', default=False, action='store_true', help='Disable Automatic Mixed Precision')
@@ -258,7 +268,6 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 # Iteratively predict primitives and propagate average loss
 def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc=''):
 	total_train_loss = 0
-	model.set_operation_scale(subtract_sdf, add_sdf, 0)
 
 	for data_sample in tqdm(train_loader, desc=desc):
 		(
@@ -320,9 +329,16 @@ def save_model(model, args, data_splits, training_results, model_path):
 	}, model_path)
 
 
+def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch):
+	epoch_range = sub_schedule_end_epoch - sub_schedule_start_epoch
+	sub_weight = max(0, min(1, (epoch - sub_schedule_start_epoch) / epoch_range))
+	return sub_weight
+
+
 # Train model for max_epochs or until stopped early
 def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, data_splits, args, device, training_logger):
 	model.train(True)
+	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
@@ -334,6 +350,10 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	init_epoch = training_logger.get_last_epoch()+1 if training_logger.get_last_epoch() else 1
 
 	for epoch in range(init_epoch, args.max_epochs+1):
+		if not args.disable_sub_operation and args.schedule_sub_weight:
+			args.sub_weight = schedule_sub_weight(args.sub_schedule_start_epoch, args.sub_schedule_end_epoch, epoch)
+			model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
+
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)

@@ -25,6 +25,7 @@ class RegressorNetwork(nn.Module):
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
 		self.init_layers(no_batch_norm);
 
+
 	def init_layers(self, no_batch_norm=False):
 		self.fc_list = nn.ModuleList()
 		self.bn_list = nn.ModuleList() if not no_batch_norm else None
@@ -36,6 +37,7 @@ class RegressorNetwork(nn.Module):
 
 			if self.bn_list != None and i+1 < len(self.layer_sizes) - 1:
 				self.bn_list.append(nn.BatchNorm1d(curr_layer_size))
+
 
 	def forward(self, X):
 		for i in range(len(self.fc_list)):
@@ -104,23 +106,23 @@ class PrimitiveRegressor(nn.Module):
 
 		self.scale_op_id = None
 		self.replace_op_id = None
-		self.operation_scale = None
+		self.operation_weight = None
 
 
 	# Set which operations to scale and by how much
-	def set_operation_scale(self, scale_op, replace_op, operation_scale):
+	def set_operation_weight(self, scale_op, replace_op, operation_weight):
 		self.scale_op_id = CSGModel.operation_functions.index(scale_op) if scale_op in CSGModel.operation_functions else None
 		self.replace_op_id = CSGModel.operation_functions.index(replace_op) if replace_op in CSGModel.operation_functions else None
-		self.operation_scale = operation_scale
+		self.operation_weight = operation_weight
 
 
 	# Scale operation vector
 	def scale_operations(self, operation):
-		if self.scale_op_id is None or self.replace_op_id is None or self.operation_scale is None:
+		if self.scale_op_id is None or self.replace_op_id is None or self.operation_weight is None:
 			return operation
 
-		operation[self.replace_op_id] += operation[self.scale_op_id] * (1 - self.operation_scale)
-		operation[self.scale_op_id] *= self.operation_scale
+		operation[:, self.replace_op_id] += operation[:, self.scale_op_id] * (1 - self.operation_weight)
+		operation[:, self.scale_op_id] *= self.operation_weight
 
 		return operation
 

@@ -16,7 +16,7 @@ from networks.csg_crn import CSG_CRN
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
-from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
+from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name, add_sdf, subtract_sdf
 from utilities.file_loader import FileLoader
 from utilities.data_augmentation import RotationAxis
 from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface
@@ -63,6 +63,7 @@ def load_model(args):
 	args.sample_dist = saved_args.sample_dist
 	args.surface_uniform_ratio = saved_args.surface_uniform_ratio
 	args.loss_metric = saved_args.loss_metric
+	args.sub_weight = saved_args.sub_weight
 
 	if not args.num_cascades:
 		args.num_cascades = saved_args.num_cascades
@@ -86,6 +87,7 @@ def load_model(args):
 	)
 
 	model.load_state_dict(state_dict, strict=False)
+	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 	model.eval()
 
 	return model
@@ -136,7 +138,7 @@ def print_csg_commands(csg_model):
 
 		print(f'Command {count}:')
 		print(f'Shape:\t\t{get_primitive_name(shape_weights)}')
-		print(f'Operation:\t{get_operation_name(operation_weights)}')
+		print(f'Operation:\t{get_operation_name(operation_weights)}\t[{operation_weights.tolist()}]')
 		pretty_print_tensor('Translation:\t', command['translations'])
 		pretty_print_tensor('Rotation:\t', command['rotations'])
 		pretty_print_tensor('Scale:\t\t', command['scales'])

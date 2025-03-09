@@ -88,9 +88,9 @@ class CSG_CRN(nn.Module):
 
 
 	# Set which operations to scale and by how much
-	def set_operation_scale(self, scale_op, replace_op, operation_scale):
+	def set_operation_weight(self, scale_op, replace_op, operation_scale):
 		for regressor_decoder in self.regressor_decoder_list:
-			regressor_decoder.set_operation_scale(scale_op, replace_op, operation_scale)
+			regressor_decoder.set_operation_weight(scale_op, replace_op, operation_scale)
 
 
 # Test network
