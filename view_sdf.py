@@ -125,7 +125,7 @@ class ToggleButtons():
 
 		# Find button that was pressed
 		for button in self.buttons:
-			if button.is_over_button(mouse_x, mouse_y):
+			if button.focused and button.is_over_button(mouse_x, mouse_y):
 				pressed_button = button
 
 		# No action if the button is already depressed
