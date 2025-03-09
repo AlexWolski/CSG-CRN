@@ -361,12 +361,12 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results
-		training_logger.add_result(epoch, train_loss, val_loss, chamfer_dist, learning_rate)\
+		training_logger.add_result(epoch, train_loss, val_loss, chamfer_dist, learning_rate)
 
 		# Update learning rate scheduler and early stopping
 		if not args.schedule_sub_weight or args.sub_weight == 1:
-			scheduler.step(val_loss)
-			early_stopping(val_loss)
+			scheduler.step(chamfer_dist)
+			early_stopping(chamfer_dist)
 
 		# Print and save epoch training results
 		print(f"Learning Rate:     {learning_rate}")
@@ -380,7 +380,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			print(f"Weight Scheduler:  {epoch}/{args.sub_schedule_end_epoch}")
 		# Once subtract weight scheduling is completed, run learning rate scheduling and early stopping
 		else:
-			print(f"Best Val Loss:     {scheduler.best}")
+			print(f"Best Chamfer Dist: {scheduler.best}")
 			print(f"LR Patience:       {scheduler.num_bad_epochs}/{scheduler.patience}")
 			print(f"Early Stop:        {early_stopping.counter}/{early_stopping.patience}")
 
