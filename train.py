@@ -26,8 +26,6 @@ from utilities.training_logger import TrainingLogger
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
 
 
-# Weights for regularization loss
-PROXIMITY_LOSS_WEIGHT = 1
 # Percentage of data to use for training, validation, and testing
 DATA_SPLIT = [0.8, 0.1, 0.1]
 
@@ -432,7 +430,7 @@ def main():
 
 	# Initialize model
 	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
-	loss_func = Loss(args.loss_metric, PROXIMITY_LOSS_WEIGHT).to(device)
+	loss_func = Loss(args.loss_metric).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = AdamW(model.parameters(), lr=current_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')

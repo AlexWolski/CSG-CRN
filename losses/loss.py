@@ -1,16 +1,12 @@
 import torch
 import torch.nn as nn
-from losses.proximity_loss import ProximityLoss
 from losses.reconstruction_loss import ReconstructionLoss
 
 
 class Loss(nn.Module):
-	def __init__(self, loss_metric, proximity_loss_weight=0):
+	def __init__(self, loss_metric):
 		super(Loss, self).__init__()
-
-		self.proximity_loss_weight = proximity_loss_weight
 		self.recon_loss = ReconstructionLoss(loss_metric)
-		self.proximity_loss = ProximityLoss()
 
 
 	# Compute reconstruction and primitive loss
@@ -18,15 +14,9 @@ class Loss(nn.Module):
 		target_points = target_samples[..., :3]
 		target_distances = target_samples[..., 3]
 
-		# Sample CSG model
-		primitive_distances = []
-		refined_distances = csg_model.sample_csg(target_points, out_primitive_samples=primitive_distances)
-
-		# Compute loss
-		refined_recon_loss = self.recon_loss(target_distances, refined_distances)
-		proximity_loss = self.proximity_loss_weight * self.proximity_loss(primitive_distances)
-		total_loss = refined_recon_loss + proximity_loss
-		return total_loss
+		# Sample CSG model and compute loss
+		refined_distances = csg_model.sample_csg(target_points)
+		return self.recon_loss(target_distances, refined_distances)
 
 
 # Test loss
