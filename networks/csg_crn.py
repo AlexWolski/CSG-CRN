@@ -46,15 +46,15 @@ class CSG_CRN(nn.Module):
 		self.to(self.device)
 
 
-	def forward(self, target_input, initial_recon_input=None):
+	def forward(self, target_input_samples, initial_recon_input=None):
 		# Change input shape from BxNx4 to Bx4xN for PointNet encoder
 		# Where B = Batch Size and N = Number of Points
-		target_input = target_input.permute(0, 2, 1)
+		target_input_samples = target_input_samples.permute(0, 2, 1)
 
 		if initial_recon_input is not None:
 			initial_recon_input = initial_recon_input.permute(0, 2, 1)
 
-		features = self.siamese_encoder(target_input, initial_recon_input)
+		features = self.siamese_encoder(target_input_samples, initial_recon_input)
 
 		output_list = []
 		first_prim = True
@@ -66,23 +66,33 @@ class CSG_CRN(nn.Module):
 		return output_list
 
 
+	def forward_refine(self, target_input_samples, csg_model=None):
+		(_, num_input_points, _) = target_input_samples.size()
+
+		# If a CSG model wasn't provided, initialize one
+		if csg_model is None:
+			csg_model = CSGModel(self.device)
+			recon_input_samples = None
+		# If a CSG model was provided, sample it to generate a reconstruction input sample
+		else:
+			(recon_input_points, recon_input_distances) = sample_sdf_from_csg_combined(csg_model, num_input_points, self.sample_dist, self.surface_uniform_ratio)
+			recon_input_samples = torch.cat((recon_input_points, recon_input_distances.unsqueeze(2)), dim=-1)
+
+		# Forward pass
+		output_list = self(target_input_samples, recon_input_samples)
+
+		# Add primitives to the CSG model
+		for output in output_list:
+			csg_model.add_command(*output)
+
+		return csg_model
+
+
 	def forward_cascade(self, target_input_samples):
-		# Initialize SDF CSG model
-		(batch_size, num_input_points, _) = target_input_samples.size()
-		csg_model = CSGModel(self.device)
-		recon_input_samples = None
+		csg_model = None
 
 		for i in range(self.num_cascades):
-			output_list = self(target_input_samples, recon_input_samples)
-
-			# Add primitives to the CSG model
-			for output in output_list:
-				csg_model.add_command(*output)
-
-			# Sample CSG for next refinement loop
-			if i < self.num_cascades - 1:
-				(recon_input_points, recon_input_distances) = sample_sdf_from_csg_combined(csg_model, num_input_points, self.sample_dist, self.surface_uniform_ratio)
-				recon_input_samples = torch.cat((recon_input_points, recon_input_distances.unsqueeze(2)), dim=-1)
+			csg_model = self.forward_refine(target_input_samples, csg_model)
 
 		return csg_model
 
