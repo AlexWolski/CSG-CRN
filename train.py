@@ -291,7 +291,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 	return total_train_loss
 
 
-def validate(model, loss_func, val_loader, args, device):
+def validate(model, loss_func, val_loader, args):
 	total_val_loss = 0
 	total_chamfer_dist = 0
 
@@ -303,8 +303,7 @@ def validate(model, loss_func, val_loader, args, device):
 				target_surface_samples
 			) = data_sample
 
-			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-				csg_model = model.forward_cascade(target_input_samples)
+			csg_model = model.forward_cascade(target_input_samples)
 
 			batch_loss = loss_func(target_loss_samples, csg_model)
 			total_val_loss += batch_loss.item()
@@ -355,7 +354,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
-		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, args, device)
+		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, args)
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results
