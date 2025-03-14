@@ -66,7 +66,7 @@ class CSG_CRN(nn.Module):
 		return output_list
 
 
-	def forward_refine(self, target_input_samples, csg_model=None):
+	def forward_refine(self, target_input_samples, csg_model=None, stop_input_grad=True):
 		(_, num_input_points, _) = target_input_samples.size()
 
 		# If a CSG model wasn't provided, initialize one
@@ -76,6 +76,11 @@ class CSG_CRN(nn.Module):
 		# If a CSG model was provided, sample it to generate a reconstruction input sample
 		else:
 			(recon_input_points, recon_input_distances) = sample_sdf_from_csg_combined(csg_model, num_input_points, self.sample_dist, self.surface_uniform_ratio)
+
+			if stop_input_grad:
+				recon_input_points = recon_input_points.detach()
+				recon_input_distances = recon_input_distances.detach()
+
 			recon_input_samples = torch.cat((recon_input_points, recon_input_distances.unsqueeze(2)), dim=-1)
 
 		# Forward pass
