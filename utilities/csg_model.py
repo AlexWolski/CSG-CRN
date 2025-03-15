@@ -93,6 +93,31 @@ class CSGModel():
 		self.device = device
 
 
+	def clone(self):
+		cloned_model = CSGModel(self.device)
+
+		for command in self.csg_commands:
+			cloned_model.add_command(
+				command['shape weights'].clone(),
+				command['operation weights'].clone(),
+				command['translations'].clone(),
+				command['rotations'].clone(),
+				command['scales'].clone(),
+				command['blending'],
+				command['roundness']
+			)
+
+		return cloned_model
+
+
+	def detach(self):
+		for command_index in range(self.num_commands):
+			command_list = self.csg_commands[command_index]
+
+			for command_key, command in command_list.items():
+				self.csg_commands[command_index][command_key] = command.detach() if torch.is_tensor(command) else command
+
+
 	# Validate that the given command has the correct batch size
 	def _validate_batch_size(self, command):
 		batch_sizes_set = set()
@@ -132,7 +157,7 @@ class CSGModel():
 		self.num_commands += 1
 
 
-	# Add batches of commands form another other CSG model to this model
+	# Add batches of commands from another other CSG model to this model
 	def add_batches_from_csg_model(self, other_csg_model):
 		if self.device != other_csg_model.device:
 			raise Exception(f'CSG Model devices do not match. Expected {self.device} but found {other_csg_model.device}')
