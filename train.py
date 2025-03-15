@@ -271,26 +271,27 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 		(
 			target_input_samples,
 			target_loss_samples,
-			target_surface_samples
+			_
 		) = data_sample
 
 		csg_model = None
-		accumulated_loss = 0
 
-		# Accumulate gradient over all refinement iterations
+		# Update model parameters after each refinement step
 		for i in range(args.num_cascades):
+			csg_model = csg_model.clone().detach() if csg_model is not None else None
+
+			# Forward
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-				csg_model = model.forward_refine(target_input_samples, csg_model, stop_input_grad=True)
+				csg_model = model.forward_refine(target_input_samples.clone(), csg_model, stop_input_grad=True)
 
-			batch_loss = loss_func(target_loss_samples, csg_model)
-			accumulated_loss = accumulated_loss + batch_loss
+			batch_loss = loss_func(target_loss_samples.clone(), csg_model)
 
-		# Back propagate
-		scaler.scale(accumulated_loss).backward()
-		scaler.step(optimizer)
-		optimizer.zero_grad(set_to_none=True)
-		scaler.update()
-		total_train_loss += accumulated_loss
+			# Back propagate
+			scaler.scale(batch_loss).backward()
+			scaler.step(optimizer)
+			optimizer.zero_grad(set_to_none=True)
+			scaler.update()
+			total_train_loss += batch_loss
 
 	total_train_loss /= train_loader.__len__() * args.num_cascades
 	return total_train_loss.cpu().item()
