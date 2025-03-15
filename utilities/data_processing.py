@@ -52,11 +52,11 @@ def get_checkpoint_dir(output_dir):
 
 
 # Read file list from a dataset directory
-def get_data_files(data_dir):
+def get_data_files(data_dir, sub_dir=None):
 	sample_list_path = os.path.join(data_dir, SAMPLE_LIST_FILE)
 
 	if os.path.isfile(sample_list_path):
-		return load_list(sample_list_path)
+		return load_list(sample_list_path, sub_dir)
 	else:
 		raise FileNotFoundError(f'Unable to find dataset file list: {sample_list_path}')
 
@@ -79,11 +79,24 @@ def save_list(file_path, output_list):
 
 
 # Read all the lines of a file to a list
-def load_list(file_path):
+def load_list(file_path, sub_dir=None):
 	list_data = []
 
+	# Read file paths from the dataset file list
 	with open(file_path, 'r') as f:
 		for item in f:
 			list_data.append(item.rstrip('\n'))
+
+	# Assert that the file list is not empty
+	if len(list_data) == 0:
+		raise FileNotFoundError(f'No entries found in the dataset file list: {file_path}')
+
+	# Filter for files in the subdirectory if one is specified
+	if sub_dir is not None:
+		list_data = [path for path in list_data if path.startswith(sub_dir + '/')]
+
+	# Assert that the dataset file list contains files in the given subdirectory
+	if len(list_data) == 0:
+		raise FileNotFoundError(f'Unable to find any dataset files in the subdirectory: {sub_dir}')
 
 	return list_data

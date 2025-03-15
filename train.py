@@ -132,7 +132,8 @@ def get_data_parser():
 	data_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
 	data_group = data_parser.add_argument_group('DATA SETTINGS')
 
-	data_group.add_argument('--data_dir', type=str, help='Dataset parent directory (data in subdirectories is included). Required unless the --model_path and --resume_training options are provided')
+	data_group.add_argument('--data_dir', type=str, help='Parent directory of the SDF Dataset (data in subdirectories is included). Required unless the --model_path and --resume_training options are provided')
+	data_group.add_argument('--sub_dir', type=str, help='A subdirectory of of the parent SDF dataset to train on. The subdirectory must be present in the nea-surface, surface, and uniform directories.')
 	data_group.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
 	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Provided arguments overwrite all the saved arguments except for network model settings')
 	data_group.add_argument('--resume_training', default=False, action='store_true', help='If a model path is supplied, resume training of the model with the original training data')
@@ -209,7 +210,7 @@ def get_device(device=None):
 # Prepare data files and load training dataset
 def load_data_splits(args, data_split, device):
 	# Load sample files
-	file_rel_paths = get_data_files(args.data_dir)
+	file_rel_paths = get_data_files(args.data_dir, args.sub_dir)
 	print(f'Found {len(file_rel_paths)} data files')
 
 	# Split dataset
@@ -327,6 +328,7 @@ def save_model(model, args, data_splits, training_results, model_path):
 		'model': model.state_dict(),
 		'args': args,
 		'data_dir': args.data_dir,
+		'sub_dir': args.sub_dir,
 		'output_dir': args.output_dir,
 		'data_splits': data_splits,
 		'training_results': training_results
