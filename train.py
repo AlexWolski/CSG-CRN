@@ -268,6 +268,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 # Iteratively predict primitives and propagate average loss
 def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc=''):
 	total_train_loss = 0
+	batch_loss = 0
 
 	for data_sample in tqdm(train_loader, desc=desc):
 		(
@@ -293,9 +294,11 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 			scaler.step(optimizer)
 			optimizer.zero_grad(set_to_none=True)
 			scaler.update()
-			total_train_loss += batch_loss
 
-	total_train_loss /= train_loader.__len__() * args.num_cascades
+		# Only record the loss for the completed reconstruction
+		total_train_loss += batch_loss
+
+	total_train_loss /= train_loader.__len__()
 	return total_train_loss.cpu().item()
 
 
