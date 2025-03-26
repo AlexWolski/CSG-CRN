@@ -31,16 +31,7 @@ class SiameseEncoder(nn.Module):
 				self.bn_list.append(nn.BatchNorm1d(curr_layer_size))
 
 
-	def forward(self, target_input, initial_recon_input=None):
-		# Weights are shared in encoders
-		target_features, _, _ = self.encoder(target_input)
-
-		# If no initial_recon_input is provided, set the output features to a zero tensor
-		if initial_recon_input is not None:
-			initial_recon_features, _, _ = self.encoder(initial_recon_input)
-		else:
-			initial_recon_features = torch.zeros(target_features.size(), device=target_input.device)
-
+	def forward(self, target_features, initial_recon_features):
 		features = torch.cat([target_features, initial_recon_features], dim=1)
 
 		# Apply fully connected, relu, and batch normalization layers
@@ -54,6 +45,21 @@ class SiameseEncoder(nn.Module):
 				features = bn_layer(features)
 
 		return features
+
+
+	# Encode the features of a target point cloud
+	def forward_initial(self, target_input):
+		# Weights are shared in encoders
+		target_features, _, _ = self.encoder(target_input)
+		initial_recon_features = torch.zeros(target_features.size(), device=target_input.device)
+		features = self.forward(target_features, initial_recon_features)
+		return features, target_features
+
+
+	# Encode the contrastive features between target features and an initial reconstruction point cloud
+	def forward_refine(self, target_features, initial_recon_input):
+		initial_recon_features, _, _ = self.encoder(initial_recon_input)
+		return self.forward(target_features.detach(), initial_recon_features)
 
 
 # Test network

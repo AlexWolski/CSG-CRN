@@ -85,16 +85,16 @@ class CSGModel():
 	num_operations = len(operation_functions)
 
 
-	def __init__(self, device=torch.device('cpu')):
+	def __init__(self, batch_size, device=torch.device('cpu')):
 		# List of all primitives and operations to build CSG model
 		self.csg_commands = []
 		self.num_commands = 0
-		self.batch_size = 0
+		self.batch_size = batch_size
 		self.device = device
 
 
 	def clone(self):
-		cloned_model = CSGModel(self.device)
+		cloned_model = CSGModel(self.batch_size, self.device)
 
 		for command in self.csg_commands:
 			cloned_model.add_command(
@@ -117,6 +117,8 @@ class CSGModel():
 			for command_key, command in command_list.items():
 				self.csg_commands[command_index][command_key] = command.detach() if torch.is_tensor(command) else command
 
+		return self
+
 
 	# Validate that the given command has the correct batch size
 	def _validate_batch_size(self, command):
@@ -133,10 +135,8 @@ class CSGModel():
 		batch_size = batch_sizes_set.pop()
 
 		# Set the number of batches if this is the first command.
-		if self.batch_size == 0:
-			self.batch_size = batch_size
 		# Ensure that the batch size of the command matches the existing commands.
-		elif self.batch_size != batch_size:
+		if self.batch_size != batch_size:
 			raise Exception(f'Expected batch size of {self.batch_size} but was given a command with batch size of {batch_size}.')
 
 

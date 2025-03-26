@@ -9,7 +9,7 @@ from utilities.sampler_utils import sample_sdf_from_csg_combined
 
 class CSG_CRN(nn.Module):
 	def __init__(
-			self, num_prims, num_shapes, num_operations, num_cascades, sample_dist, surface_uniform_ratio, device,
+			self, num_prims, num_shapes, num_operations, num_cascades, num_input_points, sample_dist, surface_uniform_ratio, device,
 			decoder_layers=[], predict_blending=True, predict_roundness=True, no_batch_norm=False):
 		super(CSG_CRN, self).__init__()
 
@@ -17,6 +17,7 @@ class CSG_CRN(nn.Module):
 		self.num_shapes = num_shapes
 		self.num_operations = num_operations
 		self.num_cascades = num_cascades
+		self.num_input_points = num_input_points
 		self.sample_dist = sample_dist
 		self.surface_uniform_ratio = surface_uniform_ratio
 		self.device = device
@@ -46,58 +47,59 @@ class CSG_CRN(nn.Module):
 		self.to(self.device)
 
 
-	def forward(self, target_input_samples, initial_recon_input=None):
+	def forward_initial(self, target_input_samples):
+		batch_size = target_input_samples.size(dim=0)
+		csg_model = CSGModel(batch_size, device=self.device)
+		first_prim = True
+
 		# Change input shape from BxNx4 to Bx4xN for PointNet encoder
 		# Where B = Batch Size and N = Number of Points
 		target_input_samples = target_input_samples.permute(0, 2, 1)
 
-		if initial_recon_input is not None:
-			initial_recon_input = initial_recon_input.permute(0, 2, 1)
+		# Encode target features
+		features, target_features = self.siamese_encoder.forward_initial(target_input_samples)
 
-		features = self.siamese_encoder(target_input_samples, initial_recon_input)
+		# Decode primitive predictions
+		for i, decoder in enumerate(self.regressor_decoder_list):
+			csg_model.add_command(*decoder(features, first_prim))
+			first_prim = False
+
+		return csg_model, target_features
+
+
+	def forward_refine(self, target_features, csg_model, stop_input_grad=True):
+		# If a CSG model was provided, sample it to generate a reconstruction input sample
+		(recon_input_points, recon_input_distances) = sample_sdf_from_csg_combined(csg_model, self.num_input_points, self.sample_dist, self.surface_uniform_ratio)
+
+		if stop_input_grad:
+			recon_input_points = recon_input_points.detach()
+			recon_input_distances = recon_input_distances.detach()
+
+		recon_input_samples = torch.cat((recon_input_points, recon_input_distances.unsqueeze(2)), dim=-1)
+
+		# Change input shape from BxNx4 to Bx4xN for PointNet encoder
+		# Where B = Batch Size and N = Number of Points
+		recon_input_samples = recon_input_samples.permute(0, 2, 1)
+
+		# Encode contrastive features
+		features = self.siamese_encoder.forward_refine(target_features, recon_input_samples)
 
 		output_list = []
 		first_prim = True
 
+		# Decode primitive predictions
 		for i, decoder in enumerate(self.regressor_decoder_list):
-			output_list.append(decoder(features, first_prim))
+			csg_model.add_command(*decoder(features, first_prim))
 			first_prim = False
-
-		return output_list
-
-
-	def forward_refine(self, target_input_samples, csg_model=None, stop_input_grad=True):
-		(_, num_input_points, _) = target_input_samples.size()
-
-		# If a CSG model wasn't provided, initialize one
-		if csg_model is None:
-			csg_model = CSGModel(self.device)
-			recon_input_samples = None
-		# If a CSG model was provided, sample it to generate a reconstruction input sample
-		else:
-			(recon_input_points, recon_input_distances) = sample_sdf_from_csg_combined(csg_model, num_input_points, self.sample_dist, self.surface_uniform_ratio)
-
-			if stop_input_grad:
-				recon_input_points = recon_input_points.detach()
-				recon_input_distances = recon_input_distances.detach()
-
-			recon_input_samples = torch.cat((recon_input_points, recon_input_distances.unsqueeze(2)), dim=-1)
-
-		# Forward pass
-		output_list = self(target_input_samples, recon_input_samples)
-
-		# Add primitives to the CSG model
-		for output in output_list:
-			csg_model.add_command(*output)
 
 		return csg_model
 
 
 	def forward_cascade(self, target_input_samples):
-		csg_model = None
+		csg_model, target_features = self.forward_initial(target_input_samples)
 
 		for i in range(self.num_cascades):
-			csg_model = self.forward_refine(target_input_samples, csg_model)
+			csg_model = self.forward_refine(target_features, csg_model)
 
 		return csg_model
 

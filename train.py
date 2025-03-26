@@ -249,6 +249,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 		num_shapes,
 		num_operations,
 		args.num_cascades,
+		args.num_input_points,
 		args.sample_dist,
 		args.surface_uniform_ratio,
 		device,
@@ -277,15 +278,15 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 			_
 		) = data_sample
 
-		csg_model = None
+		csg_model, target_features = model.forward_initial(target_input_samples)
 
 		# Update model parameters after each refinement step
 		for i in range(args.num_cascades):
-			csg_model = csg_model.clone().detach() if csg_model is not None else None
+			csg_model = csg_model.clone().detach()
 
 			# Forward
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-				csg_model = model.forward_refine(target_input_samples.clone(), csg_model, stop_input_grad=not args.back_prop_recon_input)
+				csg_model = model.forward_refine(target_features, csg_model, stop_input_grad=not args.back_prop_recon_input)
 
 			batch_loss = loss_func(target_loss_samples.clone(), csg_model)
 
