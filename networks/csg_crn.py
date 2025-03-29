@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from networks.pointnet import PointNetfeat, POINTNET_FEAT_OUTPUT_SIZE
-from networks.siamese_encoder import SiameseEncoder, SIAMEZE_ENCODER_OUTPUT_SIZE
+from networks.contrastive_encoder import ContrastiveEncoder
 from networks.regressor_decoder import PrimitiveRegressor
 from utilities.csg_model import CSGModel
 from utilities.sampler_utils import sample_sdf_from_csg_combined
@@ -27,13 +27,13 @@ class CSG_CRN(nn.Module):
 		self.no_batch_norm = no_batch_norm
 
 		self.point_encoder = PointNetfeat(global_feat=True, no_batch_norm=no_batch_norm)
-		self.siamese_encoder = SiameseEncoder(self.point_encoder, POINTNET_FEAT_OUTPUT_SIZE, no_batch_norm)
+		self.contrastive_encoder = ContrastiveEncoder(POINTNET_FEAT_OUTPUT_SIZE, no_batch_norm)
 		self.regressor_decoder_list = nn.ModuleList()
 
 		# Initialize a separate decoder for each primitive
 		for i in range(self.num_prims):
 			regressor_decoder = PrimitiveRegressor(
-				SIAMEZE_ENCODER_OUTPUT_SIZE,
+				POINTNET_FEAT_OUTPUT_SIZE,
 				self.num_shapes,
 				self.num_operations,
 				layer_sizes=self.decoder_layers,
@@ -56,15 +56,15 @@ class CSG_CRN(nn.Module):
 		# Where B = Batch Size and N = Number of Points
 		target_input_samples = target_input_samples.permute(0, 2, 1)
 
-		# Encode target features
-		features, target_features = self.siamese_encoder.forward_initial(target_input_samples)
+		# Encode target point cloud features
+		features, _, _ = self.point_encoder(target_input_samples)
 
 		# Decode primitive predictions
 		for i, decoder in enumerate(self.regressor_decoder_list):
 			csg_model.add_command(*decoder(features, first_prim))
 			first_prim = False
 
-		return csg_model, target_features
+		return csg_model, features
 
 
 	def forward_refine(self, target_features, csg_model, stop_input_grad=True):
@@ -81,8 +81,11 @@ class CSG_CRN(nn.Module):
 		# Where B = Batch Size and N = Number of Points
 		recon_input_samples = recon_input_samples.permute(0, 2, 1)
 
+		# Encode reconstruction point cloud features
+		recon_features, _, _ = self.point_encoder(recon_input_samples)
+
 		# Encode contrastive features
-		features = self.siamese_encoder.forward_refine(target_features, recon_input_samples)
+		features = self.contrastive_encoder.forward(target_features, recon_features)
 
 		output_list = []
 		first_prim = True
