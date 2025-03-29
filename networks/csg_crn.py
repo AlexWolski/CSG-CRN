@@ -87,13 +87,9 @@ class CSG_CRN(nn.Module):
 		# Encode contrastive features
 		features = self.contrastive_encoder.forward(target_features, recon_features)
 
-		output_list = []
-		first_prim = True
-
 		# Decode primitive predictions
 		for i, decoder in enumerate(self.regressor_decoder_list):
-			csg_model.add_command(*decoder(features, first_prim))
-			first_prim = False
+			csg_model.add_command(*decoder(features, first_prim=False))
 
 		return csg_model
 
