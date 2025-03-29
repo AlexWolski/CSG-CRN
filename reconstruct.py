@@ -65,7 +65,7 @@ def load_model(args):
 	args.loss_metric = saved_args.loss_metric
 	args.sub_weight = saved_args.sub_weight
 
-	if not args.num_cascades:
+	if args.num_cascades == None:
 		args.num_cascades = saved_args.num_cascades
 
 	predict_blending = not saved_args.no_blending
