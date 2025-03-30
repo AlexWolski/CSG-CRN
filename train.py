@@ -184,6 +184,8 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--schedule_sub_weight', default=False, action='store_true', help='Start the subtract operation weight at 0 and gradually increase it to 1')
 	training_group.add_argument('--sub_schedule_start_epoch', type=int, default=10, help='Epoch to start the subtract operation weight scheduler')
 	training_group.add_argument('--sub_schedule_end_epoch', type=int, default=30, help='Epoch to complete the subtract operation weight scheduler')
+	training_group.add_argument('--no_schedule_cascades', default=False, action='store_true', help='Begin training with all refinment iterations enabled rather than progressively added with a scheduler.')
+	training_group.add_argument('--cascade_schedule_epochs', type=int, default=10, help='Number of epochs to train before adding a new refinement iteration.')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
 	training_group.add_argument('--disable_amp', default=False, action='store_true', help='Disable Automatic Mixed Precision')
@@ -248,7 +250,6 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 		num_prims,
 		num_shapes,
 		num_operations,
-		args.num_cascades,
 		args.num_input_points,
 		args.sample_dist,
 		args.surface_uniform_ratio,
@@ -267,7 +268,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc=''):
+def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc=''):
 	total_train_loss = 0
 	batch_loss = 0
 
@@ -289,7 +290,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 		scaler.update()
 
 		# Update model parameters after each refinement step
-		for i in range(args.num_cascades):
+		for i in range(num_cascades):
 			csg_model = csg_model.clone().detach()
 
 			# Forward
@@ -311,7 +312,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, dev
 	return total_train_loss.cpu().item()
 
 
-def validate(model, loss_func, val_loader, args):
+def validate(model, loss_func, val_loader, num_cascades, args):
 	total_val_loss = 0
 	total_chamfer_dist = 0
 
@@ -323,7 +324,7 @@ def validate(model, loss_func, val_loader, args):
 				target_surface_samples
 			) = data_sample
 
-			csg_model = model.forward_cascade(target_input_samples)
+			csg_model = model.forward_cascade(target_input_samples, num_cascades)
 
 			batch_loss = loss_func(target_loss_samples, csg_model)
 			total_val_loss += batch_loss.item()
@@ -368,14 +369,24 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	init_epoch = training_logger.get_last_epoch()+1 if training_logger.get_last_epoch() else 1
 
 	for epoch in range(init_epoch, args.max_epochs+1):
+
+		# Set operation weight
 		if not args.disable_sub_operation and args.schedule_sub_weight:
 			args.sub_weight = schedule_sub_weight(args.sub_schedule_start_epoch, args.sub_schedule_end_epoch, epoch)
 			model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
+		# Schedule number of cascades
+		if args.no_schedule_cascades:
+			num_cascades = args.num_cascades
+		else:
+			cascade_scheduler_current = max(epoch - args.sub_schedule_start_epoch, 0) if args.schedule_sub_weight else epoch
+			num_cascades = cascade_scheduler_current // args.cascade_schedule_epochs
+			num_cascades = min(num_cascades, args.num_cascades)
+
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
-		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, args, device, desc)
-		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, args)
+		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc)
+		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args)
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results
@@ -387,20 +398,24 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			early_stopping(chamfer_dist)
 
 		# Print and save epoch training results
-		print(f"Learning Rate:     {learning_rate}")
-		print(f"Training Loss:     {train_loss}")
-		print(f"Validation Loss:   {val_loss}")
-		print(f"Chamfer Dist:      {chamfer_dist}")
+		print(f"Learning Rate:      {learning_rate}")
+		print(f"Training Loss:      {train_loss}")
+		print(f"Validation Loss:    {val_loss}")
+		print(f"Chamfer Dist:       {chamfer_dist}")
 
 		# Subtract weight scheduler runs first
 		if args.schedule_sub_weight and args.sub_weight < 1:
 			print(f"Subtract Weight:   {args.sub_weight}")
 			print(f"Weight Scheduler:  {epoch}/{args.sub_schedule_end_epoch}")
-		# Once subtract weight scheduling is completed, run learning rate scheduling and early stopping
+		# Cascade scheduler runs after subtract weight scheduler completes
+		elif not args.no_schedule_cascades and num_cascades < args.num_cascades:
+			print(f"Number of Cascades: {num_cascades}/{args.num_cascades}")
+			print(f"Cascades Scheduler: {(cascade_scheduler_current) % args.cascade_schedule_epochs}/{args.cascade_schedule_epochs}")
+		# Learning rate scheduling and early stopping runs after all other schedulers
 		else:
-			print(f"Best Chamfer Dist: {scheduler.best}")
-			print(f"LR Patience:       {scheduler.num_bad_epochs}/{scheduler.patience}")
-			print(f"Early Stop:        {early_stopping.counter}/{early_stopping.patience}")
+			print(f"Best Chamfer Dist:  {scheduler.best}")
+			print(f"LR Patience:        {scheduler.num_bad_epochs}/{scheduler.patience}")
+			print(f"Early Stop:         {early_stopping.counter}/{early_stopping.patience}")
 
 		print()
 

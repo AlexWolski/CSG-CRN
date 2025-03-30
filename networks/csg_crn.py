@@ -9,14 +9,13 @@ from utilities.sampler_utils import sample_sdf_from_csg_combined
 
 class CSG_CRN(nn.Module):
 	def __init__(
-			self, num_prims, num_shapes, num_operations, num_cascades, num_input_points, sample_dist, surface_uniform_ratio, device,
+			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, surface_uniform_ratio, device,
 			decoder_layers=[], predict_blending=True, predict_roundness=True, no_batch_norm=False):
 		super(CSG_CRN, self).__init__()
 
 		self.num_prims = num_prims
 		self.num_shapes = num_shapes
 		self.num_operations = num_operations
-		self.num_cascades = num_cascades
 		self.num_input_points = num_input_points
 		self.sample_dist = sample_dist
 		self.surface_uniform_ratio = surface_uniform_ratio
@@ -81,6 +80,9 @@ class CSG_CRN(nn.Module):
 		# Where B = Batch Size and N = Number of Points
 		recon_input_samples = recon_input_samples.permute(0, 2, 1)
 
+		# test no back-prop to shape encoder
+		recon_input_samples.detach()
+
 		# Encode reconstruction point cloud features
 		recon_features, _, _ = self.point_encoder(recon_input_samples)
 
@@ -94,10 +96,10 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
-	def forward_cascade(self, target_input_samples):
+	def forward_cascade(self, target_input_samples, num_cascades):
 		csg_model, target_features = self.forward_initial(target_input_samples)
 
-		for i in range(self.num_cascades):
+		for i in range(num_cascades):
 			csg_model = self.forward_refine(target_features, csg_model)
 
 		return csg_model

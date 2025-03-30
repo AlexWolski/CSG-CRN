@@ -76,7 +76,6 @@ def load_model(args):
 		saved_args.num_prims,
 		CSGModel.num_shapes,
 		CSGModel.num_operations,
-		args.num_cascades,
 		args.num_input_points,
 		args.sample_dist,
 		saved_args.surface_uniform_ratio,
@@ -177,7 +176,7 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 
 def construct_csg_model(model, input_file, args):
 	target_mesh, input_samples = load_mesh_and_samples(input_file, args)
-	csg_model = model.forward_cascade(input_samples)
+	csg_model = model.forward_cascade(input_samples, args.num_cascades)
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
 	# Pretty print csg commands
