@@ -75,7 +75,10 @@ def sample_uniform_points_sphere(num_points, radius=1, batch_size=None):
 		num_sphere_points += unit_sphere_points.size(dim=0)
 
 	# Select the needed number of point samples
-	unit_sphere_points = torch.cat(sphere_point_list, dim=0)[:total_points].detach()
+	if sphere_point_list:
+		unit_sphere_points = torch.cat(sphere_point_list, dim=0)[:total_points].detach()
+	else:
+		unit_sphere_points = torch.empty(0, 3)
 
 	# Reshape if batch size is defined
 	if batch_size != None:
@@ -93,7 +96,7 @@ def distance_to_mesh_surface(mesh, sample_points):
 	mesh : trimesh.Trimesh
 		Mesh object to compute distances to.
 	sample_points : torch.Tensor
-		Tensor of size (N, N, N) where N is the number of sample points.
+		Tensor of size (N, 3) where N is the number of sample points.
 
 	Returns
 	-------
@@ -121,10 +124,13 @@ def sample_points_mesh_surface(mesh, num_point_samples):
 	Returns
 	-------
 	torch.Tensor
-		Tensor of size (N, N, N) where N=`num_point_samples`.
+		Tensor of size (N, 3) where N=`num_point_samples`.
 		Points uniformly samples from the surface of the given mesh.
 
 	"""
+	if num_point_samples == 0:
+		return torch.empty(0, 3)
+
 	(face_ids, barycentric_coords) = pcu.sample_mesh_random(mesh.vertices, mesh.faces, num_point_samples)
 	surface_points = pcu.interpolate_barycentric_coords(mesh.faces, face_ids, barycentric_coords, mesh.vertices)
 	return torch.from_numpy(surface_points.astype(numpy.float32))
@@ -146,10 +152,13 @@ def sample_sdf_near_mesh_surface(mesh, num_sdf_samples, sample_dist):
 	Returns
 	-------
 	Tuple[torch.Tensor, torch.Tensor]
-		Two tensors of size (N, N, N) and (N) where N=`num_sdf_samples`.
+		Two tensors of size (N, 3) and (N) where N=`num_sdf_samples`.
 		SDF sample points and distances respectively.
 
 	"""
+	if num_sdf_samples == 0:
+		return (torch.empty(0, 3), torch.empty(0))
+
 	surface_points = sample_points_mesh_surface(mesh, num_sdf_samples)
 	gaussian_noise = torch.randn(surface_points.size(), dtype=surface_points.dtype, device=surface_points.device) * sample_dist
 	near_surface_points = surface_points + gaussian_noise
@@ -171,10 +180,13 @@ def sample_sdf_from_mesh_unit_sphere(mesh, num_sdf_samples):
 	Returns
 	-------
 	Tuple[torch.Tensor, torch.Tensor]
-		Two float tensors of size (N, N, N) and (N) where N=`num_sdf_samples`.
+		Two float tensors of size (N, 3) and (N) where N=`num_sdf_samples`.
 		SDF sample points and distances respectively.
 
 	"""
+	if num_sdf_samples == 0:
+		return (torch.empty(0, 3), torch.empty(0))
+
 	sample_points = sample_uniform_points_sphere(num_sdf_samples)
 	sample_distances = distance_to_mesh_surface(mesh, sample_points)
 	return (sample_points, sample_distances)
