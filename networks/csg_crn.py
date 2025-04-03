@@ -59,7 +59,7 @@ class CSG_CRN(nn.Module):
 		features, _, _ = self.point_encoder(target_input_samples)
 
 		# Decode primitive predictions
-		for i, decoder in enumerate(self.regressor_decoder_list):
+		for decoder in self.regressor_decoder_list:
 			csg_model.add_command(*decoder(features, first_prim))
 			first_prim = False
 
@@ -90,7 +90,7 @@ class CSG_CRN(nn.Module):
 		features = self.contrastive_encoder.forward(target_features, recon_features)
 
 		# Decode primitive predictions
-		for i, decoder in enumerate(self.regressor_decoder_list):
+		for decoder in self.regressor_decoder_list:
 			csg_model.add_command(*decoder(features, first_prim=False))
 
 		return csg_model
