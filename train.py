@@ -391,8 +391,11 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Record epoch training results
 		training_logger.add_result(epoch, train_loss, val_loss, chamfer_dist, learning_rate)
 
+		weight_scheduling_in_progress = args.schedule_sub_weight and args.sub_weight < 1
+		cascade_scheduling_in_progress = not args.no_schedule_cascades and num_cascades < args.num_cascades
+
 		# Update learning rate scheduler and early stopping
-		if not args.schedule_sub_weight or args.sub_weight == 1:
+		if not weight_scheduling_in_progress and not cascade_scheduling_in_progress:
 			scheduler.step(chamfer_dist)
 			early_stopping(chamfer_dist)
 
@@ -403,11 +406,11 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		print(f"Chamfer Dist:       {chamfer_dist}")
 
 		# Subtract weight scheduler runs first
-		if args.schedule_sub_weight and args.sub_weight < 1:
+		if weight_scheduling_in_progress:
 			print(f"Subtract Weight:   {args.sub_weight}")
 			print(f"Weight Scheduler:  {epoch}/{args.sub_schedule_end_epoch}")
 		# Cascade scheduler runs after subtract weight scheduler completes
-		elif not args.no_schedule_cascades and num_cascades < args.num_cascades:
+		elif cascade_scheduling_in_progress:
 			print(f"Number of Cascades: {num_cascades}/{args.num_cascades}")
 			print(f"Cascades Scheduler: {(cascade_scheduler_current) % args.cascade_schedule_epochs}/{args.cascade_schedule_epochs}")
 		# Learning rate scheduling and early stopping runs after all other schedulers
