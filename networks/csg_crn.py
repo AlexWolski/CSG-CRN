@@ -80,9 +80,6 @@ class CSG_CRN(nn.Module):
 		# Where B = Batch Size and N = Number of Points
 		recon_input_samples = recon_input_samples.permute(0, 2, 1)
 
-		# test no back-prop to shape encoder
-		recon_input_samples.detach()
-
 		# Encode reconstruction point cloud features
 		recon_features, _, _ = self.point_encoder(recon_input_samples)
 
