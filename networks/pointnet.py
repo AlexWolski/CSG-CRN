@@ -13,10 +13,10 @@ import torch.nn.functional as F
 POINTNET_FEAT_OUTPUT_SIZE = 1024
 
 
-class STN4d(nn.Module):
+class STN5d(nn.Module):
     def __init__(self, no_batch_norm=False):
-        super(STN4d, self).__init__()
-        self.conv1 = torch.nn.Conv1d(4, 64, 1)
+        super(STN5d, self).__init__()
+        self.conv1 = torch.nn.Conv1d(5, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
         self.fc1 = nn.Linear(1024, 512)
@@ -106,7 +106,7 @@ class STNkd(nn.Module):
 class PointNetfeat(nn.Module):
     def __init__(self, global_feat=True, input_transform=False, feature_transform=False, no_batch_norm=False):
         super(PointNetfeat, self).__init__()
-        self.conv1 = torch.nn.Conv1d(4, 64, 1)
+        self.conv1 = torch.nn.Conv1d(5, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
 
@@ -124,7 +124,7 @@ class PointNetfeat(nn.Module):
         self.feature_transform = feature_transform
 
         if self.input_transform:
-            self.stn = STN4d(no_batch_norm=no_batch_norm)
+            self.stn = STN5d(no_batch_norm=no_batch_norm)
 
         if self.feature_transform:
             self.fstn = STNkd(k=64, no_batch_norm=no_batch_norm)
@@ -174,8 +174,8 @@ def feature_transform_regularizer(trans):
 
 
 if __name__ == '__main__':
-    sim_data = Variable(torch.rand(32,4,2500))
-    trans = STN4d()
+    sim_data = Variable(torch.rand(32,5,2500))
+    trans = STN5d()
     out = trans(sim_data)
     print('stn', out.size())
     print('loss', feature_transform_regularizer(out))

@@ -279,7 +279,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 			_
 		) = data_sample
 
-		csg_model, target_features = model.forward_initial(target_input_samples.detach())
+		csg_model = model.forward(target_input_samples.detach())
 
 		batch_loss = loss_func(target_loss_samples.detach(), csg_model)
 
@@ -293,7 +293,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		for i in range(num_cascades):
 			# Forward
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-				refined_csg_model = model.forward_refine(target_features.detach(), csg_model.detach(), stop_input_grad=not args.back_prop_recon_input)
+				refined_csg_model = model.forward(target_input_samples.detach(), csg_model.detach())
 
 			batch_loss = loss_func(target_loss_samples.detach(), refined_csg_model)
 			csg_model = refined_csg_model
