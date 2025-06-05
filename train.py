@@ -103,6 +103,10 @@ def options():
 	else:
 		args.sub_weight = 1
 
+	# Configure cascade scheduling
+	if args.cascade_schedule_epochs <= 0:
+		args.no_schedule_cascades = True
+
 	# Print arguments
 	print('\nArguments:')
 	print('----------')
