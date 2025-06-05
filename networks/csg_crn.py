@@ -56,7 +56,7 @@ class CSG_CRN(nn.Module):
 		else:
 			# Sample the CSG model
 			target_points = target_input_samples[:,:,:3]
-			init_recon_sdf = csg_model.sample_csg(target_points)
+			init_recon_sdf = csg_model.sample_csg(target_points).unsqueeze(-1)
 
 		combined_samples = torch.cat((target_input_samples, init_recon_sdf), -1)
 
