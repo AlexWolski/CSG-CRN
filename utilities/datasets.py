@@ -5,25 +5,23 @@ import torch
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 from torch.utils.data import Dataset
-from utilities.data_augmentation import augment_sample_batch
+from utilities.data_augmentation import augment_sample_batch, augment_sample_batch_points
 from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER
 
 from multiprocessing import Pool
 
 
 class PointDataset(Dataset):
-	def __init__(self, file_rel_paths, device, args, include_surface_samples=True, dataset_name="Dataset"):
+	def __init__(self, file_rel_paths, device, args, include_surface_samples=True, augment_data=False, dataset_name="Dataset"):
 		self.file_rel_paths = file_rel_paths
 		self.augmented_copies = len(file_rel_paths) * args.augment_copies
 		self.raw_copies = len(file_rel_paths)
 		self.device = device
 		self.args = args
 		self.include_surface_samples = include_surface_samples
+		self.augment_data = augment_data
 		self.dataset_name = dataset_name
 		self.__load_data_set()
-
-		if self.args.augment_data and include_surface_samples:
-			print('WARNING: include_surface_samples should be disabled when augment_data is enabled')
 
 
 	# Load all samples into system memory
@@ -104,6 +102,15 @@ class PointDataset(Dataset):
 		return torch.from_numpy(samples)
 
 
+	def __augment_sdf_samples(self, sdf_samples):
+		sdf_points = sdf_samples[:,:,:3]
+		sdf_distances = sdf_samples[:,:,3]
+		sdf_distances = sdf_distances.unsqueeze(-1)
+
+		augmented_points, augmented_distances = augment_sample_batch(sdf_points, sdf_distances, self.args)
+		return torch.cat((augmented_points, augmented_distances), dim=-1)
+
+
 	def __len__(self):
 		return self.augmented_copies
 
@@ -117,13 +124,8 @@ class PointDataset(Dataset):
 		batch_target_surface_samples = self.surface_samples[batch_idx].to(self.device) if self.surface_samples != None else None
 
 		# Augment samples
-		if self.args.augment_data:
-			batch_sdf_points = batch_sdf_samples[:,:,:3]
-			batch_sdf_distances = batch_sdf_samples[:,:,3]
-			batch_sdf_distances = batch_sdf_distances.unsqueeze(2)
-
-			augmented_points, augmented_distances = augment_sample_batch(batch_sdf_points, batch_sdf_distances, self.args)
-			batch_sdf_samples = torch.cat((augmented_points, augmented_distances), dim=-1)
+		if self.augment_data:
+			batch_sdf_samples = self.__augment_sdf_samples(batch_sdf_samples)
 
 		# Shuffle the data samples
 		total_points = self.args.num_input_points + self.args.num_loss_points

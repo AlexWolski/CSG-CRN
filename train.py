@@ -481,10 +481,10 @@ def main():
 	(train_split, val_split, test_split) = data_splits
 	checkpoint_dir = get_checkpoint_dir(args.output_dir)
 
-	if not (train_dataset := PointDataset(train_split, device, args, include_surface_samples=False, dataset_name="Training Set")):
+	if not (train_dataset := PointDataset(train_split, device, args, include_surface_samples=False, augment_data=args.augment_data, dataset_name="Training Set")):
 		return
 
-	if not (val_dataset := PointDataset(val_split, device, args, include_surface_samples=True, dataset_name="Validation Set")):
+	if not (val_dataset := PointDataset(val_split, device, args, include_surface_samples=True, augment_data=False, dataset_name="Validation Set")):
 		return
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
