@@ -10,12 +10,14 @@ MAX_BOUND = 1
 # Maximum SDF value is twice the radius
 MAX_SDF_VALUE = MAX_BOUND * 2
 
+DEFAULT_MIN_BLENDING = 0.001
+
 
 # Smooth minimum and maximum borrowed from iquilezles.org
 # https://iquilezles.org/articles/smin/
 
 
-def smooth_min(a, b, blending):
+def smooth_min(a, b, blending=DEFAULT_MIN_BLENDING):
 	if blending is None:
 		smooth_factor = 0
 	else:
@@ -26,17 +28,17 @@ def smooth_min(a, b, blending):
 	return torch.min(a, b) - smooth_factor
 
 
-def smooth_max(a, b, blending):
+def smooth_max(a, b, blending=DEFAULT_MIN_BLENDING):
 	return -smooth_min(-a, -b, blending)
 
 
 # Union of two SDFs
-def add_sdf(distances, new_distances, blending):
+def add_sdf(distances, new_distances, blending=DEFAULT_MIN_BLENDING):
 	return smooth_min(distances, new_distances, blending)
 
 
 # Intersection of one SDF and the conjugate of the other
-def subtract_sdf(distances, new_distances, blending):
+def subtract_sdf(distances, new_distances, blending=DEFAULT_MIN_BLENDING):
 	return smooth_max(distances, -new_distances, blending)
 
 

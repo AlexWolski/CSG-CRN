@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from networks.pointnet import PointNetfeat, POINTNET_FEAT_OUTPUT_SIZE
 from networks.regressor_decoder import PrimitiveRegressor
-from utilities.csg_model import CSGModel
+from utilities.csg_model import CSGModel, subtract_sdf
 from utilities.sampler_utils import sample_sdf_from_csg_combined
 
 
@@ -47,18 +47,27 @@ class CSG_CRN(nn.Module):
 	def forward(self, target_input_samples, csg_model=None):
 		batch_size = target_input_samples.size(dim=0)
 		num_points = target_input_samples.size(dim=1)
+		target_input_points = target_input_samples[:,:,:3]
+		target_input_sdf = target_input_samples[:,:,3]
 		first_prim = csg_model is None
 
+		# On the first iteration, keep the target shape as the fill volume and append a dummy remove volume.
 		if first_prim:
 			# Insert a tensor of shape BxNx1 to represent the SDF values for the null initial reconstruction
 			csg_model = CSGModel(batch_size, device=self.device)
-			init_recon_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
+			null_volume_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
+			combined_samples = torch.cat((target_input_samples, null_volume_sdf), -1)
+
+		# On refinement iterations, compute the volume to fill and remove to achieve the target shape.
 		else:
 			# Sample the CSG model
-			target_points = target_input_samples[:,:,:3]
-			init_recon_sdf = csg_model.sample_csg(target_points).unsqueeze(-1)
-
-		combined_samples = torch.cat((target_input_samples, init_recon_sdf), -1)
+			init_recon_sdf = csg_model.sample_csg(target_input_points)
+			# Subtract the initial reconstruction from the target shape to find the volume that needs to be filled
+			fill_volume_sdf = subtract_sdf(target_input_sdf, init_recon_sdf)
+			# Subtract target shape from the the initial reconstruction to find the volume that needs to be removed
+			remove_volume_sdf = subtract_sdf(init_recon_sdf, target_input_sdf)
+			# Append the fill and remove volumes to the sample points to create a unified input
+			combined_samples = torch.cat((target_input_points, fill_volume_sdf.unsqueeze(-1), remove_volume_sdf.unsqueeze(-1)), -1)
 
 		# Change input shape from BxNx4 to Bx4xN for PointNet encoder
 		# Where B = Batch Size and N = Number of Points
