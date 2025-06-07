@@ -283,24 +283,16 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 			_
 		) = data_sample
 
-		csg_model = model.forward(target_input_samples.detach())
-
-		batch_loss = loss_func(target_loss_samples.detach(), csg_model)
-
-		# Back propagate
-		scaler.scale(batch_loss).backward()
-		scaler.step(optimizer)
-		optimizer.zero_grad(set_to_none=True)
-		scaler.update()
+		csg_model = None
 
 		# Update model parameters after each refinement step
-		for i in range(num_cascades):
+		for i in range(num_cascades + 1):
 			# Forward
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-				refined_csg_model = model.forward(target_input_samples.detach(), csg_model.detach())
+				csg_model = csg_model.detach() if csg_model != None else csg_model
+				csg_model = model.forward(target_input_samples.detach(), csg_model)
 
-			batch_loss = loss_func(target_loss_samples.detach(), refined_csg_model)
-			csg_model = refined_csg_model
+			batch_loss = loss_func(target_loss_samples.detach(), csg_model)
 
 			# Back propagate
 			scaler.scale(batch_loss).backward()
