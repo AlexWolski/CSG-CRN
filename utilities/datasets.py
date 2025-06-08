@@ -61,6 +61,7 @@ class PointDataset(Dataset):
 			print(e)
 			return None
 
+
 	def __load_sdf_samples(self, file_rel_path):
 		# Compute number of uniform and near-surface SDF samples to load
 		total_sdf_samples = self.args.num_input_points + self.args.num_loss_points
@@ -113,6 +114,7 @@ class PointDataset(Dataset):
 
 	def __len__(self):
 		return self.augmented_copies
+
 
 	def __getitem__(self, batch_idx):
 		# Adjust indices for augmented copies

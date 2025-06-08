@@ -62,7 +62,7 @@ class STNkd(nn.Module):
 class PointNetfeat(nn.Module):
     def __init__(self, global_feat=True, input_transform=False, feature_transform=False, no_batch_norm=False):
         super(PointNetfeat, self).__init__()
-        self.conv1 = torch.nn.Conv1d(5, 64, 1)
+        self.conv1 = torch.nn.Conv1d(6, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
 
@@ -80,7 +80,7 @@ class PointNetfeat(nn.Module):
         self.feature_transform = feature_transform
 
         if self.input_transform:
-            self.stn = STNkd(k=5, no_batch_norm=no_batch_norm)
+            self.stn = STNkd(k=6, no_batch_norm=no_batch_norm)
 
         if self.feature_transform:
             self.fstn = STNkd(k=64, no_batch_norm=no_batch_norm)
