@@ -10,6 +10,7 @@ class ReconstructionLoss(nn.Module):
 	MSE_LOSS_FUNC = "MSE"
 	LOG_LOSS_FUNC = "LOG"
 
+
 	def __init__(self, loss_metric):
 		super(ReconstructionLoss, self).__init__()
 
@@ -27,13 +28,13 @@ class ReconstructionLoss(nn.Module):
 				raise Exception(f"Invalid loss metric: {loss_metric}")
 
 
-	# Compute average L1 loss of SDF samples of all batches
+	# Compute average loss of SDF samples of all batches
 	def forward(self, target_sdf, predicted_sdf):
 		return self.loss_func(target_sdf, predicted_sdf)
 
 
 	# Log loss function roughly intersecting (0,0)
-	def log_loss(target_sdf, predicted_sdf):
+	def log_loss(target_sdf, predicted_sdf, reduction='mean'):
 		X_OFFSET = 0.01
 		Y_OFFSET = 1
 		MULTIPLE = 5
@@ -41,7 +42,14 @@ class ReconstructionLoss(nn.Module):
 		expanded_target, expanded_predicted = torch.broadcast_tensors(target_sdf, predicted_sdf)
 		absolute_error = torch.abs(expanded_target - predicted_sdf)
 		log_loss = torch.log(absolute_error + X_OFFSET) / MULTIPLE + Y_OFFSET
-		return torch.mean(log_loss)
+
+		match reduction:
+			case 'none':
+				return log_loss
+			case 'sum':
+				return torch.sum(log_loss)
+			case 'mean':
+				return torch.mean(log_loss)
 
 
 # Test loss
