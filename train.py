@@ -171,7 +171,7 @@ def get_training_parser(suppress_default=False):
 	argument_default = argparse.SUPPRESS if suppress_default else None
 	training_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, argument_default=argument_default)
 	training_group = training_parser.add_argument_group('TRAINING SETTINGS')
-	loss_metrics = [ReconstructionLoss.L1_LOSS_FUNC, ReconstructionLoss.MSE_LOSS_FUNC, ReconstructionLoss.LOG_LOSS_FUNC]
+	loss_metrics = [ReconstructionLoss.L1_LOSS_FUNC, ReconstructionLoss.MSE_LOSS_FUNC, ReconstructionLoss.LOG_LOSS_FUNC, ReconstructionLoss.OCC_LOSS_FUNC]
 
 	# Training settings
 	training_group.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')

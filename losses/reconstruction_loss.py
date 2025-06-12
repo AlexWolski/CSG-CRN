@@ -9,6 +9,7 @@ class ReconstructionLoss(nn.Module):
 	L1_LOSS_FUNC = "L1"
 	MSE_LOSS_FUNC = "MSE"
 	LOG_LOSS_FUNC = "LOG"
+	OCC_LOSS_FUNC = "OCC"
 
 
 	def __init__(self, loss_metric):
@@ -22,6 +23,8 @@ class ReconstructionLoss(nn.Module):
 				self.loss_func = torch.nn.MSELoss(reduction='mean')
 			case self.LOG_LOSS_FUNC:
 				self.loss_func = ReconstructionLoss.log_loss
+			case self.OCC_LOSS_FUNC:
+				self.loss_func = ReconstructionLoss.occupancy_loss
 			case None:
 				raise Exception("A loss function must be provided")
 			case _:
@@ -50,6 +53,28 @@ class ReconstructionLoss(nn.Module):
 				return torch.sum(log_loss)
 			case 'mean':
 				return torch.mean(log_loss)
+
+
+	# Loss computed on number of sample points.
+	def occupancy_loss(target_sdf, predicted_sdf, reduction='mean'):
+		OFFSET = 0.000001
+
+		expanded_target, expanded_predicted = torch.broadcast_tensors(target_sdf, predicted_sdf)
+
+		# Prevent division by 0 by adding a small offset.
+		expanded_target = expanded_target + OFFSET
+		expanded_predicted = expanded_predicted + OFFSET
+
+		# Get sign of values by dividing by its absolute value.
+		target_signs = expanded_target / torch.abs(expanded_target)
+		predicted_signs = expanded_predicted / torch.abs(expanded_predicted)
+
+		# Convert signs to binary occupancy values.
+		target_occupancy = (target_signs + 1) / 2.0
+		predicted_occupancy = (predicted_signs + 1) / 2.0
+
+		# Compute binary cross entropy of occupancy values.
+		return nn.functional.binary_cross_entropy(predicted_occupancy, target_occupancy, reduction=reduction)
 
 
 # Test loss
