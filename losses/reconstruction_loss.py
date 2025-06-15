@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch import Tensor
+from torch.nn.modules.loss import _Loss
 
 
 # Compute the reconstruction loss between SDFs sampled from two point clouds
@@ -22,9 +24,9 @@ class ReconstructionLoss(nn.Module):
 			case self.MSE_LOSS_FUNC:
 				self.loss_func = torch.nn.MSELoss(reduction='mean')
 			case self.LOG_LOSS_FUNC:
-				self.loss_func = ReconstructionLoss.log_loss
+				self.loss_func = LogLoss(reduction='mean')
 			case self.OCC_LOSS_FUNC:
-				self.loss_func = ReconstructionLoss.occupancy_loss
+				self.loss_func = OccLoss(reduction='mean')
 			case None:
 				raise Exception("A loss function must be provided")
 			case _:
@@ -36,7 +38,16 @@ class ReconstructionLoss(nn.Module):
 		return self.loss_func(target_sdf, predicted_sdf)
 
 
-	# Log loss function roughly intersecting (0,0)
+# Log loss function roughly intersecting (0,0)
+class LogLoss(_Loss):
+	def __init__(self, reduction: str = 'mean'):
+		super(LogLoss, self).__init__(None, None, reduction)
+
+
+	def forward(self, input: Tensor, target: Tensor) -> Tensor:
+		return LogLoss.log_loss(input, target, self.reduction)
+
+
 	def log_loss(target_sdf, predicted_sdf, reduction='mean'):
 		X_OFFSET = 0.01
 		Y_OFFSET = 1
@@ -53,6 +64,15 @@ class ReconstructionLoss(nn.Module):
 				return torch.sum(log_loss)
 			case 'mean':
 				return torch.mean(log_loss)
+
+
+class OccLoss(_Loss):
+	def __init__(self, reduction: str = 'mean'):
+		super(OccLoss, self).__init__(None, None, reduction)
+
+
+	def forward(self, input: Tensor, target: Tensor) -> Tensor:
+		return OccLoss.occupancy_loss(input, target, self.reduction)
 
 
 	# Loss computed on number of sample points.
