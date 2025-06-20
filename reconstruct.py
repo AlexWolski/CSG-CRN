@@ -63,6 +63,7 @@ def load_model(args):
 	args.sample_dist = saved_args.sample_dist
 	args.surface_uniform_ratio = saved_args.surface_uniform_ratio
 	args.loss_metric = saved_args.loss_metric
+	args.clamp_dist = saved_args.clamp_dist
 	args.sub_weight = saved_args.sub_weight
 
 	if args.num_cascades == None:

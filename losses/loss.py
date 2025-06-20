@@ -5,9 +5,9 @@ from losses.reconstruction_loss import ReconstructionLoss
 
 
 class Loss(nn.Module):
-	def __init__(self, loss_metric):
+	def __init__(self, loss_metric, clamp_dist=None):
 		super(Loss, self).__init__()
-		self.recon_loss = ReconstructionLoss(loss_metric)
+		self.recon_loss = ReconstructionLoss(loss_metric, clamp_dist)
 		self.proximity_loss = ProximityLoss()
 
 
@@ -19,7 +19,6 @@ class Loss(nn.Module):
 		# Sample CSG model
 		primitive_distances = []
 		refined_distances = csg_model.sample_csg(target_points, out_primitive_samples=primitive_distances)
-
 
 		# Compute loss
 		recon_loss = self.recon_loss(target_distances, refined_distances)

@@ -14,19 +14,21 @@ class ReconstructionLoss(nn.Module):
 	OCC_LOSS_FUNC = "OCC"
 
 
-	def __init__(self, loss_metric):
+	def __init__(self, loss_metric, clamp_dist=None):
 		super(ReconstructionLoss, self).__init__()
+
+		self.clamp_dist = clamp_dist
 
 		# Select loss function
 		match loss_metric:
 			case self.L1_LOSS_FUNC:
-				self.loss_func = torch.nn.L1Loss(reduction='mean')
+				self.loss_func = torch.nn.L1Loss(reduction='none')
 			case self.MSE_LOSS_FUNC:
-				self.loss_func = torch.nn.MSELoss(reduction='mean')
+				self.loss_func = torch.nn.MSELoss(reduction='none')
 			case self.LOG_LOSS_FUNC:
-				self.loss_func = LogLoss(reduction='mean')
+				self.loss_func = LogLoss(reduction='none')
 			case self.OCC_LOSS_FUNC:
-				self.loss_func = OccLoss(reduction='mean')
+				self.loss_func = OccLoss(reduction='none')
 			case None:
 				raise Exception("A loss function must be provided")
 			case _:
@@ -35,7 +37,17 @@ class ReconstructionLoss(nn.Module):
 
 	# Compute average loss of SDF samples of all batches
 	def forward(self, target_sdf, predicted_sdf):
-		return self.loss_func(target_sdf, predicted_sdf)
+		# Clamp the predicted SDF values to have a maximum difference of clamp_dist*2
+		if self.clamp_dist != None:
+			clamped_target_sdf = torch.clamp(target_sdf, min=target_sdf-self.clamp_dist, max=predicted_sdf+self.clamp_dist)
+			clamped_predicted_sdf = torch.clamp(predicted_sdf, min=predicted_sdf-self.clamp_dist, max=predicted_sdf+self.clamp_dist)
+		else:
+			clamped_target_sdf = target_sdf
+			clamped_predicted_sdf = predicted_sdf
+
+		# Compute the loss
+		loss_tensor = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
+		return torch.mean(loss_tensor)
 
 
 # Log loss function roughly intersecting (0,0)
