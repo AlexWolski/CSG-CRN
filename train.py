@@ -281,7 +281,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		(
 			target_input_samples,
 			target_loss_samples,
-			_
+			target_surface_samples
 		) = data_sample
 
 		csg_model = None
@@ -293,7 +293,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 				csg_model = csg_model.detach() if csg_model != None else csg_model
 				csg_model = model.forward(target_input_samples.detach(), csg_model)
 
-			batch_loss = loss_func(target_loss_samples.detach(), csg_model)
+			batch_loss = loss_func(target_loss_samples.detach(), target_surface_samples.detach(), csg_model)
 
 			# Back propagate
 			scaler.scale(batch_loss).backward()
@@ -322,7 +322,7 @@ def validate(model, loss_func, val_loader, num_cascades, args):
 
 			csg_model = model.forward_cascade(target_input_samples, num_cascades)
 
-			batch_loss = loss_func(target_loss_samples, csg_model)
+			batch_loss = loss_func(target_loss_samples, target_surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
 			total_chamfer_dist += compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
 
@@ -474,10 +474,10 @@ def main():
 	(train_split, val_split, test_split) = data_splits
 	checkpoint_dir = get_checkpoint_dir(args.output_dir)
 
-	if not (train_dataset := PointDataset(train_split, device, args, include_surface_samples=False, augment_data=args.augment_data, dataset_name="Training Set")):
+	if not (train_dataset := PointDataset(train_split, device, args, augment_data=args.augment_data, dataset_name="Training Set")):
 		return
 
-	if not (val_dataset := PointDataset(val_split, device, args, include_surface_samples=True, augment_data=False, dataset_name="Validation Set")):
+	if not (val_dataset := PointDataset(val_split, device, args, augment_data=False, dataset_name="Validation Set")):
 		return
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)

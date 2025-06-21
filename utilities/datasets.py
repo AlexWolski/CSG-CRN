@@ -12,13 +12,12 @@ from multiprocessing import Pool
 
 
 class PointDataset(Dataset):
-	def __init__(self, file_rel_paths, device, args, include_surface_samples=True, augment_data=False, dataset_name="Dataset"):
+	def __init__(self, file_rel_paths, device, args, augment_data=False, dataset_name="Dataset"):
 		self.file_rel_paths = file_rel_paths
 		self.augmented_copies = len(file_rel_paths) * args.augment_copies
 		self.raw_copies = len(file_rel_paths)
 		self.device = device
 		self.args = args
-		self.include_surface_samples = include_surface_samples
 		self.augment_data = augment_data
 		self.dataset_name = dataset_name
 		self.__load_data_set()
@@ -41,19 +40,15 @@ class PointDataset(Dataset):
 		# Save sample lists as tensors
 		sdf_sample_list, surface_sample_list = list(zip(*data_sample_list))
 		self.sdf_samples = torch.stack(sdf_sample_list, dim=0)
-		self.surface_samples = torch.stack(surface_sample_list, dim=0) if self.include_surface_samples else None
+		self.surface_samples = torch.stack(surface_sample_list, dim=0)
 
 
 	def __load_data_sample(self, file_rel_path):
 		try:
 			# Load SDF samples
 			sdf_samples = self.__load_sdf_samples(file_rel_path)
-			surface_samples = None
-
 			# Load surface samples
-			if self.include_surface_samples:
-				surface_samples = self.__load_surface_samples(file_rel_path)
-
+			surface_samples = self.__load_surface_samples(file_rel_path)
 			return (sdf_samples, surface_samples)
 
 		# Skip samples that fail to load
