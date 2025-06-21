@@ -12,14 +12,22 @@ from multiprocessing import Pool
 
 
 class PointDataset(Dataset):
-	def __init__(self, file_rel_paths, device, args, augment_data=False, dataset_name="Dataset"):
+	def __init__(self, file_rel_paths, device, args, shuffle=False, augment_data=False, dataset_name="Dataset"):
 		self.file_rel_paths = file_rel_paths
 		self.augmented_copies = len(file_rel_paths) * args.augment_copies
 		self.raw_copies = len(file_rel_paths)
 		self.device = device
 		self.args = args
+		self.shuffle = shuffle
 		self.augment_data = augment_data
 		self.dataset_name = dataset_name
+
+
+		# Compute number of uniform and near-surface SDF samples to load
+		total_sdf_samples = self.args.num_input_points + self.args.num_loss_points
+		self.num_uniform_samples = math.ceil(total_sdf_samples * self.args.surface_uniform_ratio)
+		self.num_surface_samples = math.floor(total_sdf_samples * (1 - self.args.surface_uniform_ratio))
+
 		self.__load_data_set()
 
 
@@ -58,14 +66,9 @@ class PointDataset(Dataset):
 
 
 	def __load_sdf_samples(self, file_rel_path):
-		# Compute number of uniform and near-surface SDF samples to load
-		total_sdf_samples = self.args.num_input_points + self.args.num_loss_points
-		num_uniform_samples = math.ceil(total_sdf_samples * self.args.surface_uniform_ratio)
-		num_surface_samples = math.floor(total_sdf_samples * (1 - self.args.surface_uniform_ratio))
-
 		# Load uniform and near-surface SDF samples from file
-		uniform_samples = self.__load_point_samples(UNIFORM_FOLDER, file_rel_path, num_uniform_samples)
-		near_surface_samples = self.__load_point_samples(NEAR_SURFACE_FOLDER, file_rel_path, num_surface_samples)
+		uniform_samples = self.__load_point_samples(UNIFORM_FOLDER, file_rel_path, self.num_uniform_samples)
+		near_surface_samples = self.__load_point_samples(NEAR_SURFACE_FOLDER, file_rel_path, self.num_surface_samples)
 
 		# Combine all SDF samples into one tensor
 		return torch.cat((uniform_samples, near_surface_samples), dim=0)
@@ -125,8 +128,9 @@ class PointDataset(Dataset):
 			batch_sdf_samples = self.__augment_sdf_samples(batch_sdf_samples)
 
 		# Shuffle the data samples
-		total_points = self.args.num_input_points + self.args.num_loss_points
-		batch_sdf_samples = batch_sdf_samples[:, torch.randperm(total_points)]
+		if self.shuffle:
+			total_points = self.args.num_input_points + self.args.num_loss_points
+			batch_sdf_samples = batch_sdf_samples[:, torch.randperm(total_points)]
 
 		# Separate input and loss samples
 		batch_target_input_samples = batch_sdf_samples[:,:self.args.num_input_points].detach()
