@@ -5,17 +5,12 @@ import sys
 import torch
 import traceback
 
-from torch.utils.data import DataLoader, Subset
-from torch.utils.data.sampler import BatchSampler, RandomSampler
-from torch.optim import AdamW, lr_scheduler
+from torch.utils.data import Subset
 
-from losses.loss import Loss
 from losses.reconstruction_loss import ReconstructionLoss
-from utilities.csg_model import CSGModel
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings
-from utilities.datasets import PointDataset
 from utilities.data_augmentation import get_augment_parser, RotationAxis
-from utilities.train_utils import load_data_splits, load_model, train
+from utilities.train_utils import load_data_splits, load_model, train, init_training_params
 from utilities.training_logger import TrainingLogger
 
 
@@ -67,7 +62,7 @@ def options():
 		training_parser = get_training_parser(suppress_default=True)
 		augment_parser = get_online_augment_parser(suppress_default=True)
 		args, remaining_args = training_parser.parse_known_args(args=remaining_args, namespace=args)
-		augment_parser.parse_args(args=remaining_args, namespace=args)
+		args, _unused_args = augment_parser.parse_known_args(args=remaining_args, namespace=args)
 
 	# Parse remaining arguments
 	else:
@@ -219,6 +214,8 @@ def main():
 		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis])
 		saved_settings_dict = torch.load(args.model_path, weights_only=True)
 		model_params = saved_settings_dict['model']
+	else:
+		model_params = None
 
 	# Load settings from file if resuming training. Otherwise, initialize output directories and training split
 	if args.resume_training:
@@ -236,37 +233,13 @@ def main():
 	dataset_settings = read_dataset_settings(args.data_dir)
 	args.sample_dist = dataset_settings['sample_dist']
 
-	# Initialize model
-	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
-	loss_func = Loss(args.loss_metric, args.clamp_dist).to(device)
-	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
-	optimizer = AdamW(model.parameters(), lr=current_lr)
-	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
-	scaler = torch.amp.GradScaler(enabled=not args.disable_amp)
-
-	# Load training set
-	(train_split, val_split, test_split) = data_splits
-
-	if not (train_dataset := PointDataset(train_split, device, args, shuffle=False, augment_data=args.augment_data, dataset_name="Training Set")):
-		return
-
-	if not (val_dataset := PointDataset(val_split, device, args, shuffle=False, augment_data=False, dataset_name="Validation Set")):
-		return
-
-	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
-	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
-
-	# The PointDataset class has a custom __getitem__ function so the collate function is unneeded
-	collate_fn = lambda data: data[0]
-	train_loader = DataLoader(train_dataset, sampler=train_sampler, collate_fn=collate_fn)
-	val_loader = DataLoader(val_dataset, sampler=val_sampler, collate_fn=collate_fn)
-
 	# Save settings to file
 	save_dataset_settings(args.output_dir, args.__dict__)
+	print('')
 
 	# Train model
-	print('')
-	train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, data_splits, args, device, training_logger)
+	training_params = init_training_params(training_logger, data_splits, args, device, model_params)
+	train(*training_params, training_logger, data_splits, args, device)
 
 
 if __name__ == '__main__':

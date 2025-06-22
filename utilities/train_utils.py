@@ -1,13 +1,19 @@
 import os
 import torch
 
-from tqdm import tqdm
+from losses.loss import Loss
 from torch import autocast
+from torch.optim import AdamW, lr_scheduler
+from torch.utils.data import DataLoader, Subset
+from torch.utils.data.sampler import BatchSampler, RandomSampler
+from tqdm import tqdm
+
 from networks.csg_crn import CSG_CRN
-from utilities.csg_model import add_sdf, subtract_sdf
-from utilities.data_processing import get_data_files
-from utilities.early_stopping import EarlyStopping
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
+from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
+from utilities.data_processing import get_data_files
+from utilities.datasets import PointDataset
+from utilities.early_stopping import EarlyStopping
 
 
 # Prepare data files and load training dataset
@@ -147,7 +153,7 @@ def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch)
 
 
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, data_splits, args, device, training_logger):
+def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device):
 	model.train(True)
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
@@ -226,3 +232,40 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)
+
+
+def init_training_params(training_logger, data_splits, args, device, model_params=None):
+	# Initialize model
+	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
+	loss_func = Loss(args.loss_metric, args.clamp_dist).to(device)
+	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
+	optimizer = AdamW(model.parameters(), lr=current_lr)
+	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
+	scaler = torch.amp.GradScaler(enabled=not args.disable_amp)
+
+	# Load training set
+	(train_split, val_split, test_split) = data_splits
+
+	if not (train_dataset := PointDataset(train_split, device, args, shuffle=False, augment_data=args.augment_data, dataset_name="Training Set")):
+		return
+
+	if not (val_dataset := PointDataset(val_split, device, args, shuffle=False, augment_data=False, dataset_name="Validation Set")):
+		return
+
+	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
+	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
+
+	# The PointDataset class has a custom __getitem__ function so the collate function is unneeded
+	collate_fn = lambda data: data[0]
+	train_loader = DataLoader(train_dataset, sampler=train_sampler, collate_fn=collate_fn)
+	val_loader = DataLoader(val_dataset, sampler=val_sampler, collate_fn=collate_fn)
+
+	return (
+		model,
+		loss_func,
+		optimizer,
+		scheduler,
+		scaler,
+		train_loader,
+		val_loader
+	)
