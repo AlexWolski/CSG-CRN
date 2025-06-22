@@ -159,6 +159,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
+	latest_model_path = os.path.join(args.output_dir, 'latest_model.pt')
 	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path)
 	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
@@ -229,6 +230,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch}.pt')
 			save_model(model, args, data_splits, training_logger.get_results(), checkpoint_path)
 			print(f'Checkpoint saved to: {checkpoint_path}\n')
+
+		# Save latest model parameters
+		save_model(model, args, data_splits, training_logger.get_results(), latest_model_path)
 
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)
