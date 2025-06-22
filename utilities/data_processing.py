@@ -18,7 +18,7 @@ SAMPLE_LIST_FILE = 'files.txt'
 # Create output directory for trained model and temporary files
 def create_out_dir(args):
 	# Use parent directory name as dataset name
-	dataset_name = os.path.basename(os.path.normpath(args.data_dir))
+	dataset_name = os.path.basename(os.path.normpath(args.data_dir)).replace(' ', '_')
 
 	# Create output folder name from settings
 	output_folder = dataset_name + '_' + str(args.num_input_points) +\
