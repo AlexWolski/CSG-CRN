@@ -14,11 +14,13 @@ NEAR_SURFACE_FOLDER = 'near-surface'
 SETTINGS_FILE = 'settings.yml'
 SAMPLE_LIST_FILE = 'files.txt'
 
+# Model parameter names
+BEST_MODEL_FILE = 'best_model.pt'
+LATEST_MODEL_FILE = 'latest_model.pt'
 
-# Create output directory for trained model and temporary files
-def create_out_dir(args):
-	# Use parent directory name as dataset name
-	dataset_name = os.path.basename(os.path.normpath(args.data_dir)).replace(' ', '_')
+
+def get_out_dir(args):
+	dataset_name =  os.path.basename(os.path.normpath(args.data_dir)).replace(' ', '_')
 
 	# Create output folder name from settings
 	output_folder = dataset_name + '_' + str(args.num_input_points) +\
@@ -30,7 +32,13 @@ def create_out_dir(args):
 	if args.no_roundness:
 		output_folder += '_no_roundness'
 
-	output_dir = os.path.join(args.output_dir, output_folder)
+	return os.path.join(args.output_dir, output_folder)
+
+
+# Create output directory for trained model and temporary files
+def create_out_dir(args):
+	# Use parent directory name as dataset name
+	output_dir = get_out_dir(args)
 
 	# Create output directory
 	if not os.path.exists(output_dir):

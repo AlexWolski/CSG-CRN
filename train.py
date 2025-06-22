@@ -8,7 +8,7 @@ import traceback
 from torch.utils.data import Subset
 
 from losses.reconstruction_loss import ReconstructionLoss
-from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings
+from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.train_utils import load_data_splits, load_model, train, init_training_params
 from utilities.training_logger import TrainingLogger
@@ -35,6 +35,10 @@ def options():
 	# Enforce prerequisites
 	if args.resume_training and not args.model_path:
 		print('Cannot use the resume_training option without providing the --model_path option')
+		exit()
+
+	if args.model_path and getattr(args, 'continue'):
+		print('Cannot use both the --model_path and --continue options simultaneously')
 		exit()
 
 	if not args.data_dir and not (args.model_path or args.resume_training):
@@ -130,6 +134,7 @@ def get_data_parser():
 	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Provided arguments overwrite all the saved arguments except for network model settings')
 	data_group.add_argument('--resume_training', default=False, action='store_true', help='If a model path is supplied, resume training of the model with the original training data')
 	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
+	data_group.add_argument('--continue', default=False, action='store_true', help='Resume training if the output directory exists. model_path is inferred from arguments and resume_training and overwrite are set to true.')
 
 	return data_parser
 
@@ -208,6 +213,27 @@ def main():
 
 	# Set training device
 	device = get_device(args.device)
+
+	# Set model path if continue option is provided
+	if getattr(args, 'continue'):
+		# Get output directory from argumnets
+		(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
+
+		# Check that the directory exists
+		if not os.path.exists(args.output_dir):
+			print(f'Output directory does not exist in expected location: {args.output_dir}')
+			exit()
+
+		latest_model_path = os.path.join(args.output_dir, LATEST_MODEL_FILE)
+
+		# Check that the model file exists
+		if not os.path.isfile(latest_model_path):
+			print(f'Model parameter file does not exist in expected location: {latest_model_path}')
+			exit()
+
+		args.model_path = latest_model_path
+		args.resume_training = True
+		args.overwrite = True
 
 	# Load saved settings if a model path is provided
 	if args.model_path:

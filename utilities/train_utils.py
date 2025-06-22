@@ -11,7 +11,7 @@ from tqdm import tqdm
 from networks.csg_crn import CSG_CRN
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
 from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
-from utilities.data_processing import get_data_files
+from utilities.data_processing import get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE
 from utilities.datasets import PointDataset
 from utilities.early_stopping import EarlyStopping
 
@@ -158,8 +158,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
 	# Initialize early stopper
-	trained_model_path = os.path.join(args.output_dir, 'best_model.pt')
-	latest_model_path = os.path.join(args.output_dir, 'latest_model.pt')
+	trained_model_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
+	latest_model_path = os.path.join(args.output_dir, LATEST_MODEL_FILE)
 	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path)
 	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
