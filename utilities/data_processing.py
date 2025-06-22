@@ -72,6 +72,14 @@ def read_dataset_settings(data_dir):
 		raise FileNotFoundError(f'Unable to find dataset settings file: {settings_path}')
 
 
+# Save settings to file
+def save_dataset_settings(output_dir, data_dict):
+	settings_path = os.path.join(output_dir, SETTINGS_FILE)
+
+	with open(settings_path, 'w') as out_path:
+		yaml.dump(data_dict, out_path, sort_keys=False)
+
+
 # Write each item of a list to a new line in a file
 def save_list(file_path, output_list):
 	with open(file_path, 'w') as f:
