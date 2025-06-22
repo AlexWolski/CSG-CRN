@@ -207,14 +207,8 @@ def get_device(device=None):
 		raise Exception('No CUDA devices are available.')
 
 
-def main():
-	args = options()
-	print('')
-
-	# Set training device
-	device = get_device(args.device)
-
-	# Set model path if continue option is provided
+# Set model_path, resume_training, and overwrite options if continue option is provided
+def process_continue(args):
 	if getattr(args, 'continue'):
 		# Get output directory from argumnets
 		(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
@@ -235,14 +229,20 @@ def main():
 		args.resume_training = True
 		args.overwrite = True
 
-	# Load saved settings if a model path is provided
+
+# Load saved settings if a model path is provided
+def load_saved_settings(args):
 	if args.model_path:
 		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis])
 		saved_settings_dict = torch.load(args.model_path, weights_only=True)
 		model_params = saved_settings_dict['model']
+		return (saved_settings_dict, model_params)
 	else:
-		model_params = None
+		return (None, None)
 
+
+# Initialize output directories and training split
+def init_output(args, device, saved_settings_dict=None):
 	# Load settings from file if resuming training. Otherwise, initialize output directories and training split
 	if args.resume_training:
 		args.data_dir = saved_settings_dict['data_dir']
@@ -254,6 +254,21 @@ def main():
 		(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
 		data_splits = load_data_splits(args, DATA_SPLIT, device)
 		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric)
+
+	return (data_splits, training_logger)
+
+
+def main():
+	args = options()
+	print('')
+
+	# Set training device
+	device = get_device(args.device)
+
+	# Initialize options and output
+	process_continue(args)
+	saved_settings_dict, model_params = load_saved_settings(args)
+	data_splits, training_logger = init_output(args, device, saved_settings_dict)
 
 	# Read settings from dataset
 	dataset_settings = read_dataset_settings(args.data_dir)
