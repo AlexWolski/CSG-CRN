@@ -16,14 +16,15 @@ class Loss(nn.Module):
 		target_points = target_sdf_samples[..., :3]
 		target_distances = target_sdf_samples[..., 3]
 
-		# Sample CSG model
-		primitive_distances = []
+		# Compute reconstruction loss
 		refined_distances = csg_model.sample_csg(target_points)
-		_ = csg_model.sample_csg(target_surface_samples, out_primitive_samples=primitive_distances)
-
-		# Compute loss
 		recon_loss = self.recon_loss(target_distances, refined_distances)
+
+		# Compute primitive loss
+		primitive_distances = []
+		_ = csg_model.sample_csg(target_surface_samples, out_primitive_samples=primitive_distances)
 		proximity_loss = self.proximity_loss(primitive_distances)
+
 		return recon_loss + proximity_loss
 
 

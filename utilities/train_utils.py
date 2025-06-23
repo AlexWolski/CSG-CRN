@@ -81,21 +81,26 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 	for data_sample in tqdm(train_loader, desc=desc):
 		(
-			target_input_samples,
-			target_loss_samples,
-			target_surface_samples
+			uniform_input_samples,
+			near_surface_input_samples,
+			uniform_loss_samples,
+			near_surface_loss_samples,
+			surface_samples
 		) = data_sample
 
+		input_samples, loss_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples, uniform_loss_samples, near_surface_loss_samples)
 		csg_model = None
 
 		# Update model parameters after each refinement step
 		for i in range(num_cascades + 1):
+			if csg_model != None:
+				csg_model = csg_model.detach()
+
 			# Forward
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-				csg_model = csg_model.detach() if csg_model != None else csg_model
-				csg_model = model.forward(target_input_samples.detach(), csg_model)
+				csg_model = model.forward(input_samples.detach(), csg_model)
 
-			batch_loss = loss_func(target_loss_samples.detach(), target_surface_samples.detach(), csg_model)
+			batch_loss = loss_func(loss_samples.detach(), surface_samples.detach(), csg_model)
 
 			# Back propagate
 			scaler.scale(batch_loss).backward()
@@ -117,16 +122,19 @@ def validate(model, loss_func, val_loader, num_cascades, args):
 	with torch.no_grad():
 		for data_sample in val_loader:
 			(
-				target_input_samples,
-				target_loss_samples,
-				target_surface_samples
+				uniform_input_samples,
+				near_surface_input_samples,
+				uniform_loss_samples,
+				near_surface_loss_samples,
+				surface_samples
 			) = data_sample
 
-			csg_model = model.forward_cascade(target_input_samples, num_cascades)
+			input_samples, loss_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples, uniform_loss_samples, near_surface_loss_samples)
+			csg_model = model.forward_cascade(input_samples, num_cascades)
 
-			batch_loss = loss_func(target_loss_samples, target_surface_samples, csg_model)
+			batch_loss = loss_func(loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
-			total_chamfer_dist += compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
+			total_chamfer_dist += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
 
 	total_val_loss /= val_loader.__len__()
 	total_chamfer_dist /= val_loader.__len__()
@@ -144,6 +152,19 @@ def save_model(model, args, data_splits, training_results, model_path):
 		'data_splits': data_splits,
 		'training_results': training_results
 	}, model_path)
+
+
+# Combine uniform and near-surface samples of input and loss tensors and shuffle results
+def combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples, uniform_loss_samples, near_surface_loss_samples):
+	# Combine samples
+	input_samples = torch.cat((uniform_input_samples, near_surface_input_samples), 1)
+	loss_samples = torch.cat((uniform_loss_samples, near_surface_loss_samples), 1)
+
+	# Shuffle samples
+	input_samples = input_samples[:, torch.randperm(input_samples.size(dim=1))]
+	loss_samples = loss_samples[:, torch.randperm(loss_samples.size(dim=1))]
+
+	return (input_samples, loss_samples)
 
 
 def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch):
@@ -250,10 +271,10 @@ def init_training_params(training_logger, data_splits, args, device, model_param
 	# Load training set
 	(train_split, val_split, test_split) = data_splits
 
-	if not (train_dataset := PointDataset(train_split, device, args, shuffle=False, augment_data=args.augment_data, dataset_name="Training Set")):
+	if not (train_dataset := PointDataset(train_split, device, args, augment_data=args.augment_data, dataset_name="Training Set")):
 		return
 
-	if not (val_dataset := PointDataset(val_split, device, args, shuffle=False, augment_data=False, dataset_name="Validation Set")):
+	if not (val_dataset := PointDataset(val_split, device, args, augment_data=False, dataset_name="Validation Set")):
 		return
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
