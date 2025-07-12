@@ -9,7 +9,7 @@ from utilities.sampler_utils import sample_sdf_from_csg_combined
 class CSG_CRN(nn.Module):
 	def __init__(
 			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, surface_uniform_ratio, device,
-			decoder_layers=[], predict_blending=True, predict_roundness=True, no_batch_norm=False):
+			decoder_layers=[], extended_input=False, predict_blending=True, predict_roundness=True, no_batch_norm=False):
 		super(CSG_CRN, self).__init__()
 
 		self.num_prims = num_prims
@@ -20,11 +20,13 @@ class CSG_CRN(nn.Module):
 		self.surface_uniform_ratio = surface_uniform_ratio
 		self.device = device
 		self.decoder_layers = decoder_layers
+		self.extended_input = extended_input
 		self.predict_blending = predict_blending
 		self.predict_roundness = predict_roundness
 		self.no_batch_norm = no_batch_norm
 
-		self.point_encoder = PointNetfeat(global_feat=True, input_transform=True, feature_transform=True, no_batch_norm=no_batch_norm)
+		num_feature_dims = 6 if self.extended_input else 4
+		self.point_encoder = PointNetfeat(k=num_feature_dims, global_feat=True, input_transform=True, feature_transform=True, no_batch_norm=no_batch_norm)
 		self.regressor_decoder_list = nn.ModuleList()
 
 		# Initialize a separate decoder for each primitive
@@ -55,21 +57,19 @@ class CSG_CRN(nn.Module):
 		if first_prim:
 			# Insert a tensor of shape BxNx1 to represent the SDF values for the null initial reconstruction
 			csg_model = CSGModel(batch_size, device=self.device)
-			null_volume_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
-			combined_samples = torch.cat((target_input_samples, null_volume_sdf, null_volume_sdf), -1)
+
+			if self.extended_input:
+				null_volume_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
+				combined_samples = torch.cat((target_input_samples, null_volume_sdf, null_volume_sdf), -1)
+			else:
+				combined_samples = target_input_samples
 
 		# On refinement iterations, compute the volume to fill and remove to achieve the target shape.
 		else:
-			# Sample the CSG model.
-			init_recon_sdf = csg_model.sample_csg(target_input_points)
-			# Volume of the target shape that still needs to be filled.
-			missing_volume_sdf = subtract_sdf(target_input_sdf, init_recon_sdf).unsqueeze(-1)
-			# Excess volume of the initial reconstruction that needs to be removed.
-			excess_volume_sdf = subtract_sdf(init_recon_sdf, target_input_sdf).unsqueeze(-1)
-			# Volume of the target shape that was correctly filled by the initial reconstruction.
-			filled_volume_sdf = smooth_max(init_recon_sdf, target_input_sdf).unsqueeze(-1)
-			# Append the fill and remove volumes to the sample points to create a unified input.
-			combined_samples = torch.cat((target_input_points, missing_volume_sdf, filled_volume_sdf, excess_volume_sdf), -1)
+			if self.extended_input:
+				combined_samples = self._get_combined_inputs(csg_model, target_input_points, target_input_sdf, first_prim)
+			else:
+				combined_samples = target_input_samples
 
 		# Change input shape from BxNx4 to Bx4xN for PointNet encoder
 		# Where B = Batch Size and N = Number of Points
@@ -84,6 +84,25 @@ class CSG_CRN(nn.Module):
 			first_prim = False
 
 		return csg_model
+
+
+	def _get_combined_inputs(self, csg_model, target_input_points, target_input_sdf, first_prim):
+
+		if first_prim:
+			null_volume_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
+			return torch.cat((target_input_samples, null_volume_sdf, null_volume_sdf), -1)
+
+		else:
+			# Sample the CSG model.
+			init_recon_sdf = csg_model.sample_csg(target_input_points)
+			# Volume of the target shape that still needs to be filled.
+			missing_volume_sdf = subtract_sdf(target_input_sdf, init_recon_sdf).unsqueeze(-1)
+			# Excess volume of the initial reconstruction that needs to be removed.
+			excess_volume_sdf = subtract_sdf(init_recon_sdf, target_input_sdf).unsqueeze(-1)
+			# Volume of the target shape that was correctly filled by the initial reconstruction.
+			filled_volume_sdf = smooth_max(init_recon_sdf, target_input_sdf).unsqueeze(-1)
+			# Append the fill and remove volumes to the sample points to create a unified input.
+			return torch.cat((target_input_points, missing_volume_sdf, filled_volume_sdf, excess_volume_sdf), -1)
 
 
 	def forward_cascade(self, target_input_samples, num_cascades):

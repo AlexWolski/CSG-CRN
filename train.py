@@ -150,12 +150,13 @@ def get_model_parser():
 	model_group.add_argument('--val_sample_dist', type=float, default=0.01, help='Maximum distance tolerance of approximate surface samples when computing validation metrics.')
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before backpropagating (Memory requirement scales with num_prims)')
 	model_group.add_argument('--num_cascades', type=int, default=1, help='Number of refinement passes before back-propagating (Total generated primitives = num_prims * num_cascades)')
+	model_group.add_argument('--no_extended_input', default=False, action='store_true', help='Exclude the additional volume parameters from the model input.')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 	model_group.add_argument('--surface_uniform_ratio', type=float, default=0.5, help='Percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples')
 	model_group.add_argument('--decoder_layers', nargs='+', type=int, default=[], help='List of hidden layers to add to the decoder network')
-	model_group.add_argument('--back_prop_recon_input', default=False, action='store_true', help='Backpropagate through the reconstruciton input sample and all previous refinement iterations.')
+	model_group.add_argument('--back_prop_recon_input', default=False, action='store_true', help='Backpropagate through the reconstruction input sample and all previous refinement iterations.')
 
 	return model_parser
 
@@ -182,7 +183,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--schedule_sub_weight', default=False, action='store_true', help='Start the subtract operation weight at 0 and gradually increase it to 1')
 	training_group.add_argument('--sub_schedule_start_epoch', type=int, default=10, help='Epoch to start the subtract operation weight scheduler')
 	training_group.add_argument('--sub_schedule_end_epoch', type=int, default=30, help='Epoch to complete the subtract operation weight scheduler')
-	training_group.add_argument('--no_schedule_cascades', default=False, action='store_true', help='Begin training with all refinment iterations enabled rather than progressively added with a scheduler.')
+	training_group.add_argument('--no_schedule_cascades', default=False, action='store_true', help='Begin training with all refinement iterations enabled rather than progressively added with a scheduler.')
 	training_group.add_argument('--cascade_schedule_epochs', type=int, default=10, help='Number of epochs to train before adding a new refinement iteration.')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')

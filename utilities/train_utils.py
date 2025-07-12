@@ -62,6 +62,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 		args.surface_uniform_ratio,
 		device,
 		args.decoder_layers,
+		not args.no_extended_input,
 		predict_blending,
 		predict_roundness,
 		args.no_batch_norm
