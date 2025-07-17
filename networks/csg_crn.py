@@ -48,35 +48,24 @@ class CSG_CRN(nn.Module):
 
 	def forward(self, target_input_samples, csg_model=None):
 		batch_size = target_input_samples.size(dim=0)
-		num_points = target_input_samples.size(dim=1)
-		target_input_points = target_input_samples[:,:,:3]
-		target_input_sdf = target_input_samples[:,:,3]
 		first_prim = csg_model is None
 
-		# On the first iteration, keep the target shape as the fill volume and append a dummy remove volume.
 		if first_prim:
-			# Insert a tensor of shape BxNx1 to represent the SDF values for the null initial reconstruction
 			csg_model = CSGModel(batch_size, device=self.device)
 
-			if self.extended_input:
-				null_volume_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
-				combined_samples = torch.cat((target_input_samples, null_volume_sdf, null_volume_sdf), -1)
-			else:
-				combined_samples = target_input_samples
-
-		# On refinement iterations, compute the volume to fill and remove to achieve the target shape.
+		# Full input including target, fill, and remove SDF values.
+		if self.extended_input:
+			input_tensor = self._get_extended_inputs(target_input_samples, csg_model, first_prim)
+		# Simplified input only containing target SDF.
 		else:
-			if self.extended_input:
-				combined_samples = self._get_combined_inputs(csg_model, target_input_points, target_input_sdf, first_prim)
-			else:
-				combined_samples = target_input_samples
+			input_tensor = target_input_samples
 
-		# Change input shape from BxNx4 to Bx4xN for PointNet encoder
-		# Where B = Batch Size and N = Number of Points
-		combined_samples = combined_samples.permute(0, 2, 1)
+		# Change input shape from BxNxF to BxFxN for PointNet encoder
+		# Where B = Batch Size, N = Number of Points, and F = Number of Features
+		input_tensor = input_tensor.permute(0, 2, 1)
 
 		# Encode target point cloud features
-		features, _, _ = self.point_encoder(combined_samples)
+		features, _, _ = self.point_encoder(input_tensor)
 
 		# Decode primitive predictions
 		for decoder in self.regressor_decoder_list:
@@ -86,23 +75,40 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
-	def _get_combined_inputs(self, csg_model, target_input_points, target_input_sdf, first_prim):
-
+	# Generate an extended input tensor.
+	def _get_extended_inputs(self, target_input_samples, csg_model, first_prim):
+		# On the initial iteration, keep the target shape as the fill volume and append a dummy remove volume.
 		if first_prim:
-			null_volume_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
-			return torch.cat((target_input_samples, null_volume_sdf, null_volume_sdf), -1)
-
+			return self._get_extended_inputs_initial(target_input_samples)
+		# On refinement iterations, compute the volume to fill and remove to achieve the target shape.
 		else:
-			# Sample the CSG model.
-			init_recon_sdf = csg_model.sample_csg(target_input_points)
-			# Volume of the target shape that still needs to be filled.
-			missing_volume_sdf = subtract_sdf(target_input_sdf, init_recon_sdf).unsqueeze(-1)
-			# Excess volume of the initial reconstruction that needs to be removed.
-			excess_volume_sdf = subtract_sdf(init_recon_sdf, target_input_sdf).unsqueeze(-1)
-			# Volume of the target shape that was correctly filled by the initial reconstruction.
-			filled_volume_sdf = smooth_max(init_recon_sdf, target_input_sdf).unsqueeze(-1)
-			# Append the fill and remove volumes to the sample points to create a unified input.
-			return torch.cat((target_input_points, missing_volume_sdf, filled_volume_sdf, excess_volume_sdf), -1)
+			return self._get_combined_inputs_refinement(target_input_samples, csg_model)
+
+
+	# Generate an extended input tensor but with dummy values in place of the filled and excess volumes.
+	def _get_extended_inputs_initial(self, target_input_samples):
+		batch_size = target_input_samples.size(dim=0)
+		num_points = target_input_samples.size(dim=1)
+
+		null_volume_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
+		return torch.cat((target_input_samples, null_volume_sdf, null_volume_sdf), -1)
+
+
+	# Compute SDF values for the missing volume, filled, volume, and excess volume. Combine all three into one tensor input.
+	def _get_combined_inputs_refinement(self, target_input_samples, csg_model):
+		target_input_points = target_input_samples[:,:,:3]
+		target_input_sdf = target_input_samples[:,:,3]
+
+		# Sample the CSG model.
+		init_recon_sdf = csg_model.sample_csg(target_input_points)
+		# Volume of the target shape that still needs to be filled.
+		missing_volume_sdf = subtract_sdf(target_input_sdf, init_recon_sdf).unsqueeze(-1)
+		# Excess volume of the initial reconstruction that needs to be removed.
+		excess_volume_sdf = subtract_sdf(init_recon_sdf, target_input_sdf).unsqueeze(-1)
+		# Volume of the target shape that was correctly filled by the initial reconstruction.
+		filled_volume_sdf = smooth_max(init_recon_sdf, target_input_sdf).unsqueeze(-1)
+		# Append the fill and remove volumes to the sample points to create a unified input.
+		return torch.cat((target_input_points, missing_volume_sdf, filled_volume_sdf, excess_volume_sdf), -1)
 
 
 	def forward_cascade(self, target_input_samples, num_cascades):
