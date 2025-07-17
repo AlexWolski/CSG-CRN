@@ -53,12 +53,7 @@ class CSG_CRN(nn.Module):
 		if first_prim:
 			csg_model = CSGModel(batch_size, device=self.device)
 
-		# Full input including target, fill, and remove SDF values.
-		if self.extended_input:
-			input_tensor = self._get_extended_inputs(target_input_samples, csg_model, first_prim)
-		# Simplified input only containing target SDF.
-		else:
-			input_tensor = target_input_samples
+		input_tensor = self._get_input_tensor(target_input_samples, csg_model, first_prim, self.extended_input)
 
 		# Change input shape from BxNxF to BxFxN for PointNet encoder
 		# Where B = Batch Size, N = Number of Points, and F = Number of Features
@@ -75,18 +70,22 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
-	# Generate an extended input tensor.
-	def _get_extended_inputs(self, target_input_samples, csg_model, first_prim):
+	# Create an input tensor with 
+	def _get_input_tensor(self, target_input_samples, csg_model, first_prim, extended_input):
 		# On the initial iteration, keep the target shape as the fill volume and append a dummy remove volume.
 		if first_prim:
-			return self._get_extended_inputs_initial(target_input_samples)
+			return self._get_initial_input_tensor(target_input_samples, extended_input)
 		# On refinement iterations, compute the volume to fill and remove to achieve the target shape.
 		else:
-			return self._get_combined_inputs_refinement(target_input_samples, csg_model)
+			return self._get_refinement_input_tensor(target_input_samples, csg_model, extended_input)
 
 
-	# Generate an extended input tensor but with dummy values in place of the filled and excess volumes.
-	def _get_extended_inputs_initial(self, target_input_samples):
+	# Create an input tensor containing the target shape SDF with the correct format.
+	def _get_initial_input_tensor(self, target_input_samples, extended_input):
+		# Simplified input does not require dummy values.
+		if not extended_input:
+			return target_input_samples
+
 		batch_size = target_input_samples.size(dim=0)
 		num_points = target_input_samples.size(dim=1)
 
@@ -94,8 +93,8 @@ class CSG_CRN(nn.Module):
 		return torch.cat((target_input_samples, null_volume_sdf, null_volume_sdf), -1)
 
 
-	# Compute SDF values for the missing volume, filled, volume, and excess volume. Combine all three into one tensor input.
-	def _get_combined_inputs_refinement(self, target_input_samples, csg_model):
+	# Create an input tensor containing the target and reconstruction shape SDFs with the correct format.
+	def _get_refinement_input_tensor(self, target_input_samples, csg_model, extended_input):
 		target_input_points = target_input_samples[:,:,:3]
 		target_input_sdf = target_input_samples[:,:,3]
 
@@ -103,6 +102,11 @@ class CSG_CRN(nn.Module):
 		init_recon_sdf = csg_model.sample_csg(target_input_points)
 		# Volume of the target shape that still needs to be filled.
 		missing_volume_sdf = subtract_sdf(target_input_sdf, init_recon_sdf).unsqueeze(-1)
+
+		# Simplified input contains only missing volume SDF.
+		if not extended_input:
+			return torch.cat((target_input_points, missing_volume_sdf), -1)
+
 		# Excess volume of the initial reconstruction that needs to be removed.
 		excess_volume_sdf = subtract_sdf(init_recon_sdf, target_input_sdf).unsqueeze(-1)
 		# Volume of the target shape that was correctly filled by the initial reconstruction.
