@@ -82,6 +82,7 @@ def load_model(args):
 		saved_args.surface_uniform_ratio,
 		args.device,
 		saved_args.decoder_layers,
+		not saved_args.no_extended_input,
 		predict_blending,
 		predict_roundness,
 		saved_args.no_batch_norm
