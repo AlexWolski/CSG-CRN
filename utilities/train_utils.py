@@ -89,7 +89,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 			surface_samples
 		) = data_sample
 
-		input_samples, loss_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples, uniform_loss_samples, near_surface_loss_samples)
+		input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
 		csg_model = None
 
 		# Update model parameters after each refinement step
@@ -101,7 +101,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
 				csg_model = model.forward(input_samples.detach(), csg_model)
 
-			batch_loss = loss_func(loss_samples.detach(), surface_samples.detach(), csg_model)
+			batch_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 
 			# Back propagate
 			scaler.scale(batch_loss).backward()
@@ -130,10 +130,10 @@ def validate(model, loss_func, val_loader, num_cascades, args):
 				surface_samples
 			) = data_sample
 
-			input_samples, loss_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples, uniform_loss_samples, near_surface_loss_samples)
+			input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
 			csg_model = model.forward_cascade(input_samples, num_cascades)
 
-			batch_loss = loss_func(loss_samples, surface_samples, csg_model)
+			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
 			total_chamfer_dist += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
 
@@ -156,16 +156,12 @@ def save_model(model, args, data_splits, training_results, model_path):
 
 
 # Combine uniform and near-surface samples of input and loss tensors and shuffle results
-def combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples, uniform_loss_samples, near_surface_loss_samples):
+def combine_and_shuffle_samples(uniform_samples, near_surface_samples):
 	# Combine samples
-	input_samples = torch.cat((uniform_input_samples, near_surface_input_samples), 1)
-	loss_samples = torch.cat((uniform_loss_samples, near_surface_loss_samples), 1)
-
+	input_samples = torch.cat((uniform_samples, near_surface_samples), 1)
 	# Shuffle samples
 	input_samples = input_samples[:, torch.randperm(input_samples.size(dim=1))]
-	loss_samples = loss_samples[:, torch.randperm(loss_samples.size(dim=1))]
-
-	return (input_samples, loss_samples)
+	return input_samples
 
 
 def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch):
@@ -263,7 +259,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 def init_training_params(training_logger, data_splits, args, device, model_params=None):
 	# Initialize model
 	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
-	loss_func = Loss(args.loss_metric, args.clamp_dist).to(device)
+	loss_func = Loss(args.loss_metric, args.num_loss_points, args.clamp_dist, args.loss_sampling_method).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = AdamW(model.parameters(), lr=current_lr)
 	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')

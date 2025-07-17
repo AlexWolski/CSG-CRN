@@ -12,6 +12,7 @@ class ReconstructionLoss(nn.Module):
 	MSE_LOSS_FUNC = "MSE"
 	LOG_LOSS_FUNC = "LOG"
 	OCC_LOSS_FUNC = "OCC"
+	loss_metrics = [L1_LOSS_FUNC, MSE_LOSS_FUNC, LOG_LOSS_FUNC, OCC_LOSS_FUNC]
 
 
 	def __init__(self, loss_metric, clamp_dist=None):

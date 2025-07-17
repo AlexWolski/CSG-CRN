@@ -7,6 +7,7 @@ import traceback
 
 from torch.utils.data import Subset
 
+from losses.loss import Loss
 from losses.reconstruction_loss import ReconstructionLoss
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
@@ -89,6 +90,9 @@ def options():
 	# Retrieve loss metric
 	args.loss_metric = args.loss_metric[0] if len(args.loss_metric) > 0 else None
 
+	# Retrieve loss sampling method
+	args.loss_sampling_method = args.loss_sampling_method[0] if len(args.loss_sampling_method) > 0 else None
+
 	# Configure subtract operation
 	if args.disable_sub_operation or args.schedule_sub_weight:
 		args.sub_weight = 0
@@ -154,6 +158,7 @@ def get_model_parser():
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
+	model_group.add_argument('--loss_sampling_method', type=str.upper, default=[Loss.UNIFIED_SAMPLING], choices=Loss.loss_sampling_methods, nargs=1, help="TARGET_SAMPLING samples loss points from only the target shape and UNIFIED_SAMPLING samples from both target and reconstruction shapes.")
 	model_group.add_argument('--surface_uniform_ratio', type=float, default=0.5, help='Percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples')
 	model_group.add_argument('--decoder_layers', nargs='+', type=int, default=[], help='List of hidden layers to add to the decoder network')
 	model_group.add_argument('--back_prop_recon_input', default=False, action='store_true', help='Backpropagate through the reconstruction input sample and all previous refinement iterations.')
@@ -165,13 +170,12 @@ def get_training_parser(suppress_default=False):
 	argument_default = argparse.SUPPRESS if suppress_default else None
 	training_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, argument_default=argument_default)
 	training_group = training_parser.add_argument_group('TRAINING SETTINGS')
-	loss_metrics = [ReconstructionLoss.L1_LOSS_FUNC, ReconstructionLoss.MSE_LOSS_FUNC, ReconstructionLoss.LOG_LOSS_FUNC, ReconstructionLoss.OCC_LOSS_FUNC]
 
 	# Training settings
 	training_group.add_argument('--batch_size', type=int, default=32, help='Mini-batch size. When set to 1, batch normalization is disabled')
 	training_group.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
-	training_group.add_argument('--loss_metric', type=str.upper, default=[ReconstructionLoss.L1_LOSS_FUNC], choices=loss_metrics, nargs=1, help='Reconstruction loss metric to use when training')
+	training_group.add_argument('--loss_metric', type=str.upper, default=[ReconstructionLoss.L1_LOSS_FUNC], choices=ReconstructionLoss.loss_metrics, nargs=1, help='Reconstruction loss metric to use when training')
 	training_group.add_argument('--clamp_dist', type=float, default=0.1, help='Restrict the loss computation to a maximum specified distance from the target shape')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_factor', type=float, default=0.1, help='Learning rate reduction factor')

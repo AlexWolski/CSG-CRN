@@ -328,7 +328,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 		sample_distances = torch.cat((sample_distances, new_distances), dim=1)
 
 		# Keep `num_sdf_samples` samples with the lowest sample distance
-		(new_sample_dist, sample_points, sample_distances) = _select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
+		(new_sample_dist, sample_points, sample_distances) = select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
 
 		# No samples could be found within the unit sphere
 		if new_sample_dist == None:
@@ -339,7 +339,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 	return (sample_points[:,:num_sdf_samples], sample_distances[:,:num_sdf_samples])
 
 
-def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist):
+def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist=1):
 	"""
 	Helper function to select `num_sdf_samples` samples with the smallest SDF distance.
 
@@ -352,7 +352,7 @@ def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf
 	num_sdf_samples : int
 		Required number of SDF samples.
 	current_sample_dist : float
-		Maximum value of SDF distances in `batch_sample_distances`.
+		Maximum value of SDF distances in `batch_sample_distances`. Default is 1.
 
 	Returns
 	-------
