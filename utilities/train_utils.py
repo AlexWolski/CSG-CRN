@@ -83,8 +83,8 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 	for data_sample in tqdm(train_loader, desc=desc):
 		(
 			uniform_input_samples,
-			near_surface_input_samples,
 			uniform_loss_samples,
+			near_surface_input_samples,
 			near_surface_loss_samples,
 			surface_samples
 		) = data_sample
@@ -124,8 +124,8 @@ def validate(model, loss_func, val_loader, num_cascades, args):
 		for data_sample in val_loader:
 			(
 				uniform_input_samples,
-				near_surface_input_samples,
 				uniform_loss_samples,
+				near_surface_input_samples,
 				near_surface_loss_samples,
 				surface_samples
 			) = data_sample
