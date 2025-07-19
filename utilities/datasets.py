@@ -14,8 +14,7 @@ from multiprocessing import Pool
 
 class PointDataset(Dataset):
 	# Number of uniform points to load for each required near-surface point
-	#NEAR_SURFACE_SAMPLING_MULTIPLE = 100
-	NEAR_SURFACE_SAMPLING_MULTIPLE = 4
+	NEAR_SURFACE_SAMPLE_FACTOR = 10
 
 
 	def __init__(self, file_rel_paths, device, args, augment_data=False, dataset_name="Dataset", sampling_method=Loss.UNIFIED_SAMPLING):
@@ -33,20 +32,16 @@ class PointDataset(Dataset):
 		total_sdf_samples = self.args.num_input_points + self.args.num_loss_points
 
 		self.num_uniform_input_samples = math.ceil(self.args.num_input_points * self.args.surface_uniform_ratio)
-		self.num_near_surface_input_samples = total_sdf_samples - self.num_uniform_input_samples
+		self.num_near_surface_input_samples = self.args.num_input_points - self.num_uniform_input_samples
+		self.num_uniform_loss_samples = math.ceil(self.args.num_loss_points * self.args.surface_uniform_ratio)
+		self.num_near_surface_loss_samples = self.args.num_loss_points - self.num_uniform_loss_samples
 
-		# When the loss is computed on target shape samples, load the standard number of uniform and near-surface samples
-		if self.sampling_method == Loss.TARGET_SAMPLING:
-			self.num_uniform_loss_samples = math.ceil(self.args.num_loss_points * self.args.surface_uniform_ratio)
-			self.num_near_surface_loss_samples = total_sdf_samples - self.num_uniform_loss_samples
-
-		# When the loss is computed on both target and reconstruction samples, load an increased number of only uniform samples
-		elif self.sampling_method == Loss.UNIFIED_SAMPLING:
-			self.num_target_loss_samples = math.ceil(self.args.num_loss_points * Loss.TARGET_RECON_SAMPLING_RATIO)
-			self.num_recon_loss_samples = self.args.num_loss_points - self.num_target_loss_samples
-
-			self.num_uniform_loss_samples = self.num_recon_loss_samples * self.NEAR_SURFACE_SAMPLING_MULTIPLE
-			self.num_near_surface_loss_samples = self.num_target_loss_samples
+		# When the loss is computed on both target and reconstruction near-surface samples,
+		# increase the number of uniform points loaded to allow proximity selection.
+		if self.sampling_method == Loss.UNIFIED_SAMPLING:
+			num_target_loss_samples = math.ceil(self.num_near_surface_loss_samples * Loss.TARGET_RECON_SAMPLING_RATIO)
+			num_recon_loss_samples = self.num_near_surface_loss_samples - num_target_loss_samples
+			self.num_near_surface_loss_samples = num_target_loss_samples + (num_recon_loss_samples * self.NEAR_SURFACE_SAMPLE_FACTOR)
 
 		self.num_uniform_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples
 		self.num_near_surface_samples = self.num_near_surface_input_samples + self.num_near_surface_loss_samples
