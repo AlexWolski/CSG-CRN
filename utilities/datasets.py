@@ -14,7 +14,7 @@ from multiprocessing import Pool
 
 class PointDataset(Dataset):
 	# Number of uniform points to load for each required near-surface point
-	NEAR_SURFACE_SAMPLE_FACTOR = 10
+	NEAR_SURFACE_SAMPLE_FACTOR = 3
 
 
 	def __init__(self, file_rel_paths, device, args, augment_data=False, dataset_name="Dataset", sampling_method=Loss.UNIFIED_SAMPLING):
@@ -33,18 +33,24 @@ class PointDataset(Dataset):
 
 		self.num_uniform_input_samples = math.ceil(self.args.num_input_points * self.args.surface_uniform_ratio)
 		self.num_near_surface_input_samples = self.args.num_input_points - self.num_uniform_input_samples
-		self.num_uniform_loss_samples = math.ceil(self.args.num_loss_points * self.args.surface_uniform_ratio)
-		self.num_near_surface_loss_samples = self.args.num_loss_points - self.num_uniform_loss_samples
+
+		# When the loss is computed on only the target, load a mix of surface and uniform samples based on the surface-uniform ratio.
+		if self.sampling_method == Loss.TARGET_SAMPLING:
+			self.num_uniform_loss_samples = math.ceil(self.args.num_loss_points * self.args.surface_uniform_ratio)
+			self.num_near_surface_loss_samples = self.args.num_loss_points - self.num_uniform_loss_samples
 
 		# When the loss is computed on both target and reconstruction near-surface samples,
-		# increase the number of uniform points loaded to allow proximity selection.
-		if self.sampling_method == Loss.UNIFIED_SAMPLING:
-			num_target_loss_samples = math.ceil(self.num_near_surface_loss_samples * Loss.TARGET_RECON_SAMPLING_RATIO)
-			num_recon_loss_samples = self.num_near_surface_loss_samples - num_target_loss_samples
-			self.num_near_surface_loss_samples = num_target_loss_samples + (num_recon_loss_samples * self.NEAR_SURFACE_SAMPLE_FACTOR)
+		# increase the number of uniform points loaded to allow proximity selection. No near-surface samples need to be loaded.
+		elif self.sampling_method == Loss.UNIFIED_SAMPLING:
+			self.num_near_surface_loss_samples = 0
+			self.num_uniform_loss_samples = self.args.num_loss_points * self.NEAR_SURFACE_SAMPLE_FACTOR
 
 		self.num_uniform_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples
 		self.num_near_surface_samples = self.num_near_surface_input_samples + self.num_near_surface_loss_samples
+		print(self.num_uniform_input_samples)
+		print(self.num_uniform_loss_samples)
+		print(self.num_near_surface_input_samples)
+		print(self.num_near_surface_loss_samples)
 
 		self.__load_data_set()
 

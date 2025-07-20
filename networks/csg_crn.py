@@ -70,7 +70,7 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
-	# Create an input tensor with 
+	# Create an input tensor with the correct format.
 	def _get_input_tensor(self, target_input_samples, csg_model, first_prim, extended_input):
 		# On the initial iteration, keep the target shape as the fill volume and append a dummy remove volume.
 		if first_prim:
