@@ -268,10 +268,10 @@ def init_training_params(training_logger, data_splits, args, device, model_param
 	# Load training set
 	(train_split, val_split, test_split) = data_splits
 
-	if not (train_dataset := PointDataset(train_split, device, args, augment_data=args.augment_data, dataset_name="Training Set")):
+	if not (train_dataset := PointDataset(train_split, device, args, augment_data=args.augment_data, sampling_method=args.loss_sampling_method, dataset_name="Training Set")):
 		return
 
-	if not (val_dataset := PointDataset(val_split, device, args, augment_data=False, dataset_name="Validation Set")):
+	if not (val_dataset := PointDataset(val_split, device, args, augment_data=False, sampling_method=args.loss_sampling_method, dataset_name="Validation Set")):
 		return
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)

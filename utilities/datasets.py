@@ -17,7 +17,7 @@ class PointDataset(Dataset):
 	NEAR_SURFACE_SAMPLE_FACTOR = 3
 
 
-	def __init__(self, file_rel_paths, device, args, augment_data=False, dataset_name="Dataset", sampling_method=Loss.UNIFIED_SAMPLING):
+	def __init__(self, file_rel_paths, device, args, augment_data=False, sampling_method=Loss.UNIFIED_SAMPLING, dataset_name="Dataset"):
 		self.file_rel_paths = file_rel_paths
 		self.augmented_copies = len(file_rel_paths) * args.augment_copies
 		self.raw_copies = len(file_rel_paths)
@@ -47,10 +47,6 @@ class PointDataset(Dataset):
 
 		self.num_uniform_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples
 		self.num_near_surface_samples = self.num_near_surface_input_samples + self.num_near_surface_loss_samples
-		print(self.num_uniform_input_samples)
-		print(self.num_uniform_loss_samples)
-		print(self.num_near_surface_input_samples)
-		print(self.num_near_surface_loss_samples)
 
 		self.__load_data_set()
 
