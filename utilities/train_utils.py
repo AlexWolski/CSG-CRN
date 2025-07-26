@@ -103,17 +103,27 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 			batch_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 
-			# Back propagate
-			scaler.scale(batch_loss).backward()
-			scaler.step(optimizer)
-			optimizer.zero_grad(set_to_none=True)
-			scaler.update()
+			# Back propagate through each cascade separately
+			if args.backprop_cascades:
+				_backpropagate(scaler, optimizer, batch_loss)
+
+		# Back propagate through all cascades at once
+		if not args.backprop_cascades:
+			_backpropagate(scaler, optimizer, batch_loss)
 
 		# Only record the loss for the completed reconstruction
 		total_train_loss += batch_loss
 
 	total_train_loss /= train_loader.__len__()
 	return total_train_loss.cpu().item()
+
+
+# Back propagate
+def _backpropagate(scaler, optimizer, batch_loss):
+	scaler.scale(batch_loss).backward()
+	scaler.step(optimizer)
+	optimizer.zero_grad(set_to_none=True)
+	scaler.update()
 
 
 def validate(model, loss_func, val_loader, num_cascades, args):
