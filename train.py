@@ -177,7 +177,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	training_group.add_argument('--loss_metric', type=str.upper, default=[ReconstructionLoss.L1_LOSS_FUNC], choices=ReconstructionLoss.loss_metrics, nargs=1, help='Reconstruction loss metric to use when training')
 	training_group.add_argument('--clamp_dist', type=float, default=0.1, help='Restrict the loss computation to a maximum specified distance from the target shape')
-	training_group.add_argument('--backprop_cascades', default=False, action='store_true', help='When enabled, backpropagate through each cascade separately. When disabled, backpropagate through all cascades. Disabling the setting requires more GPU memory but gives the model more context.')
+	training_group.add_argument('--backprop_all_cascades', default=False, action='store_true', help='When disabled, backpropagate through each cascade separately. When enabled, backpropagate through all cascades. Enabling the setting uses more GPU memory but gives the model more context.')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_factor', type=float, default=0.1, help='Learning rate reduction factor')
 	training_group.add_argument('--lr_patience', type=int, default=20, help='Number of training epochs without improvement before the learning rate is adjusted')

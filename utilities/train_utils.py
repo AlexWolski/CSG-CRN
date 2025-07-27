@@ -89,26 +89,28 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		) = data_sample
 
 		input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
-		csg_model = None
 
 		# Update model parameters after each refinement step
-		for i in range(num_cascades + 1):
-			# Detach the computational graph of the CSG model when back-propagating on each cascade separately
-			if csg_model != None and not args.backprop_cascades:
-				csg_model = csg_model.detach()
+		if not args.backprop_all_cascades:
+			csg_model = None
 
-			# Forward
-			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-				csg_model = model.forward(input_samples.detach(), csg_model)
+			for i in range(num_cascades + 1):
+				if csg_model != None:
+					csg_model = csg_model.detach()
 
-			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+				# Forward
+				with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+					csg_model = model.forward(input_samples.detach(), csg_model)
 
-			# Back propagate through each cascade separately
-			if args.backprop_cascades:
+				cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+
+				# Back propagate through each cascade separately
 				_backpropagate(scaler, optimizer, cascade_loss)
 
-		# Back propagate through all cascades at once
-		if not args.backprop_cascades:
+		# Update model parameters after all cascade iterations
+		else:
+			csg_model = model.forward_cascade(input_samples.detach(), num_cascades)
+			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 			_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Only record the loss for the completed reconstruction
