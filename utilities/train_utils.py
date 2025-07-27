@@ -78,7 +78,6 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 # Iteratively predict primitives and propagate average loss
 def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc=''):
 	total_train_loss = 0
-	batch_loss = 0
 
 	for data_sample in tqdm(train_loader, desc=desc):
 		(
@@ -94,25 +93,26 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 		# Update model parameters after each refinement step
 		for i in range(num_cascades + 1):
-			if csg_model != None:
+			# Detach the computational graph of the CSG model when back-propagating on each cascade separately
+			if csg_model != None and not args.backprop_cascades:
 				csg_model = csg_model.detach()
 
 			# Forward
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
 				csg_model = model.forward(input_samples.detach(), csg_model)
 
-			batch_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 
 			# Back propagate through each cascade separately
 			if args.backprop_cascades:
-				_backpropagate(scaler, optimizer, batch_loss)
+				_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Back propagate through all cascades at once
 		if not args.backprop_cascades:
-			_backpropagate(scaler, optimizer, batch_loss)
+			_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Only record the loss for the completed reconstruction
-		total_train_loss += batch_loss
+		total_train_loss += cascade_loss
 
 	total_train_loss /= train_loader.__len__()
 	return total_train_loss.cpu().item()
