@@ -95,7 +95,7 @@ def load_model(args):
 	return model
 
 
-# Randomly sample input points
+# Load sample points from file
 def load_mesh_and_samples(input_file, args):
 	mesh = trimesh.load(input_file)
 	mesh = scale_to_unit_sphere(mesh)
@@ -111,15 +111,22 @@ def load_mesh_and_samples(input_file, args):
 	) = sample_from_mesh(mesh, num_uniform_samples, args.num_acc_points, num_surface_samples, args.sample_dist)
 
 	# Combine samples
-	uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1)
-	surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1)
-	input_samples = torch.cat((uniform_samples, surface_samples))
+	uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1).unsqueeze(0).to(args.device)
+	near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1).unsqueeze(0).to(args.device)
+	surface_points = surface_points.unsqueeze(0).to(args.device)
+
+	return (mesh, uniform_samples, near_surface_samples, surface_points)
+
+
+# Randomly sample input points
+def combine_samples(uniform_samples, near_surface_samples, num_input_points, device):
+	input_samples = torch.cat((uniform_samples, near_surface_samples), dim=1)
 
 	# Shuffle data samples
-	input_samples = input_samples[torch.randperm(args.num_input_points)]
+	input_samples = input_samples[:, torch.randperm(num_input_points)]
 
 	# Add batch dimension
-	return (mesh, input_samples.unsqueeze(0).to(args.device))
+	return input_samples
 
 
 def pretty_print_tensor(message, tensor):
@@ -155,15 +162,10 @@ def print_csg_commands(csg_model):
 		count += 1
 
 
-def print_recon_loss(input_samples, csg_model, loss_metric):
-	input_points = input_samples[:,:,:3]
-	input_sdf = input_samples[:,:,3]
-
-	csg_sdf = csg_model.sample_csg(input_points)
-
+def print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, loss_metric):
 	recon_loss = ReconstructionLoss(loss_metric)
 	print(f'Reconstruction {loss_metric} Loss:')
-	print(recon_loss.forward(input_sdf, csg_sdf))
+	print(recon_loss.forward(near_surface_samples, uniform_samples, surface_points, csg_model))
 	print('')
 
 
@@ -177,14 +179,15 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 
 
 def construct_csg_model(model, input_file, args):
-	target_mesh, input_samples = load_mesh_and_samples(input_file, args)
+	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args)
+	input_samples = combine_samples(uniform_samples, near_surface_samples, args.num_input_points, args.device)
 	csg_model = model.forward_cascade(input_samples, args.num_cascades)
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
 	# Pretty print csg commands
 	print_csg_commands(csg_model)
 	# Print reconstruction loss
-	print_recon_loss(input_samples, csg_model, args.loss_metric)
+	print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, args.loss_metric)
 	# Print reconstruction accuracy
 	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, args.device)
 

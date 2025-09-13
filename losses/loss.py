@@ -30,13 +30,8 @@ class Loss(nn.Module):
 		if self.loss_sampling_method == self.UNIFIED_SAMPLING:
 			target_uniform_samples = self._select_near_surface_samples(target_uniform_samples, num_uniform_samples, csg_model)
 
-		target_sdf_samples = torch.cat((target_near_surface_samples, target_uniform_samples), 1)
-		target_points = target_sdf_samples[..., :3]
-		target_distances = target_sdf_samples[..., 3]
-
 		# Compute reconstruction loss
-		refined_distances = csg_model.sample_csg(target_points)
-		recon_loss = self.recon_loss(target_distances, refined_distances)
+		recon_loss = self.recon_loss(target_near_surface_samples, target_uniform_samples, target_surface_samples, csg_model)
 
 		# Compute primitive loss
 		primitive_distances = []

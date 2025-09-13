@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.nn.modules.loss import _Loss
+from utilities.csg_model import CSGModel
 
 
 # Compute the reconstruction loss between SDFs sampled from two point clouds
@@ -12,13 +13,15 @@ class ReconstructionLoss(nn.Module):
 	MSE_LOSS_FUNC = "MSE"
 	LOG_LOSS_FUNC = "LOG"
 	OCC_LOSS_FUNC = "OCC"
-	loss_metrics = [L1_LOSS_FUNC, MSE_LOSS_FUNC, LOG_LOSS_FUNC, OCC_LOSS_FUNC]
+	CHAMFER_LOSS_FUNC = "CHAMFER"
+	loss_metrics = [L1_LOSS_FUNC, MSE_LOSS_FUNC, LOG_LOSS_FUNC, OCC_LOSS_FUNC, CHAMFER_LOSS_FUNC]
 
 
 	def __init__(self, loss_metric, clamp_dist=None):
 		super(ReconstructionLoss, self).__init__()
 
 		self.clamp_dist = clamp_dist
+		self.loss_metric = loss_metric
 
 		# Select loss function
 		match loss_metric:
@@ -30,6 +33,8 @@ class ReconstructionLoss(nn.Module):
 				self.loss_func = LogLoss(reduction='none')
 			case self.OCC_LOSS_FUNC:
 				self.loss_func = OccLoss(reduction='none')
+			case self.CHAMFER_LOSS_FUNC:
+				self.loss_func = ChamferLoss(reduction='none')
 			case None:
 				raise Exception("A loss function must be provided")
 			case _:
@@ -37,7 +42,25 @@ class ReconstructionLoss(nn.Module):
 
 
 	# Compute average loss of SDF samples of all batches
-	def forward(self, target_sdf, predicted_sdf):
+	def forward(self, target_near_surface_samples, target_uniform_samples, target_surface_samples, csg_model):
+		# The Chamfer distance metric does not require uniform samples, but does require near-surface samples and a CSG model.
+		if self.loss_metric == self.CHAMFER_LOSS_FUNC:
+			recon_loss = self.loss_func(target_surface_samples, csg_model)
+		# All other loss metrics require a mix of near-surface and uniform samples.
+		else:
+			(clamped_target_sdf, clamped_predicted_sdf) = self.cat_and_clamp_samples(target_near_surface_samples, target_uniform_samples, csg_model)
+			recon_loss = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
+
+		return torch.mean(recon_loss)
+
+
+	def cat_and_clamp_samples(self, target_near_surface_samples, target_uniform_samples, csg_model):
+		target_sdf_samples = torch.cat((target_near_surface_samples, target_uniform_samples), 1)
+		target_points = target_sdf_samples[..., :3]
+		target_sdf = target_sdf_samples[..., 3]
+
+		predicted_sdf = csg_model.sample_csg(target_points)
+
 		# Clamp the predicted SDF values to have a maximum difference of clamp_dist*2
 		if self.clamp_dist != None:
 			clamped_target_sdf = torch.clamp(target_sdf, min=target_sdf-self.clamp_dist, max=predicted_sdf+self.clamp_dist)
@@ -47,8 +70,8 @@ class ReconstructionLoss(nn.Module):
 			clamped_predicted_sdf = predicted_sdf
 
 		# Compute the loss
-		loss_tensor = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
-		return torch.mean(loss_tensor)
+		return (clamped_target_sdf, clamped_predicted_sdf)
+		return self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
 
 
 # Log loss function roughly intersecting (0,0)
@@ -108,6 +131,30 @@ class OccLoss(_Loss):
 
 		# Compute binary cross entropy of occupancy values.
 		return nn.functional.binary_cross_entropy(predicted_occupancy, target_occupancy, reduction=reduction)
+
+
+# Chamfer distance loss function
+class ChamferLoss(_Loss):
+	def __init__(self, reduction: str = 'mean'):
+		super(ChamferLoss, self).__init__(None, None, reduction)
+
+
+	def forward(self, input: Tensor, target: CSGModel) -> Tensor:
+		return ChamferLoss.chamfer_loss(input, target, self.reduction)
+
+
+	def chamfer_loss(target_surface_samples, csg_model, reduction='mean'):
+		# TO-DO: Implement differentiable chamfer distance computation here
+		csg_to_surface_distance = csg_model.sample_csg(target_surface_samples)
+		loss = torch.abs(csg_to_surface_distance)
+
+		match reduction:
+			case 'none':
+				return loss
+			case 'sum':
+				return torch.sum(loss)
+			case 'mean':
+				return torch.mean(loss)
 
 
 # Test loss
