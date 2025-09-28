@@ -3,6 +3,8 @@ import torch.nn as nn
 from torch import Tensor
 from torch.nn.modules.loss import _Loss
 from utilities.csg_model import CSGModel
+from utilities.sampler_utils import sample_sdf_near_csg_surface
+from utilities.accuracy_metrics import compute_chamfer_distance
 
 
 # Compute the reconstruction loss between SDFs sampled from two point clouds
@@ -144,17 +146,20 @@ class ChamferLoss(_Loss):
 
 
 	def chamfer_loss(target_surface_samples, csg_model, reduction='mean'):
-		# TO-DO: Implement differentiable chamfer distance computation here
-		csg_to_surface_distance = csg_model.sample_csg(target_surface_samples)
-		loss = torch.abs(csg_to_surface_distance)
+		# TO-DO: Replace sample_sdf_near_csg_surface method with differentiable marching cubes
+		num_samples = target_surface_samples.size(1)
+		SAMPLE_DIST = 0.01
+		(near_surface_points, near_surface_distances) = sample_sdf_near_csg_surface(csg_model, num_samples, SAMPLE_DIST)
+		chamfer_dist = compute_chamfer_distance(target_surface_samples, near_surface_points, no_grad=False)
+		return chamfer_dist
 
-		match reduction:
-			case 'none':
-				return loss
-			case 'sum':
-				return torch.sum(loss)
-			case 'mean':
-				return torch.mean(loss)
+		# match reduction:
+		# 	case 'none':
+		# 		return chamfer_dist
+		# 	case 'sum':
+		# 		return torch.sum(chamfer_dist)
+		# 	case 'mean':
+		# 		return torch.mean(chamfer_dist)
 
 
 # Test loss

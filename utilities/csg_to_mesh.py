@@ -3,6 +3,7 @@ import math
 import torch
 import trimesh
 import tkinter as tk
+from diso import DiffDMC
 from tkinter import filedialog, simpledialog, StringVar
 from pytorch3d.ops.marching_cubes import marching_cubes
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
@@ -42,71 +43,93 @@ def get_grid_points(min_bound, max_bound, resolution, device=None):
 	return (x, y, z)
 
 
+def sample_csg_grid(csg_model, resolution):
+	"""
+	Generates SDF samples of a CSG model where the points are aligned to a grid.
+	A grid of NxNxN point samples is generated where N=resolution. 
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		CSG model object to convert to a mesh.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+
+	Returns
+	-------
+	torch.Tensor
+		Tensor of size (B, N, N, N) where B is the number of batches in the CSG model and N is the resolution.
+
+	"""
+	torch.cuda.empty_cache()
+
+	# Generate grid points
+	voxel_size = abs(MAX_BOUND - MIN_BOUND) / resolution
+	(x, y, z) = get_grid_points(MIN_BOUND, MAX_BOUND, resolution, csg_model.device)
+
+	# Calculate number of batches needed to compute SDF values given memory restrictions
+	(free_memory, total_memory) = torch.cuda.mem_get_info(device=x.device.index)
+	csg_batch_size = csg_model.batch_size
+	num_samples = resolution**3
+	input_bytes = num_samples * 3 * x.element_size()
+	output_bytes = num_samples * x.element_size() * csg_batch_size
+	comp_bytes = input_bytes * SDF_MEMORY_USAGE_FACTOR * csg_batch_size
+	total_req_bytes = input_bytes + output_bytes + comp_bytes
+	num_comp_batches = math.ceil(total_req_bytes / free_memory)
+
+	# Quantize computation batch size to be divisible by grid layer size
+	layers_per_batch = resolution // num_comp_batches
+	layers_per_batch = max(layers_per_batch, 1)
+	distances_list = []
+
+	# Sample SDF
+	for layer in range(0, resolution, layers_per_batch):
+		start_layer = layer
+		end_layer = layer + layers_per_batch if layer + layers_per_batch < resolution else resolution
+
+		# Slice query points in current batch
+		x_slice = x[start_layer:end_layer,...]
+		y_slice = y[start_layer:end_layer,...]
+		z_slice = z[start_layer:end_layer,...]
+		# Combine query points into single tensor
+		points_slice = torch.stack((x_slice, y_slice, z_slice), dim=-1)
+		# Reshape query points to (1, N, 3) where N=num_points
+		points_slice = points_slice.reshape(1,-1,3)
+		# Expand for required number of batches
+		points_slice = points_slice.expand(csg_batch_size, -1, 3)
+		# Sample SDF
+		distances_list.append(csg_model.sample_csg(points_slice))
+
+	# Reshape into grid
+	distances = torch.cat(distances_list, dim=-1)
+	distances = distances.reshape(csg_batch_size, resolution, resolution, resolution)
+	return distances
+
+
 def csg_to_mesh(csg_model, resolution, iso_level=0.0):
+	"""
+	Use the marching cubes algorithm to extract a mesh representation of a given implicit CSG model.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		CSG model object to convert to a mesh.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+	iso_level : float, optional
+		The distance from the  isosurface. Default is 0.
+
+	Returns
+	-------
+	[trimesh.Trimesh]
+		List containing B converted mesh objects, where B is the batch size of `csg_model`.
+
+	"""
 	torch.cuda.empty_cache()
 
 	with torch.no_grad():
-		"""
-		Use the marching cubes algorithm to extract a mesh representation of a given implicit CSG model.
-
-		Parameters
-		----------
-		csg_model : utilities.csg_model.CSGModel
-			CSG model object to convert to a mesh.
-		resolution : int
-			Voxel resolution to use for the marching cubes algorithm.
-		iso_level : float, optional
-			The distance from the  isosurface. Default is 0.
-
-		Returns
-		-------
-		[trimesh.Trimesh]
-			List containing B converted mesh objects, where B is the batch size of `csg_model`.
-
-		"""
-		# Generate grid points
-		voxel_size = abs(MAX_BOUND - MIN_BOUND) / resolution
-		(x, y, z) = get_grid_points(MIN_BOUND, MAX_BOUND, resolution, csg_model.device)
-
-		# Calculate number of batches needed to compute SDF values given memory restrictions
-		(free_memory, total_memory) = torch.cuda.mem_get_info(device=x.device.index)
+		distances = sample_csg_grid(csg_model, resolution)
 		csg_batch_size = csg_model.batch_size
-		num_samples = resolution**3
-		input_bytes = num_samples * 3 * x.element_size()
-		output_bytes = num_samples * x.element_size() * csg_batch_size
-		comp_bytes = input_bytes * SDF_MEMORY_USAGE_FACTOR * csg_batch_size
-		total_req_bytes = input_bytes + output_bytes + comp_bytes
-		num_comp_batches = math.ceil(total_req_bytes / free_memory)
-
-		# Quantize computation batch size to be divisible by grid layer size
-		layers_per_batch = resolution // num_comp_batches
-		layers_per_batch = max(layers_per_batch, 1)
-		distances_list = []
-
-		# Sample SDF
-		for layer in range(0, resolution, layers_per_batch):
-			start_layer = layer
-			end_layer = layer + layers_per_batch if layer + layers_per_batch < resolution else resolution
-
-			# Slice query points in current batch
-			x_slice = x[start_layer:end_layer,...]
-			y_slice = y[start_layer:end_layer,...]
-			z_slice = z[start_layer:end_layer,...]
-			# Combine query points into single tensor
-			points_slice = torch.stack((x_slice, y_slice, z_slice), dim=-1)
-			# Reshape query points to (1, N, 3) where N=num_points
-			points_slice = points_slice.reshape(1,-1,3)
-			# Expand for required number of batches
-			points_slice = points_slice.expand(csg_batch_size, -1, 3)
-			# Sample SDF
-			distances_list.append(csg_model.sample_csg(points_slice))
-
-		# Reshape into grid
-		distances = torch.cat(distances_list, dim=-1)
-		distances = distances.reshape(csg_batch_size, resolution, resolution, resolution)
-
-		del x, y ,z, distances_list
-
 		mesh_list = []
 
 		try:
@@ -126,6 +149,38 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 			torch.cuda.empty_cache()
 
 		return mesh_list
+
+
+def csg_to_mesh_differentiable(csg_model, resolution):
+	"""
+	Use a differentiable variant of the marching cubes algorithm to extract a mesh representation of a given implicit CSG model.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		CSG model object to convert to a mesh.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+
+	Returns
+	-------
+	[Tuple[torch.Tensor, torch.Tensor]]
+		List containing B tuples of vertex tensors and face tensors, where B is the batch size of `csg_model`.
+
+	"""
+	batch_sdf_distances = sample_csg_grid(csg_model, resolution)
+	batch_size = batch_sdf_distances.size(0)
+	diffdmc = DiffDMC(dtype=torch.float32).cuda()
+	mesh_list = []
+
+	for batch in range(batch_size):
+		sdf_distances = batch_sdf_distances[batch]
+		verts, faces = diffdmc(sdf_distances, deform=None, normalize=True)
+
+		# Convert the lists of vertices and faces to mesh objects
+		mesh_list.append((verts, faces))
+
+	return mesh_list
 
 
 def export_to_mesh(csg_model, resolution, output_file):
