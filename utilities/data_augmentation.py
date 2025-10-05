@@ -133,6 +133,12 @@ def random_scale_batch(scale_axis, min_scale, max_scale, batch_size):
 	return torch.stack(scale_list, dim=0)
 
 
+# Generate random noise given a tensor and noise variance.
+def __random_noise(tensor, noise_variance):
+	noise_std = math.sqrt(noise_variance)
+	return torch.randn(tensor.size(), dtype=tensor.dtype, device=tensor.device) * noise_std
+
+
 # Augment a single SDF sample
 def augment_sample(points, distances, args):
 	augmented_points, augmented_distances = points, distances
@@ -140,10 +146,8 @@ def augment_sample(points, distances, args):
 
 	# Add noise to the points and distances
 	if not args.no_noise:
-		points_noise = torch.randn(points.size(), dtype=points.dtype, device=points.device) * noise_std
-		distances_noise = torch.randn(distances.size(), dtype=distances.dtype, device=distances.device) * noise_std
-		augmented_points += points_noise
-		augmented_distances += distances_noise
+		augmented_points += __random_noise(points_noise, args.noise_variance)
+		augmented_distances += __random_noise(distances_noise, args.noise_variance)
 
 	# Rotate
 	if not args.no_rotation:
@@ -153,22 +157,36 @@ def augment_sample(points, distances, args):
 	return (augmented_points, augmented_distances)
 
 
-# Augment a single SDF sample
+# Augment a batch of SDF samples
 def augment_sample_batch(batch_points, batch_distances, args):
+	augmented_points = augment_sample_batch_points(batch_points, args)
+	augmented_distances = augment_sample_batch_distances(batch_distances, args)
+	return (augmented_points, augmented_distances)
+
+
+# Augment a batch of point samples
+def augment_sample_batch_points(batch_points, args):
 	batch_size = batch_points.size()[0]
-	augmented_points, augmented_distances = batch_points, batch_distances
-	noise_std = math.sqrt(args.noise_variance)
+	augmented_points = batch_points
 
 	# Add noise to the points and distances
 	if not args.no_noise:
-		points_noise = torch.randn(batch_points.size(), dtype=batch_points.dtype, device=batch_points.device) * noise_std
-		distances_noise = torch.randn(batch_distances.size(), dtype=batch_distances.dtype, device=batch_distances.device) * noise_std
-		augmented_points += points_noise
-		augmented_distances += distances_noise
+		augmented_points += __random_noise(batch_points, args.noise_variance)
 
 	# Rotate
 	if not args.no_rotation:
 		rotation_quat = random_rotation_batch(args.rotate_axis, batch_size).to(augmented_points.device)
 		augmented_points = rotate_point_cloud_batch(augmented_points, rotation_quat)
 
-	return (augmented_points, augmented_distances)
+	return augmented_points
+
+
+# Augment a batch of SDF distances
+def augment_sample_batch_distances(batch_distances, args):
+	augmented_distances = batch_distances
+
+	# Add noise to the points and distances
+	if not args.no_noise:
+		augmented_distances += __random_noise(batch_distances, args.noise_variance)
+
+	return augmented_distances

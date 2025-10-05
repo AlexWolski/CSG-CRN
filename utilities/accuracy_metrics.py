@@ -4,7 +4,7 @@ from utilities.csg_to_mesh import csg_to_mesh
 from utilities.sampler_utils import sample_points_mesh_surface, sample_points_csg_surface, sample_sdf_near_csg_surface
 
 
-def compute_chamfer_distance(target_surface_samples, recon_surface_samples):
+def compute_chamfer_distance(target_surface_samples, recon_surface_samples, no_grad=False):
 	"""
 	Compute the Chamfer Distance metric between a target point cloud and a reconstruction point cloud.
 
@@ -21,16 +21,21 @@ def compute_chamfer_distance(target_surface_samples, recon_surface_samples):
 		The average bidirectional Chamfer Distance accuracy metric between all batches of target and reconstruction shapes.
 
 	"""
-	with torch.no_grad():
+	with torch.set_grad_enabled(not no_grad):
 		chamferDist = ChamferDistance().to(target_surface_samples.device)
 		dist_bidirectional = chamferDist(target_surface_samples, recon_surface_samples, bidirectional=True)
-		return dist_bidirectional.detach().cpu().item()
+
+		if no_grad:
+			return dist_bidirectional.detach().cpu().item()
+		else:
+			return dist_bidirectional.cpu()
 
 
 def compute_chamfer_distance_csg(target_surface_samples, csg_model, num_acc_points, recon_resolution):
 	"""
 	Compute the Chamfer Distance metric between a target point cloud and a CSG reconstruction.
 	Uses the marching cubes algorithm to extract an isosurface mesh of the CSG model and sample surface points.
+	This method is non-differentiable as the marching cubes algorithm is non-differentiable.
 
 	Parameters
 	----------
@@ -52,7 +57,7 @@ def compute_chamfer_distance_csg(target_surface_samples, csg_model, num_acc_poin
 	# Sample CSG surface
 	recon_points_batch = sample_points_csg_surface(csg_model, recon_resolution, num_acc_points)
 	# Compute average Chamfer distance
-	return compute_chamfer_distance(target_surface_samples, recon_points_batch)
+	return compute_chamfer_distance(target_surface_samples, recon_points_batch, no_grad=True)
 
 
 def compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, num_acc_points, sample_dist):

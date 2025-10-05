@@ -5,7 +5,7 @@ import trimesh
 import torch
 import math
 from torch.distributions.uniform import Uniform
-from utilities.csg_to_mesh import csg_to_mesh
+from utilities.csg_to_mesh import csg_to_mesh, csg_to_mesh_differentiable
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
 
 
@@ -265,6 +265,67 @@ def sample_points_csg_surface(csg_model, resolution, num_sdf_samples):
 	return torch.stack(surface_points_list).detach()
 
 
+def sample_points_csg_surface_differentiable(csg_model, resolution, num_sdf_samples):
+	"""
+	Uniformly sample points on the surface of a batch of CSG models.
+	Uses the marching cubes algorithm to extract an isosurface mesh, then uniformly samples the mesh faces.
+
+	Parameters
+	----------
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model to sample.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+	num_sdf_samples : int
+		Number of surface samples to generate.
+
+	Returns
+	-------
+	torch.Tensor
+		Tensor of size (B, N, 3) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
+		Each point in the tensor is on the surface of the given CSG model.
+
+	"""
+	# Extract meshes from CSG models
+	mesh_list = csg_to_mesh_differentiable(csg_model, resolution)
+	triangles_list = []
+
+	prob_dist = torch.ones(num_sdf_samples) / num_sdf_samples
+
+	# Randomly select `num_sdf_samples` faces from each mesh. Faces can be selected multiple times.
+	# Note: The sampling is not weighted by face area. This can be done by populating `prob_dist` with the normalized face areas.
+	for (verts, faces) in mesh_list:
+		face_indices = prob_dist.multinomial(num_samples=num_sdf_samples, replacement=True)
+		select_faces = faces[face_indices]
+		select_vertices = verts[select_faces]
+		triangles_list.append(select_vertices)
+
+	# The `triangles` tensor has shape BxNx3x3, where B=`csg_model`.batch_size and N=`num_sdf_samples`.
+	# The third dimension represents the vertices in each face and the fourth dimension represents the coordinates of each vertex.
+	triangles = torch.stack(triangles_list, dim=0)
+
+	# Given a face has points A, B, and C, compute the side vectors AB and AC. The vectors have shape BxNx3.
+	# Point A is acts as the origin while AB and AC represent the triangle.
+	AB_vec = triangles[:,:,1] - triangles[:,:,0]
+	AC_vec = triangles[:,:,2] - triangles[:,:,0]
+
+	# Generate uniform random values u1, u2 ~ U(0, 1) for the two side vectors. The tensors have shape BxNx2.
+	# These are the parameters for generating random points.
+	uniform_rand_params = torch.rand(size=(csg_model.batch_size, num_sdf_samples, 2), device=csg_model.device)
+	# A random point will be out of bounds (OOB) of the target triangle when u1 + u2 > 1.
+	OOB_condition = torch.sum(uniform_rand_params, dim=-1) > 1
+	# Reflect the out of bounds points by computing 1 - [u1, u2] but leave the in-bounds points unmodified.
+	reflect_sign = torch.where(OOB_condition, -1, 1).unsqueeze(-1)
+	reflect_addition = torch.where(OOB_condition, 1, 0).unsqueeze(-1)
+	reflected_rand_params = reflect_addition + (reflect_sign * uniform_rand_params)
+
+	# Generate a random point by varying the length of each side vector using the random parameters.
+	# Then translate the random point to the correct position by adding it to the 'origin' point.
+	u1 = reflected_rand_params[...,0].unsqueeze(-1)
+	u2 = reflected_rand_params[...,1].unsqueeze(-1)
+	return triangles[:,:,0] + (AB_vec * u1) + (AC_vec * u2)
+
+
 def sample_sdf_from_csg_uniform_sphere(csg_model, num_sdf_samples):
 	"""
 	Generate SDF samples a batch of CSG models uniformly distributed in a unit sphere.
@@ -328,7 +389,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 		sample_distances = torch.cat((sample_distances, new_distances), dim=1)
 
 		# Keep `num_sdf_samples` samples with the lowest sample distance
-		(new_sample_dist, sample_points, sample_distances) = _select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
+		(new_sample_dist, sample_points, sample_distances) = select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
 
 		# No samples could be found within the unit sphere
 		if new_sample_dist == None:
@@ -339,7 +400,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 	return (sample_points[:,:num_sdf_samples], sample_distances[:,:num_sdf_samples])
 
 
-def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist):
+def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist=1):
 	"""
 	Helper function to select `num_sdf_samples` samples with the smallest SDF distance.
 
@@ -352,7 +413,7 @@ def _select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf
 	num_sdf_samples : int
 		Required number of SDF samples.
 	current_sample_dist : float
-		Maximum value of SDF distances in `batch_sample_distances`.
+		Maximum value of SDF distances in `batch_sample_distances`. Default is 1.
 
 	Returns
 	-------
