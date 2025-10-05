@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch import Tensor
 from torch.nn.modules.loss import _Loss
 from utilities.csg_model import CSGModel
-from utilities.sampler_utils import sample_sdf_near_csg_surface
+from utilities.sampler_utils import sample_points_csg_surface_differentiable
 from utilities.accuracy_metrics import compute_chamfer_distance
 
 
@@ -137,29 +137,29 @@ class OccLoss(_Loss):
 
 # Chamfer distance loss function
 class ChamferLoss(_Loss):
+	RESOLUTION = 64
+
+
 	def __init__(self, reduction: str = 'mean'):
 		super(ChamferLoss, self).__init__(None, None, reduction)
 
 
 	def forward(self, input: Tensor, target: CSGModel) -> Tensor:
-		return ChamferLoss.chamfer_loss(input, target, self.reduction)
+		return ChamferLoss.chamfer_loss(input, target, self.RESOLUTION, self.reduction)
 
 
-	def chamfer_loss(target_surface_samples, csg_model, reduction='mean'):
-		# TO-DO: Replace sample_sdf_near_csg_surface method with differentiable marching cubes
+	def chamfer_loss(target_surface_samples, csg_model, resolution, reduction='mean'):
 		num_samples = target_surface_samples.size(1)
-		SAMPLE_DIST = 0.01
-		(near_surface_points, near_surface_distances) = sample_sdf_near_csg_surface(csg_model, num_samples, SAMPLE_DIST)
-		chamfer_dist = compute_chamfer_distance(target_surface_samples, near_surface_points, no_grad=False)
-		return chamfer_dist
+		surface_points = sample_points_csg_surface_differentiable(csg_model, resolution, num_samples)
+		chamfer_dist = compute_chamfer_distance(target_surface_samples[:,:surface_points.size(1)], surface_points, no_grad=False)
 
-		# match reduction:
-		# 	case 'none':
-		# 		return chamfer_dist
-		# 	case 'sum':
-		# 		return torch.sum(chamfer_dist)
-		# 	case 'mean':
-		# 		return torch.mean(chamfer_dist)
+		match reduction:
+			case 'none':
+				return chamfer_dist
+			case 'sum':
+				return torch.sum(chamfer_dist)
+			case 'mean':
+				return torch.mean(chamfer_dist)
 
 
 # Test loss
