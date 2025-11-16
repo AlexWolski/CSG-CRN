@@ -132,6 +132,10 @@ def validate(model, loss_func, val_loader, num_cascades, args):
 	total_val_loss = 0
 	total_chamfer_dist = 0
 
+	# Set the model to Eval mode as to not modify the BatchNorm layer
+	was_training = model.training
+	model.eval()
+
 	with torch.no_grad():
 		for data_sample in val_loader:
 			(
@@ -148,6 +152,9 @@ def validate(model, loss_func, val_loader, num_cascades, args):
 			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
 			total_chamfer_dist += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
+
+	# Return model to its previous mode
+	model.train() if was_training else model.eval()
 
 	total_val_loss /= val_loader.__len__()
 	total_chamfer_dist /= val_loader.__len__()
