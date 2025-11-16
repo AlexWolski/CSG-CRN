@@ -149,12 +149,12 @@ class PointDataset(Dataset):
 		if self.augment_data:
 			combined_samples = torch.cat((batch_uniform_samples, batch_near_surface_samples), dim=1)
 			combined_samples = self.__augment_sdf_samples(combined_samples)
-			batch_uniform_samples = combined_samples[:, self.num_uniform_samples:]
-			batch_near_surface_samples = combined_samples[:, :self.num_near_surface_samples]
+			batch_uniform_samples = combined_samples[:, :self.num_uniform_samples]
+			batch_near_surface_samples = combined_samples[:, self.num_uniform_samples:]
 
 		# Separate input and loss samples
 		batch_uniform_input_samples = batch_uniform_samples[:, :self.num_uniform_input_samples]
-		batch_uniform_loss_samples = batch_uniform_samples[:, self.num_uniform_loss_samples:]
+		batch_uniform_loss_samples = batch_uniform_samples[:, self.num_uniform_input_samples:]
 		batch_near_surface_input_samples = batch_near_surface_samples[:, :self.num_near_surface_input_samples]
 		batch_near_surface_loss_samples = batch_near_surface_samples[:, self.num_near_surface_input_samples:]
 
