@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 
 
-HEADERS = ['Epoch', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Learning Rate']
+HEADERS = ['Epoch', 'Cascades', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Learning Rate']
 
 
 class TrainingLogger():
@@ -20,7 +20,7 @@ class TrainingLogger():
 
 		# Initialize output csv file
 		self.create_csv_file()
-		self.write_results(self.training_results)
+		self.write_results()
 		self.plot_results()
 
 
@@ -57,7 +57,7 @@ class TrainingLogger():
 
 
 	# Write all training results to csv file
-	def write_results(self, initial_results):
+	def write_results(self):
 		with open(self.csv_output_file, 'a') as fd:
 			csv_writer = csv.writer(fd)
 
@@ -73,12 +73,13 @@ class TrainingLogger():
 	# Generate plot image of results
 	def plot_results(self):
 		epoch = self.training_results['Epoch']
+		num_cascades = self.training_results['Cascades']
 		train_loss = self.training_results['Training Loss']
 		val_loss = self.training_results['Validation Loss']
 		val_acc = self.training_results['Chamfer Distance']
 		learning_rate = self.training_results['Learning Rate']
 
-		fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(5,8))
+		fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, sharex=True, figsize=(5,10))
 
 		ax1.plot(epoch, train_loss, color='blue', label='Training Loss')
 		ax1.plot(epoch, val_loss, color='red', label='Validation Loss')
@@ -98,13 +99,20 @@ class TrainingLogger():
 		ax3.set_ylabel('Learning Rate')
 		ax3.set_yscale('log')
 
+		ax4.plot(epoch, num_cascades, color='black', label='Cascades')
+		ax4.set_xlabel('Epoch')
+		ax4.set_ylabel('Cascades')
+		ax4.set_yticks(range(0, 1 if not num_cascades else max(num_cascades) + 1))
+		ax4.set_ylim(bottom=0)
+
 		fig.savefig(self.plot_output_file, bbox_inches="tight", dpi=300)
 		plt.close()
 
 
 	# Append epoch result data to training_results dictionary
-	def _append_training_results(self, epoch, train_loss, val_loss, val_acc, learning_rate):
+	def _append_training_results(self, epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate):
 		self.training_results['Epoch'].append(epoch)
+		self.training_results['Cascades'].append(num_cascades)
 		self.training_results['Training Loss'].append(train_loss)
 		self.training_results['Validation Loss'].append(val_loss)
 		self.training_results['Chamfer Distance'].append(val_acc)
@@ -112,11 +120,11 @@ class TrainingLogger():
 
 
 	# Log epoch training results
-	def add_result(self, epoch, train_loss, val_loss, val_acc, learning_rate):
-		self._append_training_results(epoch, train_loss, val_loss, val_acc, learning_rate)
+	def add_result(self, epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate):
+		self._append_training_results(epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate)
 
 		with open(self.csv_output_file, 'a') as fd:
 			csv_writer = csv.writer(fd)
-			csv_writer.writerow([epoch, train_loss, val_loss, val_acc, learning_rate])
+			csv_writer.writerow([epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate])
 
 		self.plot_results()

@@ -16,8 +16,13 @@ from utilities.datasets import PointDataset
 from utilities.early_stopping import EarlyStopping
 
 
+SHARED_PARAMS = "SHARED"
+SEPARATE_PARAMS = "SEPARATE"
+CASCADE_MODEL_MODES = [SHARED_PARAMS, SEPARATE_PARAMS]
+
+
 # Prepare data files and load training dataset
-def load_data_splits(args, data_split, device):
+def load_data_splits(args, data_split):
 	# Load sample files
 	file_rel_paths = get_data_files(args.data_dir, args.sub_dir)
 	print(f'Found {len(file_rel_paths)} data files')
@@ -210,13 +215,18 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			args.sub_weight = schedule_sub_weight(args.sub_schedule_start_epoch, args.sub_schedule_end_epoch, epoch)
 			model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
-		# Schedule number of cascades
-		if args.no_schedule_cascades:
-			num_cascades = args.num_cascades
-		else:
-			cascade_scheduler_current = max(epoch - args.sub_schedule_start_epoch, 0) if args.schedule_sub_weight else epoch
-			num_cascades = cascade_scheduler_current // args.cascade_schedule_epochs
-			num_cascades = min(num_cascades, args.num_cascades)
+		# When using the same model parameters for all cascades, use the schedule to control the number of cascades
+		if args.cascade_training_mode == SHARED_PARAMS:
+			# Schedule number of cascades
+			if args.no_schedule_cascades:
+				num_cascades = args.num_cascades
+			else:
+				cascade_scheduler_current = max(epoch - args.sub_schedule_start_epoch, 0) if args.schedule_sub_weight else epoch
+				num_cascades = cascade_scheduler_current // args.cascade_schedule_epochs
+				num_cascades = min(num_cascades, args.num_cascades)
+		elif args.cascade_training_mode == SEPARATE_PARAMS:
+			# TODO - Implement cascade scheduling based on early stop
+			num_cascades = 0
 
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
@@ -225,7 +235,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results
-		training_logger.add_result(epoch, train_loss, val_loss, chamfer_dist, learning_rate)
+		training_logger.add_result(epoch, num_cascades, train_loss, val_loss, chamfer_dist, learning_rate)
 
 		weight_scheduling_in_progress = args.schedule_sub_weight and args.sub_weight < 1
 		cascade_scheduling_in_progress = not args.no_schedule_cascades and num_cascades < args.num_cascades

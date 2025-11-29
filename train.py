@@ -11,7 +11,7 @@ from losses.loss import Loss
 from losses.reconstruction_loss import ReconstructionLoss
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
-from utilities.train_utils import load_data_splits, load_model, train, init_training_params
+from utilities.train_utils import load_data_splits, train, init_training_params, SEPARATE_PARAMS, CASCADE_MODEL_MODES
 from utilities.training_logger import TrainingLogger
 
 
@@ -93,6 +93,9 @@ def options():
 	# Retrieve loss sampling method
 	args.loss_sampling_method = args.loss_sampling_method[0] if len(args.loss_sampling_method) > 0 else None
 
+	# Retrieve cascade training mode
+	args.cascade_training_mode = args.cascade_training_mode[0] if len(args.cascade_training_mode) > 0 else None
+
 	# Configure subtract operation
 	if args.disable_sub_operation or args.schedule_sub_weight:
 		args.sub_weight = 0
@@ -101,6 +104,10 @@ def options():
 
 	# Configure cascade scheduling
 	if args.cascade_schedule_epochs <= 0:
+		args.no_schedule_cascades = True
+
+	# Disable cascade scheduling when separate model parameters are used for each cascade
+	if args.cascade_training_mode == SEPARATE_PARAMS:
 		args.no_schedule_cascades = True
 
 	# Print arguments
@@ -177,7 +184,8 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	training_group.add_argument('--loss_metric', type=str.upper, default=[ReconstructionLoss.CHAMFER_LOSS_FUNC], choices=ReconstructionLoss.loss_metrics, nargs=1, help='Reconstruction loss metric to use when training')
 	training_group.add_argument('--clamp_dist', type=float, default=0.1, help='Restrict the loss computation to a maximum specified distance from the target shape')
-	training_group.add_argument('--backprop_all_cascades', default=False, action='store_true', help='When disabled, backpropagate through each cascade separately. When enabled, backpropagate through all cascades. Enabling the setting uses more GPU memory but gives the model more context.')
+	training_group.add_argument('--cascade_training_mode', type=str.upper, default=[SEPARATE_PARAMS], choices=CASCADE_MODEL_MODES, nargs=1, help='SHARED mode uses the same model parameters for all cascades while the SEPARATE mode retrains the model parameters on each cascades.')
+	training_group.add_argument('--backprop_all_cascades', default=False, action='store_true', help='When disabled, backpropagate through each cascade separately. When enabled, backpropagate through all cascades. Enabling the setting uses more GPU memory but gives the model more context. Not applicable when `cascade_training_mode` is set to SEPARATE.')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_factor', type=float, default=0.1, help='Learning rate reduction factor')
 	training_group.add_argument('--lr_patience', type=int, default=20, help='Number of training epochs without improvement before the learning rate is adjusted')
@@ -188,8 +196,8 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--schedule_sub_weight', default=False, action='store_true', help='Start the subtract operation weight at 0 and gradually increase it to 1')
 	training_group.add_argument('--sub_schedule_start_epoch', type=int, default=10, help='Epoch to start the subtract operation weight scheduler')
 	training_group.add_argument('--sub_schedule_end_epoch', type=int, default=30, help='Epoch to complete the subtract operation weight scheduler')
-	training_group.add_argument('--no_schedule_cascades', default=False, action='store_true', help='Begin training with all refinement iterations enabled rather than progressively added with a scheduler.')
-	training_group.add_argument('--cascade_schedule_epochs', type=int, default=10, help='Number of epochs to train before adding a new refinement iteration.')
+	training_group.add_argument('--no_schedule_cascades', default=False, action='store_true', help='Begin training with all refinement iterations enabled rather than progressively added with a scheduler. Not applicable when `cascade_training_mode` is set to SEPARATE.')
+	training_group.add_argument('--cascade_schedule_epochs', type=int, default=10, help='Number of epochs to train before adding a new refinement iteration. Not applicable when `cascade_training_mode` is set to SEPARATE.')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
 	training_group.add_argument('--disable_amp', default=False, action='store_true', help='Disable Automatic Mixed Precision')
@@ -248,7 +256,7 @@ def load_saved_settings(args):
 
 
 # Initialize output directories and training split
-def init_output(args, device, saved_settings_dict=None):
+def init_output(args, saved_settings_dict=None):
 	# Load settings from file if resuming training. Otherwise, initialize output directories and training split
 	if args.resume_training:
 		args.data_dir = saved_settings_dict['data_dir']
@@ -258,7 +266,7 @@ def init_output(args, device, saved_settings_dict=None):
 		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric, training_results)
 	else:
 		(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
-		data_splits = load_data_splits(args, DATA_SPLIT, device)
+		data_splits = load_data_splits(args, DATA_SPLIT)
 		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric)
 
 	return (data_splits, training_logger)
@@ -274,7 +282,7 @@ def main():
 	# Initialize options and output
 	process_continue(args)
 	saved_settings_dict, model_params = load_saved_settings(args)
-	data_splits, training_logger = init_output(args, device, saved_settings_dict)
+	data_splits, training_logger = init_output(args, saved_settings_dict)
 
 	# Read settings from dataset
 	dataset_settings = read_dataset_settings(args.data_dir)
