@@ -37,3 +37,8 @@ class EarlyStopping:
 				self.improvement_callback(*callback_args)
 			else:
 				self.improvement_callback()
+
+	def reset(self):
+		self.counter = 0
+		self.best_loss = None
+		self.early_stop = False

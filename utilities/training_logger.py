@@ -46,6 +46,15 @@ class TrainingLogger():
 			return None
 
 
+	# Return the last recorded number of cascades
+	def get_last_cascade(self):
+		cascade_list = self.training_results['Cascades']
+
+		if cascade_list:
+			return cascade_list[-1]
+		else:
+			return None
+
 	# Return the last recorded learning rate
 	def get_last_lr(self):
 		learning_rate = self.training_results['Learning Rate']

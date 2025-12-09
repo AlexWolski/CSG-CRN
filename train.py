@@ -9,9 +9,10 @@ from torch.utils.data import Subset
 
 from losses.loss import Loss
 from losses.reconstruction_loss import ReconstructionLoss
+from utilities.constants import SEPARATE_PARAMS, CASCADE_MODEL_MODES
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
-from utilities.train_utils import load_data_splits, train, init_training_params, SEPARATE_PARAMS, CASCADE_MODEL_MODES
+from utilities.train_utils import load_data_splits, train, init_training_params
 from utilities.training_logger import TrainingLogger
 
 
@@ -225,7 +226,7 @@ def get_device(device=None):
 def process_continue(args):
 	if getattr(args, 'continue'):
 		# Get output directory from argumnets
-		(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
+		(args.output_dir, args.checkpoint_dir, args.cascade_models_dir) = create_out_dir(args)
 
 		# Check that the directory exists
 		if not os.path.exists(args.output_dir):
@@ -265,7 +266,7 @@ def init_output(args, saved_settings_dict=None):
 		training_results = saved_settings_dict['training_results']
 		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric, training_results)
 	else:
-		(args.output_dir, args.checkpoint_dir) = create_out_dir(args)
+		(args.output_dir, args.checkpoint_dir, args.cascade_models_dir) = create_out_dir(args)
 		data_splits = load_data_splits(args, DATA_SPLIT)
 		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric)
 

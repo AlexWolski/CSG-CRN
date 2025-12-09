@@ -1,9 +1,6 @@
 import os
-import glob
 import yaml
-import numpy as np
-from tqdm import tqdm
-
+from utilities.constants import SEPARATE_PARAMS, SHARED_PARAMS
 
 # Subdirectory names
 UNIFORM_FOLDER = 'uniform'
@@ -47,16 +44,19 @@ def create_out_dir(args):
 		err_msg = f'The output folder "{output_dir}" is already populated. Choose another directory, use the --overwrite option, or use the --resume option.'
 		raise Exception(err_msg)
 
+	checkpoint_dir = None
+	cascade_models_dir = None
+
 	# Create checkpoint folder
-	checkpoint_dir = get_checkpoint_dir(output_dir)
-	os.makedirs(checkpoint_dir, exist_ok=True)
+	if args.cascade_training_mode == SHARED_PARAMS:
+		checkpoint_dir = os.path.join(output_dir, 'checkpoints')
+		os.makedirs(checkpoint_dir, exist_ok=True)
+	# Create trained cascade models folder
+	elif args.cascade_training_mode == SEPARATE_PARAMS:
+		cascade_models_dir = os.path.join(output_dir, 'cascade_models')
+		os.makedirs(cascade_models_dir, exist_ok=True)
 
-	return (output_dir, checkpoint_dir)
-
-
-# Return the checkpoints directory path
-def get_checkpoint_dir(output_dir):
-	return os.path.join(output_dir, 'checkpoints')
+	return (output_dir, checkpoint_dir, cascade_models_dir)
 
 
 # Read file list from a dataset directory

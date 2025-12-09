@@ -10,15 +10,11 @@ from tqdm import tqdm
 
 from networks.csg_crn import CSG_CRN
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
+from utilities.constants import SHARED_PARAMS, SEPARATE_PARAMS
 from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
 from utilities.data_processing import get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE
 from utilities.datasets import PointDataset
 from utilities.early_stopping import EarlyStopping
-
-
-SHARED_PARAMS = "SHARED"
-SEPARATE_PARAMS = "SEPARATE"
-CASCADE_MODEL_MODES = [SHARED_PARAMS, SEPARATE_PARAMS]
 
 
 # Prepare data files and load training dataset
@@ -166,6 +162,24 @@ def validate(model, loss_func, val_loader, num_cascades, args):
 	return (total_val_loss, total_chamfer_dist)
 
 
+# Save the checkpoint of a model with shared parameters for all cascades
+def save_shared_model_checkpoint(model, args, data_splits, training_logger):
+	checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{training_logger.get_last_epoch()}.pt')
+	save_model(model, args, data_splits, training_logger.get_results(), checkpoint_path)
+	print(f'Checkpoint saved to: {checkpoint_path}\n')
+
+
+# Save a model trained on a specific cascade
+def save_separate_trained(model, args, data_splits, training_logger):
+	cascade_index = training_logger.get_last_cascade()
+	cascade_index = cascade_index if cascade_index is not None else 0
+
+	os.makedirs(args.cascade_models_dir, exist_ok=True)
+	cascade_path = os.path.join(args.cascade_models_dir, f'cascade_{cascade_index}.pt')
+	save_model(model, args, data_splits, training_logger.get_results(), cascade_path)
+	print(f'Cascade {cascade_index} model saved to: {cascade_path}\n')
+
+
 # Save the model and settings to file
 def save_model(model, args, data_splits, training_results, model_path):
 	torch.save({
@@ -207,6 +221,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 	# Train until model stops improving or a maximum number of epochs is reached
 	init_epoch = training_logger.get_last_epoch()+1 if training_logger.get_last_epoch() else 1
+	# Initialize current number of cascades from train logger
+	num_cascades = training_logger.get_last_cascade() if training_logger.get_last_cascade() else 0
 
 	for epoch in range(init_epoch, args.max_epochs+1):
 
@@ -224,9 +240,6 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 				cascade_scheduler_current = max(epoch - args.sub_schedule_start_epoch, 0) if args.schedule_sub_weight else epoch
 				num_cascades = cascade_scheduler_current // args.cascade_schedule_epochs
 				num_cascades = min(num_cascades, args.num_cascades)
-		elif args.cascade_training_mode == SEPARATE_PARAMS:
-			# TODO - Implement cascade scheduling based on early stop
-			num_cascades = 0
 
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
@@ -269,14 +282,20 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 		# Check for early stopping
 		if early_stopping.early_stop:
+			# When using separate model parameters for each cascade, if all iterations haven't completed, reset the early stopping and train the next cascade.
+			if args.cascade_training_mode == SEPARATE_PARAMS and num_cascades < args.num_cascades:
+				early_stopping.reset()
+				num_cascades += 1
+				save_separate_trained(model, args, data_splits, training_logger)
+				# TODO: complete training loop in SEPARATE_PARAMS mode
+
 			print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
 			break
 
 		# Save checkpoint parameters
 		if epoch % args.checkpoint_freq == 0:
-			checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{epoch}.pt')
-			save_model(model, args, data_splits, training_logger.get_results(), checkpoint_path)
-			print(f'Checkpoint saved to: {checkpoint_path}\n')
+			if args.cascade_training_mode == SHARED_PARAMS:
+				save_shared_model_checkpoint(model, args, data_splits, training_logger)
 
 		# Save latest model parameters
 		save_model(model, args, data_splits, training_logger.get_results(), latest_model_path)
