@@ -1,10 +1,11 @@
 import os
 import torch
+import shutil
 
 from losses.loss import Loss
 from torch import autocast
 from torch.optim import AdamW, lr_scheduler
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 from tqdm import tqdm
 
@@ -173,10 +174,17 @@ def save_shared_model_checkpoint(model, args, data_splits, training_logger):
 def save_separate_trained(model, args, data_splits, training_logger):
 	cascade_index = training_logger.get_last_cascade()
 	cascade_index = cascade_index if cascade_index is not None else 0
-
 	os.makedirs(args.cascade_models_dir, exist_ok=True)
 	cascade_path = os.path.join(args.cascade_models_dir, f'cascade_{cascade_index}.pt')
-	save_model(model, args, data_splits, training_logger.get_results(), cascade_path)
+	best_model_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
+
+	# Save the best model if it exists
+	if os.path.isfile(best_model_path):
+		shutil.copy(best_model_path, cascade_path)
+	# Otherwise, save the current model
+	else:
+		save_model(model, args, data_splits, training_logger.get_results(), cascade_path)
+
 	print(f'Cascade {cascade_index} model saved to: {cascade_path}\n')
 
 
@@ -216,9 +224,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
 	latest_model_path = os.path.join(args.output_dir, LATEST_MODEL_FILE)
-	save_best = args.cascade_training_mode == SHARED_PARAMS
 	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path)
-	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model if save_best else None)
+	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
 	# Train until model stops improving or a maximum number of epochs is reached
 	init_epoch = training_logger.get_last_epoch()+1 if training_logger.get_last_epoch() else 1
