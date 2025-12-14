@@ -285,9 +285,14 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		if early_stopping.early_stop:
 			# When using separate model parameters for each cascade, if all iterations haven't completed, reset the early stopping and train the next cascade.
 			if args.cascade_training_mode == SEPARATE_PARAMS and num_cascades < args.num_cascades:
-				early_stopping.reset()
-				num_cascades += 1
 				save_separate_trained(model, args, data_splits, training_logger)
+
+				# Reset training management
+				early_stopping.reset()
+				optimizer = init_optimizer(model, args.init_lr)
+				scheduler = init_scheduler(optimizer, args)
+				num_cascades += 1
+
 				# TODO: complete training loop in SEPARATE_PARAMS mode
 			else:
 				print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
@@ -310,8 +315,8 @@ def init_training_params(training_logger, data_splits, args, device, model_param
 	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
 	loss_func = Loss(args.loss_metric, args.num_loss_points, args.clamp_dist, args.loss_sampling_method).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
-	optimizer = AdamW(model.parameters(), lr=current_lr)
-	scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
+	optimizer = init_optimizer(model, current_lr)
+	scheduler = init_scheduler(optimizer, args)
 	scaler = torch.amp.GradScaler(enabled=not args.disable_amp)
 
 	# Load training set
@@ -340,3 +345,11 @@ def init_training_params(training_logger, data_splits, args, device, model_param
 		train_loader,
 		val_loader
 	)
+
+
+def init_optimizer(model, learning_rate):
+	return AdamW(model.parameters(), lr=learning_rate)
+
+
+def init_scheduler(optimizer, args):
+	return lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
