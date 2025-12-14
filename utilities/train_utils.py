@@ -290,18 +290,20 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 		# Check for early stopping
 		if early_stopping.early_stop:
-			# When using separate model parameters for each cascade, if all iterations haven't completed, reset the early stopping and train the next cascade.
-			if args.cascade_training_mode == SEPARATE_PARAMS and num_cascades < args.num_cascades:
-				save_separate_trained(model, args, data_splits, training_logger)
+			separate_params_training = args.cascade_training_mode == SEPARATE_PARAMS
+			last_cascade = num_cascades >= args.num_cascades
 
-				# Reset training management
+			# When training cascades separately and training completes,
+			# save the model parameters and reset the training management
+			if separate_params_training:
+				save_separate_trained(model, args, data_splits, training_logger)
 				early_stopping.reset()
 				optimizer = init_optimizer(model, args.init_lr)
 				scheduler = init_scheduler(optimizer, args)
 				num_cascades += 1
 
-				# TODO: complete training loop in SEPARATE_PARAMS mode
-			else:
+			# Training is complete when the model stops improving on the last cascade
+			if last_cascade:
 				print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
 				break
 
