@@ -29,8 +29,6 @@ class PointDataset(Dataset):
 
 
 		# Compute number of uniform and near-surface SDF samples to load
-		total_sdf_samples = self.args.num_input_points + self.args.num_loss_points
-
 		self.num_uniform_input_samples = math.ceil(self.args.num_input_points * self.args.surface_uniform_ratio)
 		self.num_near_surface_input_samples = self.args.num_input_points - self.num_uniform_input_samples
 
@@ -151,6 +149,9 @@ class PointDataset(Dataset):
 			combined_samples = self.__augment_sdf_samples(combined_samples)
 			batch_uniform_samples = combined_samples[:, :self.num_uniform_samples]
 			batch_near_surface_samples = combined_samples[:, self.num_uniform_samples:]
+
+			if batch_surface_samples != None:
+				batch_surface_samples = augment_sample_batch_points(batch_surface_samples, self.args)
 
 		# Separate input and loss samples
 		batch_uniform_input_samples = batch_uniform_samples[:, :self.num_uniform_input_samples]
