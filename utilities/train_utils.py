@@ -216,8 +216,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
 	latest_model_path = os.path.join(args.output_dir, LATEST_MODEL_FILE)
+	save_best = args.cascade_training_mode == SHARED_PARAMS
 	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path)
-	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
+	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model if save_best else None)
 
 	# Train until model stops improving or a maximum number of epochs is reached
 	init_epoch = training_logger.get_last_epoch()+1 if training_logger.get_last_epoch() else 1
@@ -288,9 +289,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 				num_cascades += 1
 				save_separate_trained(model, args, data_splits, training_logger)
 				# TODO: complete training loop in SEPARATE_PARAMS mode
-
-			print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
-			break
+			else:
+				print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
+				break
 
 		# Save checkpoint parameters
 		if epoch % args.checkpoint_freq == 0:
