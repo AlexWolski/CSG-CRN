@@ -5,9 +5,6 @@ import signal
 import argparse
 import trimesh
 import traceback
-import mesh_to_sdf
-import pyrender
-import numpy as np
 import torch
 import time
 
@@ -16,8 +13,8 @@ from networks.csg_crn import CSG_CRN
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
+from utilities.constants import SEPARATE_PARAMS
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name, add_sdf, subtract_sdf
-from utilities.file_loader import FileLoader
 from utilities.data_augmentation import RotationAxis
 from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface
 from utilities.accuracy_metrics import compute_chamfer_distance
@@ -65,6 +62,7 @@ def load_model(args):
 	args.loss_metric = saved_args.loss_metric
 	args.clamp_dist = saved_args.clamp_dist
 	args.sub_weight = saved_args.sub_weight
+	args.cascade_training_mode = saved_args.cascade_training_mode
 
 	if args.num_cascades == None:
 		args.num_cascades = saved_args.num_cascades
@@ -119,7 +117,7 @@ def load_mesh_and_samples(input_file, args):
 
 
 # Randomly sample input points
-def combine_samples(uniform_samples, near_surface_samples, num_input_points, device):
+def combine_samples(uniform_samples, near_surface_samples, num_input_points):
 	input_samples = torch.cat((uniform_samples, near_surface_samples), dim=1)
 
 	# Shuffle data samples
@@ -180,8 +178,13 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 
 def construct_csg_model(model, input_file, args):
 	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args)
-	input_samples = combine_samples(uniform_samples, near_surface_samples, args.num_input_points, args.device)
-	csg_model = model.forward_cascade(input_samples, args.num_cascades)
+	input_samples = combine_samples(uniform_samples, near_surface_samples, args.num_input_points)
+
+	if args.cascade_training_mode == SEPARATE_PARAMS:
+		csg_model = model.forward_separate_cascades(input_samples)
+	else:
+		csg_model = model.forward_cascade(input_samples, args.num_cascades)
+
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
 	# Pretty print csg commands
