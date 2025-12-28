@@ -9,8 +9,6 @@ from losses.loss import Loss
 from utilities.data_augmentation import augment_sample_batch, augment_sample_batch_points
 from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER
 
-from multiprocessing import Pool
-
 
 class PointDataset(Dataset):
 	# Number of uniform points to load for each required near-surface point

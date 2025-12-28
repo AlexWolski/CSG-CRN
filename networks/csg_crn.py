@@ -24,6 +24,7 @@ class CSG_CRN(nn.Module):
 		self.predict_blending = predict_blending
 		self.predict_roundness = predict_roundness
 		self.no_batch_norm = no_batch_norm
+		self.prev_cascades_list = []
 
 		num_feature_dims = 6 if self.extended_input else 4
 		self.point_encoder = PointNetfeat(k=num_feature_dims, global_feat=True, input_transform=True, feature_transform=True, no_batch_norm=no_batch_norm)
@@ -124,10 +125,29 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
+	# Train only the current cascade. Preivous cascades have trained model parameters saved in the `prev_cascades_list` field.
+	def forward_separate_cascades(self, target_input_samples):
+		csg_model = None
+
+		# Generate previous cascasdes in inference mode
+		with torch.no_grad():
+			for prev_model in self.prev_cascades_list:
+				prev_model.eval()
+				csg_model = prev_model.forward(target_input_samples, csg_model)
+
+		# Generate current cascade
+		return self.forward(target_input_samples, csg_model)
+
+
 	# Set which operations to scale and by how much
 	def set_operation_weight(self, scale_op, replace_op, operation_scale):
 		for regressor_decoder in self.regressor_decoder_list:
 			regressor_decoder.set_operation_weight(scale_op, replace_op, operation_scale)
+
+
+	# Save a trained model for a previous cascade
+	def add_prev_cascade_model(self, prev_model):
+		self.prev_cascades_list.append(prev_model)
 
 
 # Test network

@@ -12,7 +12,7 @@ from losses.reconstruction_loss import ReconstructionLoss
 from utilities.constants import SEPARATE_PARAMS, CASCADE_MODEL_MODES
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
-from utilities.train_utils import load_data_splits, train, init_training_params
+from utilities.train_utils import load_data_splits, load_saved_settings, train, init_training_params
 from utilities.training_logger import TrainingLogger
 
 
@@ -245,17 +245,6 @@ def process_continue(args):
 		args.overwrite = True
 
 
-# Load saved settings if a model path is provided
-def load_saved_settings(args):
-	if args.model_path:
-		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis])
-		saved_settings_dict = torch.load(args.model_path, weights_only=True)
-		model_params = saved_settings_dict['model']
-		return (saved_settings_dict, model_params)
-	else:
-		return (None, None)
-
-
 # Initialize output directories and training split
 def init_output(args, saved_settings_dict=None):
 	# Load settings from file if resuming training. Otherwise, initialize output directories and training split
@@ -282,7 +271,7 @@ def main():
 
 	# Initialize options and output
 	process_continue(args)
-	saved_settings_dict, model_params = load_saved_settings(args)
+	saved_settings_dict, model_params = load_saved_settings(args.model_path)
 	data_splits, training_logger = init_output(args, saved_settings_dict)
 
 	# Read settings from dataset

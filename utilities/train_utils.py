@@ -2,10 +2,11 @@ import os
 import torch
 import shutil
 
+from argparse import Namespace
 from losses.loss import Loss
 from torch import autocast
 from torch.optim import AdamW, lr_scheduler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 from tqdm import tqdm
 
@@ -14,6 +15,7 @@ from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
 from utilities.constants import SHARED_PARAMS, SEPARATE_PARAMS
 from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
 from utilities.data_processing import get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE
+from utilities.data_augmentation import RotationAxis
 from utilities.datasets import PointDataset
 from utilities.early_stopping import EarlyStopping
 
@@ -47,6 +49,17 @@ def load_data_splits(args, data_split):
 	print(f'Testing set:\t{len(test_split.indices)} samples\n')
 
 	return (train_split, val_split, test_split)
+
+
+# Load saved settings if a model path is provided
+def load_saved_settings(model_path):
+	if model_path:
+		torch.serialization.add_safe_globals([Namespace, Subset, RotationAxis])
+		saved_settings_dict = torch.load(model_path, weights_only=True)
+		model_params = saved_settings_dict['model']
+		return (saved_settings_dict, model_params)
+	else:
+		return (None, None)
 
 
 # Load CSG-CRN network model
@@ -92,8 +105,12 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 		input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
 
+		if args.cascade_training_mode == SEPARATE_PARAMS:
+			csg_model = model.forward_separate_cascades(input_samples.detach())
+			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+			_backpropagate(scaler, optimizer, cascade_loss)
 		# Update model parameters after each refinement step
-		if not args.backprop_all_cascades:
+		elif not args.backprop_all_cascades:
 			csg_model = None
 
 			for i in range(num_cascades + 1):
@@ -184,6 +201,11 @@ def save_separate_trained(model, args, data_splits, training_logger):
 	# Otherwise, save the current model
 	else:
 		save_model(model, args, data_splits, training_logger.get_results(), cascade_path)
+
+	# Save the trained model parameters for the previous cascade to CSGCRN model object
+	(_, prev_model_params) = load_saved_settings(cascade_path)
+	prev_model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, model.device, args, prev_model_params)
+	model.add_prev_cascade_model(prev_model)
 
 	print(f'Cascade {cascade_index} model saved to: {cascade_path}\n')
 
