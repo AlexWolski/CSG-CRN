@@ -91,7 +91,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc=''):
+def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None):
 	total_train_loss = 0
 
 	for data_sample in tqdm(train_loader, desc=desc):
@@ -106,7 +106,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
 
 		if args.cascade_training_mode == SEPARATE_PARAMS:
-			csg_model = model.forward_separate_cascades(input_samples.detach())
+			csg_model = model.forward_separate_cascades(input_samples.detach(), prev_cascades_list)
 			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 			_backpropagate(scaler, optimizer, cascade_loss)
 		# Update model parameters after each refinement step
@@ -188,7 +188,7 @@ def save_shared_model_checkpoint(model, args, data_splits, training_logger):
 
 
 # Save a model trained on a specific cascade
-def save_separate_trained(model, args, data_splits, training_logger):
+def save_separate_trained(model, args, data_splits, training_logger, prev_cascades_list):
 	cascade_index = training_logger.get_last_cascade()
 	cascade_index = cascade_index if cascade_index is not None else 0
 	os.makedirs(args.cascade_models_dir, exist_ok=True)
@@ -200,19 +200,20 @@ def save_separate_trained(model, args, data_splits, training_logger):
 		shutil.copy(best_model_path, cascade_path)
 	# Otherwise, save the current model
 	else:
-		save_model(model, args, data_splits, training_logger.get_results(), cascade_path)
-
-	# Save the trained model parameters for the previous cascade to CSGCRN model object
-	(_, prev_model_params) = load_saved_settings(cascade_path)
-	model.add_prev_cascade_params(prev_model_params)
+		save_model(model, args, data_splits, training_logger.get_results(), cascade_path, prev_cascades_list)
 
 	print(f'Cascade {cascade_index} model saved to: {cascade_path}\n')
 
+	# Return the trained model parameters for the previous cascade
+	(_, prev_cascade_params) = load_saved_settings(cascade_path)
+	return prev_cascade_params
+
 
 # Save the model and settings to file
-def save_model(model, args, data_splits, training_results, model_path):
+def save_model(model, args, data_splits, training_results, model_path, prev_cascades_list=None):
 	torch.save({
 		'model': model.state_dict(),
+		'prev_cascades_list': prev_cascades_list,
 		'args': args,
 		'data_dir': args.data_dir,
 		'sub_dir': args.sub_dir,
@@ -241,11 +242,12 @@ def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch)
 def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device):
 	model.train(True)
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
+	prev_cascades_list = []
 
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
 	latest_model_path = os.path.join(args.output_dir, LATEST_MODEL_FILE)
-	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path)
+	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path, prev_cascades_list)
 	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
 	# Train until model stops improving or a maximum number of epochs is reached
@@ -272,7 +274,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
-		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc)
+		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list)
 		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args)
 		learning_rate = optimizer.param_groups[0]['lr']
 
@@ -317,7 +319,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			# When training cascades separately and training completes,
 			# save the model parameters and reset the training management
 			if separate_params_training:
-				save_separate_trained(model, args, data_splits, training_logger)
+				cascade_params = save_separate_trained(model, args, data_splits, training_logger, prev_cascades_list)
+				prev_cascades_list.append(cascade_params)
 				early_stopping.reset()
 				optimizer = init_optimizer(model, args.init_lr)
 				scheduler = init_scheduler(optimizer, args)
@@ -334,7 +337,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 				save_shared_model_checkpoint(model, args, data_splits, training_logger)
 
 		# Save latest model parameters
-		save_model(model, args, data_splits, training_logger.get_results(), latest_model_path)
+		save_model(model, args, data_splits, training_logger.get_results(), latest_model_path, prev_cascades_list)
 
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)

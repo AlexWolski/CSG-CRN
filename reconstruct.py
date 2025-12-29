@@ -54,6 +54,7 @@ def load_model(args):
 	save_data = torch.load(args.model_params, weights_only=True)
 	state_dict = save_data['model']
 	saved_args = save_data['args']
+	prev_cascades_list = save_data['prev_cascades_list']
 
 	# Load training args
 	args.num_input_points = saved_args.num_input_points
@@ -90,7 +91,7 @@ def load_model(args):
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 	model.eval()
 
-	return model
+	return (model, prev_cascades_list)
 
 
 # Load sample points from file
@@ -176,12 +177,12 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 	print('')
 
 
-def construct_csg_model(model, input_file, args):
+def construct_csg_model(model, input_file, args, prev_cascades_list=None):
 	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args)
 	input_samples = combine_samples(uniform_samples, near_surface_samples, args.num_input_points)
 
 	if args.cascade_training_mode == SEPARATE_PARAMS:
-		csg_model = model.forward_separate_cascades(input_samples)
+		csg_model = model.forward_separate_cascades(input_samples, prev_cascades_list)
 	else:
 		csg_model = model.forward_cascade(input_samples, args.num_cascades)
 
@@ -203,10 +204,10 @@ def main():
 
 	# Run model
 	args.device = get_device(args.device)
-	model = load_model(args)
+	(model, prev_cascades_list) = load_model(args)
 
 	# View reconstruction
-	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args)
+	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args, prev_cascades_list)
 	window_title = "Reconstruct: " + os.path.basename(args.input_file)
 
 	try:

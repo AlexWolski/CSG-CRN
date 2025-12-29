@@ -24,8 +24,6 @@ class CSG_CRN(nn.Module):
 		self.predict_blending = predict_blending
 		self.predict_roundness = predict_roundness
 		self.no_batch_norm = no_batch_norm
-		# Only populated when cascades have separately trained parameters.
-		self.prev_cascade_params_list = []
 
 		num_feature_dims = 6 if self.extended_input else 4
 		self.point_encoder = PointNetfeat(k=num_feature_dims, global_feat=True, input_transform=True, feature_transform=True, no_batch_norm=no_batch_norm)
@@ -126,18 +124,18 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
-	# Train only the current cascade. Preivous cascades have trained parameters accessed through the `prev_cascade_params_list` field.
-	def forward_separate_cascades(self, target_input_samples):
+	# Train only the current cascade. Preivous cascades have trained parameters accessed through the `prev_cascades_list` parameter.
+	def forward_separate_cascades(self, target_input_samples, prev_cascades_list):
 		csg_model = None
 		current_params = None
 		is_training = self.training
 
-		if len(self.prev_cascade_params_list) > 0:
+		if len(prev_cascades_list) > 0:
 			self.eval()
 			current_params = self.state_dict()
 
 		# Generate previous cascasdes in inference mode. forward_separate_cascades will be called recursively on all cascades.
-		for model_params in self.prev_cascade_params_list:
+		for model_params in prev_cascades_list:
 			with torch.no_grad():
 				self.eval()
 				self.load_state_dict(model_params)
@@ -156,11 +154,6 @@ class CSG_CRN(nn.Module):
 	def set_operation_weight(self, scale_op, replace_op, operation_scale):
 		for regressor_decoder in self.regressor_decoder_list:
 			regressor_decoder.set_operation_weight(scale_op, replace_op, operation_scale)
-
-
-	# Save a trained model for a previous cascade
-	def add_prev_cascade_params(self, prev_model):
-		self.prev_cascade_params_list.append(prev_model)
 
 
 # Test network
