@@ -204,8 +204,7 @@ def save_separate_trained(model, args, data_splits, training_logger):
 
 	# Save the trained model parameters for the previous cascade to CSGCRN model object
 	(_, prev_model_params) = load_saved_settings(cascade_path)
-	prev_model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, model.device, args, prev_model_params)
-	model.add_prev_cascade_model(prev_model)
+	model.add_prev_cascade_params(prev_model_params)
 
 	print(f'Cascade {cascade_index} model saved to: {cascade_path}\n')
 

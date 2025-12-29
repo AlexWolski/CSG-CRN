@@ -24,7 +24,8 @@ class CSG_CRN(nn.Module):
 		self.predict_blending = predict_blending
 		self.predict_roundness = predict_roundness
 		self.no_batch_norm = no_batch_norm
-		self.prev_cascades_list = []
+		# Only populated when cascades have separately trained parameters.
+		self.prev_cascade_params_list = []
 
 		num_feature_dims = 6 if self.extended_input else 4
 		self.point_encoder = PointNetfeat(k=num_feature_dims, global_feat=True, input_transform=True, feature_transform=True, no_batch_norm=no_batch_norm)
@@ -125,17 +126,29 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
-	# Train only the current cascade. Preivous cascades have trained model parameters saved in the `prev_cascades_list` field.
+	# Train only the current cascade. Preivous cascades have trained parameters accessed through the `prev_cascade_params_list` field.
 	def forward_separate_cascades(self, target_input_samples):
 		csg_model = None
+		current_params = None
+		is_training = self.training
 
-		# Generate previous cascasdes in inference mode
-		with torch.no_grad():
-			for prev_model in self.prev_cascades_list:
-				prev_model.eval()
-				csg_model = prev_model.forward(target_input_samples, csg_model)
+		if len(self.prev_cascade_params_list) > 0:
+			self.eval()
+			current_params = self.state_dict()
+
+		# Generate previous cascasdes in inference mode. forward_separate_cascades will be called recursively on all cascades.
+		for model_params in self.prev_cascade_params_list:
+			with torch.no_grad():
+				self.eval()
+				self.load_state_dict(model_params)
+				csg_model = self.forward(target_input_samples, csg_model)
 
 		# Generate current cascade
+		if current_params != None:
+			self.load_state_dict(current_params)
+
+		# Run a forward pass on the current cascade
+		self.train() if is_training else self.eval()
 		return self.forward(target_input_samples, csg_model)
 
 
@@ -146,8 +159,8 @@ class CSG_CRN(nn.Module):
 
 
 	# Save a trained model for a previous cascade
-	def add_prev_cascade_model(self, prev_model):
-		self.prev_cascades_list.append(prev_model)
+	def add_prev_cascade_params(self, prev_model):
+		self.prev_cascade_params_list.append(prev_model)
 
 
 # Test network
