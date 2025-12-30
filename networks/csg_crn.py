@@ -3,7 +3,6 @@ import torch.nn as nn
 from networks.pointnet import PointNetfeat, POINTNET_FEAT_OUTPUT_SIZE
 from networks.regressor_decoder import PrimitiveRegressor
 from utilities.csg_model import CSGModel, subtract_sdf, smooth_max
-from utilities.sampler_utils import sample_sdf_from_csg_combined
 
 
 class CSG_CRN(nn.Module):
@@ -139,7 +138,7 @@ class CSG_CRN(nn.Module):
 			with torch.no_grad():
 				self.eval()
 				self.load_state_dict(model_params)
-				csg_model = self.forward(target_input_samples, csg_model)
+				csg_model = self.forward(target_input_samples, csg_model).detach()
 
 		# Generate current cascade
 		if current_params != None:

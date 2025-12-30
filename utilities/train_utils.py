@@ -106,31 +106,36 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
 
 		if args.cascade_training_mode == SEPARATE_PARAMS:
-			csg_model = model.forward_separate_cascades(input_samples.detach(), prev_cascades_list)
+			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+				csg_model = model.forward_separate_cascades(input_samples.detach(), prev_cascades_list)
+
 			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 			_backpropagate(scaler, optimizer, cascade_loss)
-		# Update model parameters after each refinement step
-		elif not args.backprop_all_cascades:
-			csg_model = None
+		elif args.cascade_training_mode == SHARED_PARAMS:
+			# Update model parameters after each refinement step
+			if not args.backprop_all_cascades:
+				csg_model = None
 
-			for i in range(num_cascades + 1):
-				if csg_model != None:
-					csg_model = csg_model.detach()
+				for i in range(num_cascades + 1):
+					if csg_model != None:
+						csg_model = csg_model.detach()
 
-				# Forward
+					# Forward
+					with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+						csg_model = model.forward(input_samples.detach(), csg_model)
+
+					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+
+					# Back propagate through each cascade separately
+					_backpropagate(scaler, optimizer, cascade_loss)
+
+			# Update model parameters after all cascade iterations
+			else:
 				with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
-					csg_model = model.forward(input_samples.detach(), csg_model)
+					csg_model = model.forward_cascade(input_samples.detach(), num_cascades)
 
 				cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
-
-				# Back propagate through each cascade separately
 				_backpropagate(scaler, optimizer, cascade_loss)
-
-		# Update model parameters after all cascade iterations
-		else:
-			csg_model = model.forward_cascade(input_samples.detach(), num_cascades)
-			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
-			_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Only record the loss for the completed reconstruction
 		total_train_loss += cascade_loss
@@ -332,8 +337,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 				break
 
 		# Save checkpoint parameters
-		if epoch % args.checkpoint_freq == 0:
-			if args.cascade_training_mode == SHARED_PARAMS:
+		if epoch % args.checkpoint_freq == 0 and args.cascade_training_mode == SHARED_PARAMS:
 				save_shared_model_checkpoint(model, args, data_splits, training_logger)
 
 		# Save latest model parameters
