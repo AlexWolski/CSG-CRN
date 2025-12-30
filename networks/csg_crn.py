@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 from networks.pointnet import PointNetfeat, POINTNET_FEAT_OUTPUT_SIZE
@@ -131,7 +132,7 @@ class CSG_CRN(nn.Module):
 
 		if len(prev_cascades_list) > 0:
 			self.eval()
-			current_params = self.state_dict()
+			current_params = copy.deepcopy(self.state_dict())
 
 		# Generate previous cascasdes in inference mode. forward_separate_cascades will be called recursively on all cascades.
 		for model_params in prev_cascades_list:
