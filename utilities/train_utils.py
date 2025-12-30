@@ -152,7 +152,7 @@ def _backpropagate(scaler, optimizer, batch_loss):
 	scaler.update()
 
 
-def validate(model, loss_func, val_loader, num_cascades, args):
+def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list=None):
 	total_val_loss = 0
 	total_chamfer_dist = 0
 
@@ -171,7 +171,11 @@ def validate(model, loss_func, val_loader, num_cascades, args):
 			) = data_sample
 
 			input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
-			csg_model = model.forward_cascade(input_samples, num_cascades)
+
+			if args.cascade_training_mode == SEPARATE_PARAMS:
+				csg_model = model.forward_separate_cascades(input_samples, prev_cascades_list)
+			else:
+				csg_model = model.forward_cascade(input_samples, num_cascades)
 
 			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
@@ -280,7 +284,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list)
-		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args)
+		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list)
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results
