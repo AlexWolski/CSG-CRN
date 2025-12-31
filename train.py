@@ -9,6 +9,7 @@ from torch.utils.data import Subset
 
 from losses.loss import Loss
 from losses.reconstruction_loss import ReconstructionLoss
+from wakepy import keep
 from utilities.constants import SEPARATE_PARAMS, CASCADE_MODEL_MODES
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
@@ -297,7 +298,8 @@ if __name__ == '__main__':
 	signal.signal(signal.SIGTSTP, lambda _signum, _frame: exit_handler())
 
 	try:
-		main()
+		with keep.running():
+			main()
 	# Catch CTRL+C force shutdown
 	except KeyboardInterrupt:
 		print('\nProgram interrupted by keyboard input')
