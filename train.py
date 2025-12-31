@@ -202,7 +202,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--cascade_schedule_epochs', type=int, default=10, help='Number of epochs to train before adding a new refinement iteration. Not applicable when `cascade_training_mode` is set to SEPARATE.')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str, default='', help='Select preferred training device')
-	training_group.add_argument('--disable_amp', default=False, action='store_true', help='Disable Automatic Mixed Precision')
+	training_group.add_argument('--enable_amp', default=False, action='store_true', help='Enable Automatic Mixed Precision')
 
 	return training_parser
 

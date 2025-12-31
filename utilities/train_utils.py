@@ -106,7 +106,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
 
 		if args.cascade_training_mode == SEPARATE_PARAMS:
-			with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+			with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
 				csg_model = model.forward_separate_cascades(input_samples.detach(), prev_cascades_list)
 
 			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
@@ -121,7 +121,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 						csg_model = csg_model.detach()
 
 					# Forward
-					with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+					with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
 						csg_model = model.forward(input_samples.detach(), csg_model)
 
 					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
@@ -131,7 +131,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 			# Update model parameters after all cascade iterations
 			else:
-				with autocast(device_type=device.type, dtype=torch.float16, enabled=not args.disable_amp):
+				with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
 					csg_model = model.forward_cascade(input_samples.detach(), num_cascades)
 
 				cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
@@ -358,7 +358,7 @@ def init_training_params(training_logger, data_splits, args, device, model_param
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = init_optimizer(model, current_lr)
 	scheduler = init_scheduler(optimizer, args)
-	scaler = torch.amp.GradScaler(enabled=not args.disable_amp)
+	scaler = torch.amp.GradScaler(enabled=args.enable_amp)
 
 	# Load training set
 	(train_split, val_split, test_split) = data_splits
