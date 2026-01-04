@@ -1,7 +1,6 @@
 import torch
 from chamferdist import ChamferDistance
-from utilities.csg_to_mesh import csg_to_mesh
-from utilities.sampler_utils import sample_points_mesh_surface, sample_points_csg_surface, sample_sdf_near_csg_surface
+from utilities.sampler_utils import sample_points_csg_surface, sample_sdf_near_csg_surface
 
 
 def compute_chamfer_distance(target_surface_samples, recon_surface_samples, no_grad=False):

@@ -1,7 +1,5 @@
-import mesh_to_sdf
 import numpy
 import point_cloud_utils as pcu
-import trimesh
 import torch
 import math
 from torch.distributions.uniform import Uniform
@@ -428,7 +426,7 @@ def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_
 
 	NUM_BINS = 100
 	bin_bounds = torch.linspace(0, current_sample_dist, steps=NUM_BINS+1, device=device)
-	bin_indices = torch.bucketize(batch_sample_distances, bin_bounds)
+	bin_indices = torch.bucketize(torch.abs(batch_sample_distances), bin_bounds)
 	min_sample_dist = current_sample_dist
 	min_bin_index = -1
 
