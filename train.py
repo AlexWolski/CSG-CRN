@@ -167,7 +167,7 @@ def get_model_parser():
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
-	model_group.add_argument('--loss_sampling_method', type=str.upper, default=[Loss.TARGET_SAMPLING], choices=Loss.loss_sampling_methods, nargs=1, help="TARGET_SAMPLING samples loss points from only the target shape and UNIFIED_SAMPLING samples from both target and reconstruction shapes.")
+	model_group.add_argument('--loss_sampling_method', type=str.upper, default=[Loss.UNIFIED_SAMPLING], choices=Loss.loss_sampling_methods, nargs=1, help="TARGET_SAMPLING samples loss points from only the target shape and UNIFIED_SAMPLING samples from both target and reconstruction shapes.")
 	model_group.add_argument('--surface_uniform_ratio', type=float, default=0.5, help='Percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples')
 	model_group.add_argument('--decoder_layers', nargs='+', type=int, default=[], help='List of hidden layers to add to the decoder network')
 	model_group.add_argument('--back_prop_recon_input', default=False, action='store_true', help='Backpropagate through the reconstruction input sample and all previous refinement iterations.')
