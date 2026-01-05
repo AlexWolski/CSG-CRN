@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
-import math
 from losses.proximity_loss import ProximityLoss
 from losses.reconstruction_loss import ReconstructionLoss
-from utilities.csg_model import add_sdf
 from utilities.sampler_utils import select_nearest_samples
 
 
@@ -48,23 +46,10 @@ class Loss(nn.Module):
 
 		# Compute the reconstruction shape distances and apply a union with the target shape distances.
 		combined_distances = csg_model.sample_csg(target_points, initial_distances=target_distances)
-		(_, near_surface_points, near_surface_distances) = select_nearest_samples(target_points, combined_distances, num_uniform_samples)
-		near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1)
+		(_, near_surface_points, _, near_surface_indices) = select_nearest_samples(target_points, combined_distances, num_uniform_samples, return_indices=True)
+
+		# Select the near-surface points and distances to target shape.
+		near_surface_target_distances = torch.gather(target_distances, 1, near_surface_indices)
+		near_surface_samples = torch.cat((near_surface_points, near_surface_target_distances.unsqueeze(-1)), dim=-1)
 
 		return near_surface_samples
-
-
-# Test loss
-def test():
-	batch_size = 2
-	num_points = 2
-	proximity_loss_weight = 0.001
-	shape_loss_weight = 0.001
-	op_loss_weight = 0.001
-
-	target_distances = torch.rand([batch_size, num_points])
-	refined_distances = torch.rand([batch_size, num_points])
-	loss = Loss(clamp_dist, proximity_loss_weight, shape_loss_weight, op_loss_weight)
-
-	print('Total Loss:')
-	print(loss.forward(target_distances, refined_distances, shape_probs, operation_probs))

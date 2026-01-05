@@ -387,7 +387,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 		sample_distances = torch.cat((sample_distances, new_distances), dim=1)
 
 		# Keep `num_sdf_samples` samples with the lowest sample distance
-		(new_sample_dist, sample_points, sample_distances) = select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
+		(new_sample_dist, sample_points, sample_distances, _) = select_nearest_samples(sample_points, sample_distances, num_sdf_samples, current_sample_dist)
 
 		# No samples could be found within the unit sphere
 		if new_sample_dist == None:
@@ -398,7 +398,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 	return (sample_points[:,:num_sdf_samples], sample_distances[:,:num_sdf_samples])
 
 
-def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist=1):
+def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist=1, return_indices=False):
 	"""
 	Helper function to select `num_sdf_samples` samples with the smallest SDF distance.
 
@@ -415,10 +415,11 @@ def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_
 
 	Returns
 	-------
-	Tuple[float, torch.Tensor, torch.Tensor]
+	Tuple[float, torch.Tensor, torch.Tensor, torch.Tensor]
 		1. The maximum sample distance of the return SDF samples.
 		2. Select point samples.
 		3. Select SDF distance values.
+		4. Select sample indices.
 
 	"""
 	device = batch_sample_points.device
@@ -448,6 +449,7 @@ def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_
 	batch_indices = bin_indices <= min_bin_index
 	select_points_list = []
 	select_distances_list = []
+	select_indices_list = []
 
 	for batch in range(batch_size):
 		select_indices = batch_indices[batch]
@@ -456,10 +458,14 @@ def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_
 		select_points_list.append(select_points[:num_sdf_samples])
 		select_distances_list.append(select_distances[:num_sdf_samples])
 
+		select_indices = torch.nonzero(select_indices).squeeze(-1)
+		select_indices_list.append(select_indices[:num_sdf_samples])
+
 	select_points = torch.stack(select_points_list)
 	select_distances = torch.stack(select_distances_list)
+	select_indices = torch.stack(select_indices_list)
 
-	return (min_sample_dist, select_points, select_distances)
+	return (min_sample_dist, select_points, select_distances, select_indices)
 
 
 def sample_sdf_from_csg_combined(csg_model, num_sdf_samples, sample_dist, surface_uniform_ratio):
