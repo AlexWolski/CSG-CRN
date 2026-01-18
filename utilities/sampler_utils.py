@@ -398,7 +398,7 @@ def sample_sdf_near_csg_surface(csg_model, num_sdf_samples, sample_dist):
 	return (sample_points[:,:num_sdf_samples], sample_distances[:,:num_sdf_samples])
 
 
-def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist=1, return_indices=False):
+def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_samples, current_sample_dist=1):
 	"""
 	Helper function to select `num_sdf_samples` samples with the smallest SDF distance.
 
@@ -426,26 +426,30 @@ def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_
 	batch_size = batch_sample_points.size(dim=0)
 
 	NUM_BINS = 100
+	# The cutoff sample distances defining the bin bounds.
 	bin_bounds = torch.linspace(0, current_sample_dist, steps=NUM_BINS+1, device=device)
+	# Tensor with the same size as `batch_sample_distances` where each entry denotes which bin a distance belongs to.
 	bin_indices = torch.bucketize(torch.abs(batch_sample_distances), bin_bounds)
-	min_sample_dist = current_sample_dist
-	min_bin_index = -1
+	# The approximate maximum sample distance in the returned subset of samples (rounded up to the nearest bin bound.)
+	max_sample_dist = current_sample_dist
+	# The lowest bin number where the number of sammples up to that bin satisfies the target sample count.
+	min_bin_index = None
 
-	# Find minimum bin that contains at least num_sdf_samples samples
+	# Find the minimum bin that contains at least num_sdf_samples samples.
 	for bin_index in range(0, NUM_BINS-1):
 		bucket_count = torch.count_nonzero(bin_indices <= bin_index, dim=1)
 		min_sample_count = torch.min(bucket_count).item()
 
 		if min_sample_count >= num_sdf_samples:
-			min_sample_dist = bin_bounds[bin_index+1]
+			max_sample_dist = bin_bounds[bin_index+1]
 			min_bin_index = bin_index
 			break
 
-	# No samples were found
-	if min_bin_index == -1:
-		return (None, batch_sample_points, batch_sample_distances)
+	# Not enough samples were found.
+	if min_bin_index == None:
+		return (None, batch_sample_points, batch_sample_distances, torch.ones_like(batch_sample_distances))
 
-	# Select num_sdf_samples samples
+	# Select num_sdf_samples samples.
 	batch_indices = bin_indices <= min_bin_index
 	select_points_list = []
 	select_distances_list = []
@@ -465,7 +469,7 @@ def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_
 	select_distances = torch.stack(select_distances_list)
 	select_indices = torch.stack(select_indices_list)
 
-	return (min_sample_dist, select_points, select_distances, select_indices)
+	return (max_sample_dist, select_points, select_distances, select_indices)
 
 
 def sample_sdf_from_csg_combined(csg_model, num_sdf_samples, sample_dist, surface_uniform_ratio):

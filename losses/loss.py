@@ -46,7 +46,7 @@ class Loss(nn.Module):
 
 		# Compute the reconstruction shape distances and apply a union with the target shape distances.
 		combined_distances = csg_model.sample_csg(target_points, initial_distances=target_distances)
-		(_, near_surface_points, _, near_surface_indices) = select_nearest_samples(target_points, combined_distances, num_uniform_samples, return_indices=True)
+		(_, near_surface_points, _, near_surface_indices) = select_nearest_samples(target_points, combined_distances, num_uniform_samples)
 
 		# Select the near-surface points and distances to target shape.
 		near_surface_target_distances = torch.gather(target_distances, 1, near_surface_indices)
