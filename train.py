@@ -278,6 +278,8 @@ def main():
 	# Read settings from dataset
 	dataset_settings = read_dataset_settings(args.data_dir)
 	args.sample_dist = dataset_settings['sample_dist']
+	args.dataset_num_sdf_samples = dataset_settings['num_sdf_samples']
+	args.dataset_num_surface_samples = dataset_settings['num_surface_samples']
 
 	# Save settings to file
 	save_dataset_settings(args.output_dir, args.__dict__)

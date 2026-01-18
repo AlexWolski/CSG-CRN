@@ -447,7 +447,7 @@ def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_
 
 	# Not enough samples were found.
 	if min_bin_index == None:
-		return (None, batch_sample_points, batch_sample_distances, torch.ones_like(batch_sample_distances))
+		return (None, batch_sample_points, batch_sample_distances, torch.ones_like(batch_sample_distances, dtype=torch.int64))
 
 	# Select num_sdf_samples samples.
 	batch_indices = bin_indices <= min_bin_index

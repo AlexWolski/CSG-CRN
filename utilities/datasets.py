@@ -40,6 +40,17 @@ class PointDataset(Dataset):
 		elif self.sampling_method == Loss.UNIFIED_SAMPLING:
 			self.num_near_surface_loss_samples = 0
 			self.num_uniform_loss_samples = self.args.num_loss_points * self.NEAR_SURFACE_SAMPLE_FACTOR
+			max_loss_samples = args.dataset_num_sdf_samples - self.args.num_input_points
+
+			# Adjust the number of uniform samples loaded if the provided dataset does not contain enough samples.
+			if self.num_uniform_loss_samples > max_loss_samples:
+				print('WARNING: Insufficient sample points in dataset.')
+				print(f'With Unified Sampling enabled, {self.num_uniform_loss_samples} uniform loss samples are recommended for the target {self.args.num_loss_points} unified loss samples.')
+				print(f'The provided dataset is only large enough for {self.args.num_input_points} input and {max_loss_samples} uniform samples.')
+				print()
+
+				self.num_uniform_loss_samples = max_loss_samples
+
 
 		self.num_uniform_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples
 		self.num_near_surface_samples = self.num_near_surface_input_samples + self.num_near_surface_loss_samples
