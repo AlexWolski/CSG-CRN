@@ -9,7 +9,7 @@ from mesh_to_sdf.utils import scale_to_unit_sphere
 from tqdm import tqdm
 from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER, SETTINGS_FILE, SAMPLE_LIST_FILE, save_list
 from utilities.file_utils import create_output_dir, create_output_subdir, get_mesh_files
-from utilities.sampler_utils import sample_points_mesh_surface, sample_sdf_near_surface, sample_sdf_unit_sphere
+from utilities.sampler_utils import sample_from_mesh
 
 
 # Parse command-line arguments
