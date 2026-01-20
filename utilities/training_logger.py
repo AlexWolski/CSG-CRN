@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 
 
-HEADERS = ['Epoch', 'Cascades', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Learning Rate']
+HEADERS = ['Epoch', 'Cascades', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Learning Rate', 'Time Ellapsed']
 
 
 class TrainingLogger():
@@ -39,31 +39,23 @@ class TrainingLogger():
 	# Return the last recorded epoch
 	def get_last_epoch(self):
 		epoch_list = self.training_results['Epoch']
-
-		if epoch_list:
-			return epoch_list[-1]
-		else:
-			return None
+		return epoch_list[-1] if epoch_list else None
 
 
 	# Return the last recorded number of cascades
 	def get_last_cascade(self):
 		cascade_list = self.training_results['Cascades']
-
-		if cascade_list:
-			return cascade_list[-1]
-		else:
-			return None
+		return cascade_list[-1] if cascade_list else None
 
 	# Return the last recorded learning rate
 	def get_last_lr(self):
 		learning_rate = self.training_results['Learning Rate']
+		return learning_rate[-1] if learning_rate else None
 
-		if learning_rate:
-			return learning_rate[-1]
-		else:
-			return None
-
+	# Return the last recorded time ellapsed
+	def get_last_time_ellapsed(self):
+		time_ellapsed = self.training_results['Time Ellapsed']
+		return time_ellapsed[-1] if time_ellapsed else None
 
 	# Write all training results to csv file
 	def write_results(self):
@@ -72,11 +64,13 @@ class TrainingLogger():
 
 			for index in range(len(self.training_results['Epoch'])):
 				epoch = self.training_results['Epoch'][index]
+				num_cascades = self.training_results['Cascades'][index]
 				train_loss = self.training_results['Training Loss'][index]
 				val_loss = self.training_results['Validation Loss'][index]
 				val_acc = self.training_results['Chamfer Distance'][index]
 				learning_rate = self.training_results['Learning Rate'][index]
-				csv_writer.writerow([epoch, train_loss, val_loss, val_acc, learning_rate])
+				time_ellapsed = self.training_results['Time Ellapsed'][index]
+				csv_writer.writerow([epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed])
 
 
 	# Generate plot image of results
@@ -119,21 +113,22 @@ class TrainingLogger():
 
 
 	# Append epoch result data to training_results dictionary
-	def _append_training_results(self, epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate):
+	def _append_training_results(self, epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed):
 		self.training_results['Epoch'].append(epoch)
 		self.training_results['Cascades'].append(num_cascades)
 		self.training_results['Training Loss'].append(train_loss)
 		self.training_results['Validation Loss'].append(val_loss)
 		self.training_results['Chamfer Distance'].append(val_acc)
 		self.training_results['Learning Rate'].append(learning_rate)
+		self.training_results['Time Ellapsed'].append(time_ellapsed)
 
 
 	# Log epoch training results
-	def add_result(self, epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate):
-		self._append_training_results(epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate)
+	def add_result(self, epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed):
+		self._append_training_results(epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed)
 
 		with open(self.csv_output_file, 'a') as fd:
 			csv_writer = csv.writer(fd)
-			csv_writer.writerow([epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate])
+			csv_writer.writerow([epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed])
 
 		self.plot_results()

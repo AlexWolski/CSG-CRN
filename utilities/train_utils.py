@@ -3,6 +3,7 @@ import torch
 import shutil
 
 from argparse import Namespace
+from datetime import datetime as dt, timedelta
 from losses.loss import Loss
 from torch import autocast
 from torch.optim import AdamW, lr_scheduler
@@ -54,7 +55,7 @@ def load_data_splits(args, data_split):
 # Load saved settings if a model path is provided
 def load_saved_settings(model_path):
 	if model_path:
-		torch.serialization.add_safe_globals([Namespace, Subset, RotationAxis])
+		torch.serialization.add_safe_globals([Namespace, Subset, RotationAxis, timedelta])
 		saved_settings_dict = torch.load(model_path, weights_only=True)
 		model_params = saved_settings_dict['model']
 		return (saved_settings_dict, model_params)
@@ -253,6 +254,10 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 	prev_cascades_list = []
 
+	# Initalize training time ellapsed counter
+	saved_time_ellapsed = training_logger.get_last_time_ellapsed()
+	train_start_time = dt.now() - saved_time_ellapsed if saved_time_ellapsed else dt.now()
+
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
 	latest_model_path = os.path.join(args.output_dir, LATEST_MODEL_FILE)
@@ -288,7 +293,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results
-		training_logger.add_result(epoch, num_cascades, train_loss, val_loss, chamfer_dist, learning_rate)
+		current_time = dt.now()
+		time_ellapsed = current_time - train_start_time
+		training_logger.add_result(epoch, num_cascades, train_loss, val_loss, chamfer_dist, learning_rate, time_ellapsed)
 
 		weight_scheduling_in_progress = args.schedule_sub_weight and args.sub_weight < 1
 		cascade_scheduling_in_progress = not args.no_schedule_cascades and num_cascades < args.num_cascades
@@ -318,6 +325,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			print(f"LR Patience:        {scheduler.num_bad_epochs}/{scheduler.patience}")
 			print(f"Early Stop:         {early_stopping.counter}/{early_stopping.patience}")
 
+		print("Ellapsed Time:      %02d:%02d:%02d" % (time_ellapsed.seconds // 3600, time_ellapsed.seconds // 60, time_ellapsed.seconds % 60))
 		print()
 
 		# Check for early stopping
