@@ -12,7 +12,7 @@ from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFA
 
 class PointDataset(Dataset):
 	# Number of uniform points to load for each required near-surface point
-	NEAR_SURFACE_SAMPLE_FACTOR = 3
+	NEAR_SURFACE_SAMPLE_FACTOR = 5
 
 
 	def __init__(self, file_rel_paths, device, args, augment_data=False, sampling_method=Loss.UNIFIED_SAMPLING, dataset_name="Dataset"):
