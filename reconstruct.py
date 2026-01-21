@@ -8,6 +8,7 @@ import traceback
 import torch
 import time
 
+from datetime import timedelta
 from torch.utils.data import Subset
 from networks.csg_crn import CSG_CRN
 from mesh_to_sdf.utils import scale_to_unit_sphere
@@ -50,7 +51,7 @@ def get_device(device=None):
 
 def load_model(args):
 	# Load model parameters and arguments
-	torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis])
+	torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis, timedelta])
 	save_data = torch.load(args.model_params, weights_only=True)
 	state_dict = save_data['model']
 	saved_args = save_data['args']
