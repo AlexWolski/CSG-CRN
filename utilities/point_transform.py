@@ -1,5 +1,4 @@
 import torch
-import math
 
 
 # Invert translation vectors

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from utilities.csg_model import CSGModel
 
 
 # Square the minimum distance between the primitive and the closest sample point

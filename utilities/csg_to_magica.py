@@ -2,7 +2,7 @@ import copy
 import json
 from tkinter import filedialog
 from scipy.spatial.transform import Rotation
-from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name
+from utilities.csg_model import get_primitive_name, get_operation_name
 
 
 # Amount to scale the output 

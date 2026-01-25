@@ -4,11 +4,9 @@ import random
 import torch
 import numpy as np
 from tqdm import tqdm
-from utilities import data_augmentation
 from utilities.data_augmentation import RotationAxis, ScaleAxis, random_rotation_batch, random_scale_batch
 from utilities.point_transform import center_point_cloud_batch
 from utilities.csg_model import CSGModel, add_sdf
-from reconstruct import print_csg_commands
 
 
 # Number of samples to take form a CSG model to find a near-surface point

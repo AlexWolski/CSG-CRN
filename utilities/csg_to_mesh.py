@@ -1,10 +1,9 @@
-import os
 import math
 import torch
 import trimesh
 import tkinter as tk
 from diso import DiffDMC
-from tkinter import filedialog, simpledialog, StringVar
+from tkinter import filedialog, StringVar
 from pytorch3d.ops.marching_cubes import marching_cubes
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
 

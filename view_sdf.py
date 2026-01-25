@@ -2,8 +2,6 @@ import argparse
 import numpy as np
 import pyglet
 import torch
-import trimesh
-import tkinter
 
 from pyglet.gl import *
 from utilities.csg_model import add_sdf

@@ -1,4 +1,3 @@
-import math
 import torch
 from torch.distributions.uniform import Uniform
 from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder, world_to_local_points
