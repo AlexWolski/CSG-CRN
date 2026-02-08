@@ -189,8 +189,8 @@ class PointDataset(Dataset):
 		# Separate input and loss samples
 		batch_uniform_input_samples = batch_uniform_samples[:, :self.num_uniform_input_samples]
 		batch_uniform_loss_samples = batch_uniform_samples[:, self.num_uniform_input_samples:]
-		batch_near_surface_input_samples = batch_near_surface_samples[:, :self.num_near_surface_input_samples]
-		batch_near_surface_loss_samples = batch_near_surface_samples[:, self.num_near_surface_input_samples:]
+		batch_near_surface_input_samples = batch_near_surface_samples[:, :self.num_uniform_loss_samples]
+		batch_near_surface_loss_samples = batch_near_surface_samples[:, self.num_near_surface_loss_samples:]
 
 		data_sample = (
 			batch_uniform_input_samples.detach(),
