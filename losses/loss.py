@@ -24,7 +24,7 @@ class Loss(nn.Module):
 	def forward(self, target_near_surface_samples, target_uniform_samples, target_surface_samples, csg_model):
 		num_uniform_samples = self.num_loss_samples - target_near_surface_samples.size(1)
 
-		# On refinement iterations, when using Unified sampling, replace the uniform samples with samples near the surface of the current reconstruction.
+		# When using Unified sampling, filter the uniform samples by distance to both the target and reconstruction shapes.
 		if self.loss_sampling_method == self.UNIFIED_SAMPLING:
 			target_uniform_samples = self._select_near_surface_samples(target_uniform_samples, num_uniform_samples, csg_model)
 

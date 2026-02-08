@@ -24,37 +24,62 @@ class PointDataset(Dataset):
 		self.dataset_name = dataset_name
 		self.sampling_method = sampling_method
 
-
 		# Compute number of uniform and near-surface SDF samples to load
 		self.num_uniform_input_samples = math.ceil(self.args.num_input_points * self.args.surface_uniform_ratio)
 		self.num_near_surface_input_samples = self.args.num_input_points - self.num_uniform_input_samples
 
-		# When the loss is computed on only the target, load a mix of surface and uniform samples based on the surface-uniform ratio.
-		if self.sampling_method == Loss.TARGET_SAMPLING:
-			self.num_uniform_loss_samples = math.ceil(self.args.num_loss_points * self.args.surface_uniform_ratio)
-			self.num_near_surface_loss_samples = self.args.num_loss_points - self.num_uniform_loss_samples
+		# Compute the number of surface and uniform loss samples based on the surface-uniform ratio.
+		self.num_uniform_loss_samples = math.ceil(self.args.num_loss_points * self.args.surface_uniform_ratio)
+		self.num_near_surface_loss_samples = self.args.num_loss_points - self.num_uniform_loss_samples
 
-		# When the loss is computed on both target and reconstruction near-surface samples,
-		# increase the number of uniform points loaded to allow proximity selection. No near-surface samples need to be loaded.
-		elif self.sampling_method == Loss.UNIFIED_SAMPLING:
-			self.num_near_surface_loss_samples = 0
-			self.num_uniform_loss_samples = self.args.num_loss_points * self.NEAR_SURFACE_SAMPLE_FACTOR
-			max_loss_samples = args.dataset_num_sdf_samples - self.args.num_input_points
+		# Validate that the dataset contains enough samples for the configuration.
+		self.__validate_dataset_size()
 
-			# Adjust the number of uniform samples loaded if the provided dataset does not contain enough samples.
-			if self.num_uniform_loss_samples > max_loss_samples:
-				print('WARNING: Insufficient sample points in dataset.')
-				print(f'With Unified Sampling enabled, {self.num_uniform_loss_samples} uniform loss samples are recommended for the target {self.args.num_loss_points} unified loss samples.')
-				print(f'The provided dataset is only large enough for {self.args.num_input_points} input and {max_loss_samples} uniform samples.')
-				print()
+		# # When the loss is computed on both target and reconstruction near-surface samples,
+		# # increase the number of uniform points loaded to allow proximity selection. No near-surface samples need to be loaded.
+		# if self.sampling_method == Loss.UNIFIED_SAMPLING:
+		# 	# Near-surface samples are replaced with a larger number of uniform samples.
+		# 	# The uniform samples are filtered selected based on their distance to the target and reconstruction SDFs for use as near-surface samples.
+		# 	num_proximity_samples = self.num_near_surface_loss_samples * self.NEAR_SURFACE_SAMPLE_FACTOR
+		# 	total_uniform_loss_samples = self.num_uniform_loss_samples + num_proximity_samples
+		# 	self.num_near_surface_loss_samples = 0
 
-				self.num_uniform_loss_samples = max_loss_samples
+		# 	# Adjust the number of uniform samples loaded if the provided dataset does not contain enough.
+		# 	max_uniform_loss_samples = args.dataset_num_sdf_samples - self.num_uniform_input_samples
+
+		# 	if total_uniform_loss_samples > max_uniform_loss_samples:
+		# 		print('WARNING: Insufficient sample points in dataset.')
+		# 		print(f'With Unified Sampling enabled, {total_uniform_loss_samples} uniform loss samples are recommended for the target {self.args.num_loss_points} unified loss samples.')
+		# 		print(f'The provided dataset is only large enough for {max_uniform_loss_samples} uniform samples.')
+		# 		print()
+
+		# 		self.num_uniform_loss_samples = max_uniform_loss_samples
+
+		# 	# Reserve a number of uniform samples for use as uniform samples based on the surface-uniform sample ratio.
+		# 	self.num_uniform_loss_samples = total_uniform_loss_samples
 
 
 		self.num_uniform_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples
 		self.num_near_surface_samples = self.num_near_surface_input_samples + self.num_near_surface_loss_samples
 
 		self.__load_data_set()
+
+
+	def __validate_dataset_size(self):
+		# Ensure that the dataset is sufficiently large for both the near-surface and uniformsamples
+		# Note that the dataset should contain an equal amount of near-surface and uniform samples.
+		total_near_surface_samples = self.num_near_surface_input_samples + self.num_near_surface_loss_samples
+		total_uniform_loss_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples
+		excpetion_message = ""
+
+		if total_near_surface_samples > self.args.dataset_num_sdf_samples:
+			excpetion_message += f'Insufficient number of near-surface samples. Configuration set to {total_near_surface_samples} samples but the dataset only contains {args.dataset_num_sdf_samples} samples.\n'
+
+		if total_uniform_loss_samples > self.args.dataset_num_sdf_samples:
+			excpetion_message += f'Insufficient number of uniform samples. Configuration set to {total_uniform_loss_samples} samples but the dataset only contains {args.dataset_num_sdf_samples} samples.\n'
+
+		if excpetion_message != "":
+			raise Exception(excpetion_message)
 
 
 	# Load all samples into system memory
