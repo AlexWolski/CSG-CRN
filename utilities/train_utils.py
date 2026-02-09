@@ -325,7 +325,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			print(f"LR Patience:        {scheduler.num_bad_epochs}/{scheduler.patience}")
 			print(f"Early Stop:         {early_stopping.counter}/{early_stopping.patience}")
 
-		print("Ellapsed Time:      %02d:%02d:%02d" % (time_ellapsed.seconds // 3600, time_ellapsed.seconds // 60, time_ellapsed.seconds % 60))
+		print("Ellapsed Time:      {}:{:02d}:{:02d}".format(time_ellapsed.seconds // 3600, (time_ellapsed.seconds // 60) % 60, time_ellapsed.seconds % 60))
 		print()
 
 		# Check for early stopping
