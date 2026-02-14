@@ -104,11 +104,9 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 			surface_samples
 		) = data_sample
 
-		input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
-
 		if args.cascade_training_mode == SEPARATE_PARAMS:
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-				csg_model = model.forward_separate_cascades(input_samples.detach(), prev_cascades_list)
+				csg_model = model.forward_separate_cascades(uniform_input_samples.detach(), near_surface_input_samples.detach(), prev_cascades_list)
 
 			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 			_backpropagate(scaler, optimizer, cascade_loss)
@@ -123,7 +121,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 					# Forward
 					with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-						csg_model = model.forward(input_samples.detach(), csg_model)
+						csg_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), csg_model)
 
 					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 
@@ -133,7 +131,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 			# Update model parameters after all cascade iterations
 			else:
 				with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-					csg_model = model.forward_cascade(input_samples.detach(), num_cascades)
+					csg_model = model.forward_cascade(uniform_input_samples.detach(), near_surface_input_samples.detach(), num_cascades)
 
 				cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 				_backpropagate(scaler, optimizer, cascade_loss)
@@ -171,12 +169,10 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 				surface_samples
 			) = data_sample
 
-			input_samples = combine_and_shuffle_samples(uniform_input_samples, near_surface_input_samples)
-
 			if args.cascade_training_mode == SEPARATE_PARAMS:
-				csg_model = model.forward_separate_cascades(input_samples, prev_cascades_list)
+				csg_model = model.forward_separate_cascades(uniform_input_samples, near_surface_input_samples, prev_cascades_list)
 			else:
-				csg_model = model.forward_cascade(input_samples, num_cascades)
+				csg_model = model.forward_cascade(uniform_input_samples, near_surface_input_samples, num_cascades)
 
 			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
@@ -231,15 +227,6 @@ def save_model(model, args, data_splits, training_results, model_path, prev_casc
 		'data_splits': data_splits,
 		'training_results': training_results
 	}, model_path)
-
-
-# Combine uniform and near-surface samples of input and loss tensors and shuffle results
-def combine_and_shuffle_samples(uniform_samples, near_surface_samples):
-	# Combine samples
-	input_samples = torch.cat((uniform_samples, near_surface_samples), 1)
-	# Shuffle samples
-	input_samples = input_samples[:, torch.randperm(input_samples.size(dim=1))]
-	return input_samples
 
 
 def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch):

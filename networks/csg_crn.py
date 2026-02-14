@@ -46,13 +46,14 @@ class CSG_CRN(nn.Module):
 		self.to(self.device)
 
 
-	def forward(self, target_input_samples, csg_model=None):
-		batch_size = target_input_samples.size(dim=0)
+	def forward(self, target_near_surface_samples, target_uniform_samples, csg_model=None):
+		batch_size = target_near_surface_samples.size(dim=0)
 		first_prim = csg_model is None
 
 		if first_prim:
 			csg_model = CSGModel(batch_size, device=self.device)
 
+		target_input_samples = self.combine_and_shuffle_samples(target_near_surface_samples, target_uniform_samples)
 		input_tensor = self._get_input_tensor(target_input_samples, csg_model, first_prim, self.extended_input)
 
 		# Change input shape from BxNxF to BxFxN for PointNet encoder
@@ -115,17 +116,17 @@ class CSG_CRN(nn.Module):
 		return torch.cat((target_input_points, missing_volume_sdf, filled_volume_sdf, excess_volume_sdf), -1)
 
 
-	def forward_cascade(self, target_input_samples, num_cascades):
-		csg_model = self.forward(target_input_samples)
+	def forward_cascade(self, target_near_surface_samples, target_uniform_samples, num_cascades):
+		csg_model = self.forward(target_near_surface_samples, target_uniform_samples)
 
 		for i in range(num_cascades):
-			csg_model = self.forward(target_input_samples, csg_model)
+			csg_model = self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
 
 		return csg_model
 
 
 	# Train only the current cascade. Preivous cascades have trained parameters accessed through the `prev_cascades_list` parameter.
-	def forward_separate_cascades(self, target_input_samples, prev_cascades_list):
+	def forward_separate_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list):
 		csg_model = None
 		current_params = None
 		is_training = self.training
@@ -139,7 +140,7 @@ class CSG_CRN(nn.Module):
 			with torch.no_grad():
 				self.eval()
 				self.load_state_dict(model_params)
-				csg_model = self.forward(target_input_samples, csg_model).detach()
+				csg_model = self.forward(target_near_surface_samples, target_uniform_samples, csg_model).detach()
 
 		# Generate current cascade
 		if current_params != None:
@@ -147,13 +148,21 @@ class CSG_CRN(nn.Module):
 
 		# Run a forward pass on the current cascade
 		self.train() if is_training else self.eval()
-		return self.forward(target_input_samples, csg_model)
+		return self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
 
 
 	# Set which operations to scale and by how much
 	def set_operation_weight(self, scale_op, replace_op, operation_scale):
 		for regressor_decoder in self.regressor_decoder_list:
 			regressor_decoder.set_operation_weight(scale_op, replace_op, operation_scale)
+
+	# Combine uniform and near-surface samples of input and loss tensors and shuffle results
+	def combine_and_shuffle_samples(self, uniform_samples, near_surface_samples):
+		# Combine samples
+		input_samples = torch.cat((uniform_samples, near_surface_samples), 1)
+		# Shuffle samples
+		input_samples = input_samples[:, torch.randperm(input_samples.size(dim=1))]
+		return input_samples
 
 
 # Test network

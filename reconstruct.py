@@ -180,12 +180,11 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 
 def construct_csg_model(model, input_file, args, prev_cascades_list=None):
 	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args)
-	input_samples = combine_samples(uniform_samples, near_surface_samples, args.num_input_points)
 
 	if args.cascade_training_mode == SEPARATE_PARAMS:
-		csg_model = model.forward_separate_cascades(input_samples, prev_cascades_list)
+		csg_model = model.forward_separate_cascades(uniform_samples, near_surface_samples, prev_cascades_list)
 	else:
-		csg_model = model.forward_cascade(input_samples, args.num_cascades)
+		csg_model = model.forward_cascade(uniform_samples, near_surface_samples, args.num_cascades)
 
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
