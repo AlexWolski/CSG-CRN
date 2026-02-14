@@ -472,6 +472,40 @@ def select_nearest_samples(batch_sample_points, batch_sample_distances, num_sdf_
 	return (max_sample_dist, select_points, select_distances, select_indices)
 
 
+def select_near_surface_samples(target_uniform_samples, num_near_surface_samples, csg_model):
+	"""
+	Select samples from the given SDF point cloud that are near the surface of both the target and reconstruction shapes.
+	No minimum sample distance is guaranteed. The uniform samples are binned according to their distance and the closest samples are returned.
+	
+	Parameters
+	----------
+	target_uniform_samples : torch.Tensor
+		Tensor of size (B, N, 4) containing uniformly distributed SDF samples from which to select near-surface samples.
+	num_near_surface_samples : int
+		The target number of near-surface samples.
+	csg_model : utilities.csg_model.CSGModel
+		The CSG model representing the reconstruction shape.
+
+	Returns
+	-------
+	torch.Tensor
+		Tensor of size (B, `num_near_surface_samples`, 4) containing the filtered set of samples closest to either the target or reconstruction shapes.
+
+	"""
+	target_points = target_uniform_samples[..., :3]
+	target_distances = target_uniform_samples[..., 3]
+
+	# Compute the reconstruction shape distances and apply a union with the target shape distances.
+	combined_distances = csg_model.sample_csg(target_points, initial_distances=target_distances)
+	(_, near_surface_points, _, near_surface_indices) = select_nearest_samples(target_points, combined_distances, num_near_surface_samples)
+
+	# Select the near-surface points and distances to target shape.
+	near_surface_target_distances = torch.gather(target_distances, 1, near_surface_indices)
+	near_surface_samples = torch.cat((near_surface_points, near_surface_target_distances.unsqueeze(-1)), dim=-1)
+
+	return near_surface_samples
+
+
 def sample_sdf_from_csg_combined(csg_model, num_sdf_samples, sample_dist, surface_uniform_ratio):
 	"""
 	Generate a combination of uniform and near-surface  SDF samples for a batch of CSG models.

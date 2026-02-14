@@ -1,10 +1,9 @@
-import torch
 import torch.nn as nn
 from losses.proximity_loss import ProximityLoss
 from losses.reconstruction_loss import ReconstructionLoss
 from utilities.constants import UNIFIED_SAMPLING, TARGET_SAMPLING
 from utilities.datasets import NEAR_SURFACE_SAMPLE_FACTOR
-from utilities.sampler_utils import select_nearest_samples
+from utilities.sampler_utils import select_near_surface_samples
 
 
 class Loss(nn.Module):
@@ -22,7 +21,7 @@ class Loss(nn.Module):
 		# When using Unified sampling, generate near-surface samples by filtering by distance to both the target and reconstruction shapes.
 		if self.loss_sampling_method == UNIFIED_SAMPLING:
 			num_near_surface_samples = target_near_surface_samples.size(1) // NEAR_SURFACE_SAMPLE_FACTOR
-			target_near_surface_samples = self._select_near_surface_samples(target_near_surface_samples, num_near_surface_samples, csg_model)
+			target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, num_near_surface_samples, csg_model)
 
 		# Compute reconstruction loss
 		recon_loss = self.recon_loss(target_near_surface_samples, target_uniform_samples, target_surface_samples, csg_model)
@@ -34,18 +33,3 @@ class Loss(nn.Module):
 
 		return recon_loss + proximity_loss
 
-
-	# Select samples from the given SDF point cloud that are near the surface of both the target and reconstruction shapes.
-	def _select_near_surface_samples(self, target_uniform_samples, num_uniform_samples, csg_model):
-		target_points = target_uniform_samples[..., :3]
-		target_distances = target_uniform_samples[..., 3]
-
-		# Compute the reconstruction shape distances and apply a union with the target shape distances.
-		combined_distances = csg_model.sample_csg(target_points, initial_distances=target_distances)
-		(_, near_surface_points, _, near_surface_indices) = select_nearest_samples(target_points, combined_distances, num_uniform_samples)
-
-		# Select the near-surface points and distances to target shape.
-		near_surface_target_distances = torch.gather(target_distances, 1, near_surface_indices)
-		near_surface_samples = torch.cat((near_surface_points, near_surface_target_distances.unsqueeze(-1)), dim=-1)
-
-		return near_surface_samples
