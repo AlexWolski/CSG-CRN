@@ -180,18 +180,19 @@ class PointDataset(Dataset):
 			if batch_surface_samples != None:
 				batch_surface_samples = augment_sample_batch_points(batch_surface_samples, self.args)
 
-		# Separate input and loss samples
-		batch_uniform_input_samples = batch_uniform_samples[:, :self.num_uniform_input_samples]
-		batch_near_surface_input_samples = batch_near_surface_samples[:, :self.num_near_surface_input_samples]
+		uniform_tensor_sizes = [self.num_uniform_input_samples, self.num_uniform_loss_samples]
+		near_surface_tensor_sizes = [self.num_near_surface_input_samples, self.num_near_surface_loss_samples]
 
-		# When unified sampling is enabled, the near-surface loss tensor is populated with uniform samples.
+		# When unified loss sampling is enabled, all tensors are populated with uniform samples.
 		if self.sampling_method == UNIFIED_SAMPLING:
-			loss_samples = batch_uniform_samples[:, self.num_uniform_input_samples:]
-			batch_uniform_loss_samples = loss_samples[:, self.num_uniform_loss_samples:]
-			batch_near_surface_loss_samples = loss_samples[:, :self.num_near_surface_loss_samples]
+			uniform_tensor_sizes += [self.num_near_surface_loss_samples]
+			(batch_uniform_input_samples, batch_uniform_loss_samples, batch_near_surface_loss_samples) = torch.split(batch_uniform_samples, uniform_tensor_sizes, dim=1)
+			batch_near_surface_input_samples = batch_near_surface_samples[:, :self.num_near_surface_input_samples]
+		# When using target sampling, separate input and loss samples using the standard number of samples.
 		else:
-			batch_uniform_loss_samples = batch_uniform_samples[:, self.num_uniform_input_samples:]
-			batch_near_surface_loss_samples = batch_near_surface_samples[:, self.num_near_surface_input_samples:]
+			(batch_uniform_input_samples, batch_uniform_loss_samples) = torch.split(batch_uniform_samples, uniform_tensor_sizes, dim=1)
+			(batch_near_surface_input_samples, batch_near_surface_loss_samples) = torch.split(batch_near_surface_samples, near_surface_tensor_sizes, dim=1)
+
 
 		data_sample = (
 			batch_uniform_input_samples.detach(),
