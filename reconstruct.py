@@ -79,6 +79,7 @@ def load_model(args):
 		CSGModel.num_operations,
 		args.num_input_points,
 		args.sample_dist,
+		args.input_sampling_method,
 		saved_args.surface_uniform_ratio,
 		args.device,
 		saved_args.decoder_layers,

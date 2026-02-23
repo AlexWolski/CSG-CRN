@@ -3,12 +3,14 @@ import torch
 import torch.nn as nn
 from networks.pointnet import PointNetfeat, POINTNET_FEAT_OUTPUT_SIZE
 from networks.regressor_decoder import PrimitiveRegressor
+from utilities.constants import NEAR_SURFACE_SAMPLE_FACTOR, UNIFIED_SAMPLING
 from utilities.csg_model import CSGModel, subtract_sdf, smooth_max
+from utilities.sampler_utils import select_near_surface_samples
 
 
 class CSG_CRN(nn.Module):
 	def __init__(
-			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, surface_uniform_ratio, device,
+			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, input_sampling_method, surface_uniform_ratio, device,
 			decoder_layers=[], extended_input=False, predict_blending=True, predict_roundness=True, no_batch_norm=False):
 		super(CSG_CRN, self).__init__()
 
@@ -17,6 +19,7 @@ class CSG_CRN(nn.Module):
 		self.num_operations = num_operations
 		self.num_input_points = num_input_points
 		self.sample_dist = sample_dist
+		self.input_sampling_method = input_sampling_method
 		self.surface_uniform_ratio = surface_uniform_ratio
 		self.device = device
 		self.decoder_layers = decoder_layers
@@ -52,6 +55,15 @@ class CSG_CRN(nn.Module):
 
 		if first_prim:
 			csg_model = CSGModel(batch_size, device=self.device)
+
+		# When using Unified sampling, generate near-surface samples by filtering by distance to both the target and reconstruction shapes.
+		if self.input_sampling_method == UNIFIED_SAMPLING:
+			num_near_surface_samples = target_near_surface_samples.size(1) // NEAR_SURFACE_SAMPLE_FACTOR
+
+			if first_prim:
+				target_near_surface_samples = target_near_surface_samples[:, num_near_surface_samples:]
+			else:
+				target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, num_near_surface_samples, csg_model)
 
 		target_input_samples = self.combine_and_shuffle_samples(target_near_surface_samples, target_uniform_samples)
 		input_tensor = self._get_input_tensor(target_input_samples, csg_model, first_prim, self.extended_input)
@@ -156,11 +168,9 @@ class CSG_CRN(nn.Module):
 		for regressor_decoder in self.regressor_decoder_list:
 			regressor_decoder.set_operation_weight(scale_op, replace_op, operation_scale)
 
-	# Combine uniform and near-surface samples of input and loss tensors and shuffle results
+	# Combine uniform and near-surface samples and shuffle results
 	def combine_and_shuffle_samples(self, uniform_samples, near_surface_samples):
-		# Combine samples
 		input_samples = torch.cat((uniform_samples, near_surface_samples), 1)
-		# Shuffle samples
 		input_samples = input_samples[:, torch.randperm(input_samples.size(dim=1))]
 		return input_samples
 

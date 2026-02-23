@@ -9,7 +9,7 @@ from torch.utils.data import Subset
 
 from losses.reconstruction_loss import ReconstructionLoss
 from wakepy import keep
-from utilities.constants import SEPARATE_PARAMS, CASCADE_MODEL_MODES, loss_sampling_methods, UNIFIED_SAMPLING
+from utilities.constants import SEPARATE_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.train_utils import load_data_splits, load_saved_settings, train, init_training_params
@@ -91,8 +91,9 @@ def options():
 	# Retrieve loss metric
 	args.loss_metric = args.loss_metric[0] if len(args.loss_metric) > 0 else None
 
-	# Retrieve loss sampling method
+	# Retrieve sampling methods
 	args.loss_sampling_method = args.loss_sampling_method[0] if len(args.loss_sampling_method) > 0 else None
+	args.input_sampling_method = args.input_sampling_method[0] if len(args.input_sampling_method) > 0 else None
 
 	# Retrieve cascade training mode
 	args.cascade_training_mode = args.cascade_training_mode[0] if len(args.cascade_training_mode) > 0 else None
@@ -166,7 +167,8 @@ def get_model_parser():
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
-	model_group.add_argument('--loss_sampling_method', type=str.upper, default=[UNIFIED_SAMPLING], choices=loss_sampling_methods, nargs=1, help="TARGET_SAMPLING samples loss points from only the target shape and UNIFIED_SAMPLING samples from both target and reconstruction shapes.")
+	model_group.add_argument('--loss_sampling_method', type=str.upper, default=[UNIFIED_SAMPLING], choices=sampling_methods, nargs=1, help="TARGET_SAMPLING samples loss points from only the target shape and UNIFIED_SAMPLING samples from both target and output reconstruction shapes.")
+	model_group.add_argument('--input_sampling_method', type=str.upper, default=[TARGET_SAMPLING], choices=sampling_methods, nargs=1, help="TARGET_SAMPLING generates input points from only the target shape and UNIFIED_SAMPLING generates from both target and initial reconstruction shapes.")
 	model_group.add_argument('--surface_uniform_ratio', type=float, default=0.5, help='Percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples')
 	model_group.add_argument('--decoder_layers', nargs='+', type=int, default=[], help='List of hidden layers to add to the decoder network')
 	model_group.add_argument('--back_prop_recon_input', default=False, action='store_true', help='Backpropagate through the reconstruction input sample and all previous refinement iterations.')

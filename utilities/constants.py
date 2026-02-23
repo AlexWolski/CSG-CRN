@@ -10,7 +10,7 @@ CASCADE_MODEL_MODES = [SHARED_PARAMS, SEPARATE_PARAMS]
 # UNIFIED include samples near to either the target or reconstruction shape.
 TARGET_SAMPLING = "TARGET"
 UNIFIED_SAMPLING = "UNIFIED"
-loss_sampling_methods = [TARGET_SAMPLING, UNIFIED_SAMPLING]
+sampling_methods = [TARGET_SAMPLING, UNIFIED_SAMPLING]
 
 # Number of uniform points to load for each required near-surface point.
 NEAR_SURFACE_SAMPLE_FACTOR = 5
