@@ -59,11 +59,7 @@ class CSG_CRN(nn.Module):
 		# When using Unified sampling, generate near-surface samples by filtering by distance to both the target and reconstruction shapes.
 		if self.input_sampling_method == UNIFIED_SAMPLING:
 			num_near_surface_samples = target_near_surface_samples.size(1) // NEAR_SURFACE_SAMPLE_FACTOR
-
-			if first_prim:
-				target_near_surface_samples = target_near_surface_samples[:, num_near_surface_samples:]
-			else:
-				target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, num_near_surface_samples, csg_model)
+			target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, num_near_surface_samples, csg_model)
 
 		target_input_samples = self.combine_and_shuffle_samples(target_near_surface_samples, target_uniform_samples)
 		input_tensor = self._get_input_tensor(target_input_samples, csg_model, first_prim, self.extended_input)
