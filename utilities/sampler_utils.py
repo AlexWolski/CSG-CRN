@@ -7,7 +7,7 @@ from utilities.csg_to_mesh import csg_to_mesh, csg_to_mesh_differentiable
 from utilities.csg_model import MIN_BOUND, MAX_BOUND
 
 
-def sample_uniform_points_cube(num_points, side_length, batch_size=None):
+def sample_uniform_points_cube(num_points, side_length=2, batch_size=None):
 	"""
 	Uniformly sample points from a cube with given side length.
 
@@ -23,7 +23,8 @@ def sample_uniform_points_cube(num_points, side_length, batch_size=None):
 	Returns
 	-------
 	torch.Tensor
-		Float Tensor of size (N, 3) where N=`num_points`.
+		When batch_size is None, returns Float Tensor of size (N, 3) where N=`num_points`.
+		When batch_size (B) is provided, returns Float Tensor of size (B, N, 3) where N=`num_points`.
 		Points uniformly sampled from a cube with side length `side_length`.
 
 	"""
@@ -538,7 +539,8 @@ def sample_sdf_from_csg_combined(csg_model, num_sdf_samples, sample_dist, surfac
 	combined_distances = torch.cat((uniform_distances, surface_distances), dim=1)
 
 	# Shuffle samples
-	combined_points = combined_points[:, torch.randperm(num_sdf_samples)].detach()
-	combined_distances = combined_distances[:, torch.randperm(num_sdf_samples)].detach()
+	rand_perm = torch.randperm(num_sdf_samples)
+	combined_points = combined_points[:, rand_perm].detach()
+	combined_distances = combined_distances[:, rand_perm].detach()
 
 	return (combined_points, combined_distances)
