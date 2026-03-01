@@ -4,6 +4,7 @@ import random
 import torch
 import numpy as np
 from tqdm import tqdm
+from utilities import sampler_utils
 from utilities.data_augmentation import RotationAxis, ScaleAxis, random_rotation_batch, random_scale_batch
 from utilities.point_transform import center_point_cloud_batch
 from utilities.csg_model import CSGModel, add_sdf
@@ -84,14 +85,14 @@ def random_operation(is_first_shape):
 # Randomly sample a point near the surface of the CSG model
 def random_position(csg_model):
 	# Sample the CSG model
-	sample_points = csg_model.gen_uniform_csg_samples(1, POSITION_SAMPLE_POINTS)
+	points = sampler_utils.sample_uniform_points_cube(POSITION_SAMPLE_POINTS, batch_size=1).to(csg_model.device)
+	distances = csg_model.sample_csg(points)
 
 	# Return the origin if the CSG model contains no shapes
-	if not sample_points:
+	if distances is None:
 		return torch.zeros(1, 3, dtype=float)
 
 	# Find and return the point closest to the CSG model surface
-	(points, distances) = sample_points
 	min_dist_index = torch.argmin(distances, dim=1)
 	return points.squeeze()[min_dist_index]
 
@@ -121,7 +122,7 @@ def generate_dataset(args):
 		output_path = os.path.join(args.output_dir, f'Sample {i}.npy')
 
 		device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-		csg_model = CSGModel(device)
+		csg_model = CSGModel(1, device)
 
 		# Generate model
 		for i in range(args.num_shapes):
@@ -129,15 +130,15 @@ def generate_dataset(args):
 			generate_shape(csg_model, is_first_shape, args.no_blending, args.min_blending, args.max_blending, args.no_roundness, args.min_roundness, args.max_roundness, args.min_scale, args.max_scale)
 
 		# Sample model
-		surface_points = csg_model.gen_csg_samples(1, args.num_sample_points, args.surface_uniform_ratio, args.sample_dist, strict_ratio=True)
+		samples = sampler_utils.sample_sdf_from_csg_combined(csg_model, args.num_sample_points, args.sample_dist, args.surface_uniform_ratio)
 
 		# Re-generate sample if there are no samples
-		if surface_points is None:
+		if samples is None:
 			i = i-1
 			continue
 
 		# Center sample
-		(sample_points, sample_distances) = surface_points
+		(sample_points, sample_distances) = samples
 		sample_points = center_point_cloud_batch(sample_points)
 
 		# Save model samples to file
