@@ -46,15 +46,6 @@ def options():
 	return args
 
 
-# Create output directory
-def create_output_dir(output_dir, overwrite=False):
-	if not os.path.exists(output_dir):
-		os.makedirs(output_dir)
-	elif len(os.listdir(output_dir)) != 0 and not overwrite:
-		err_msg = f'The output folder "{output_dir}" is already populated. Use another directory or the --overwrite option.'
-		raise Exception(err_msg)
-
-
 # Create dataset directories and metadata file
 def init_dataset(args):
 	uniform_dir = os.path.join(args.output_dir, UNIFORM_FOLDER)

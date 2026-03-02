@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from utilities import sampler_utils
 from utilities.data_augmentation import RotationAxis, ScaleAxis, random_rotation_batch, random_scale_batch
+from utilities.file_utils import create_output_dir
 from utilities.point_transform import center_point_cloud_batch
 from utilities.csg_model import CSGModel, add_sdf
 
@@ -116,7 +117,8 @@ def generate_shape(csg_model, is_first_shape, no_blending, min_blending, max_ble
 
 # Generate a synthetic dataset of CSG model samples with random shapes and operations
 def generate_dataset(args):
-	os.makedirs(args.output_dir, exist_ok=True)
+	# os.makedirs(args.output_dir, exist_ok=True)
+	create_output_dir(args.output_dir, args.overwrite)
 
 	for i in tqdm(range(args.num_samples)):
 		output_path = os.path.join(args.output_dir, f'Sample {i}.npy')
