@@ -20,7 +20,7 @@ class ProximityLoss(nn.Module):
 def test():
 	batch_size = 2
 
-	sdf_samples = torch.tensor([0.4,0.6,0.8], dtype=float).repeat(batch_size,1)
+	sdf_samples = torch.tensor([0.4,0.6,0.8], dtype=torch.float).repeat(batch_size,1)
 	primitive_loss = ProximityLoss()
 
 	print('Primitive Loss:')

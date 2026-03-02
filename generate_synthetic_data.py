@@ -66,7 +66,7 @@ def options():
 # Randomly select a shape
 def random_shape():
 	shape_index = random.randrange(CSGModel.num_shapes)
-	shape_weights = torch.zeros(1, CSGModel.num_shapes, dtype=float)
+	shape_weights = torch.zeros(1, CSGModel.num_shapes, dtype=torch.float)
 	shape_weights[:,shape_index] = 1.0
 	return shape_weights
 
@@ -78,7 +78,7 @@ def random_operation(is_first_shape):
 	else:
 		op_index = random.randrange(CSGModel.num_operations)
 
-	operation_weights = torch.zeros(1, CSGModel.num_operations, dtype=float)
+	operation_weights = torch.zeros(1, CSGModel.num_operations, dtype=torch.float)
 	operation_weights[:,op_index] = 1.0
 	return operation_weights
 
@@ -91,7 +91,7 @@ def random_position(csg_model):
 
 	# Return the origin if the CSG model contains no shapes
 	if distances is None:
-		return torch.zeros(1, 3, dtype=float)
+		return torch.zeros(1, 3, dtype=torch.float)
 
 	# Find and return the point closest to the CSG model surface
 	min_dist_index = torch.argmin(distances, dim=1)
