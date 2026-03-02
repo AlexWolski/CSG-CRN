@@ -1,5 +1,7 @@
 import os
 import glob
+import yaml
+from utilities.data_processing import NEAR_SURFACE_FOLDER, SETTINGS_FILE, SURFACE_FOLDER, UNIFORM_FOLDER
 
 MESH_FILE_TYPES = ['*.3mf', '*.obj', '*.off', '*.glb', '*.gltf', '*.ply', '*.stl', '*.3dxml']
 
@@ -76,6 +78,36 @@ def create_output_subdir(source_dir, target_dir, file_path):
 	os.makedirs(output_subdir, exist_ok=True)
 
 	return output_file_path
+
+
+def init_dataset(output_dir, overwrite=False, args=None):
+	"""
+	Create dataset directories and metadata file
+
+	Parameters
+	----------
+	output_dir : str
+		Root directory for the dataset, including subdirectories and settings files.
+	overwrite : bool
+		When enabled and the supplied output directory is populated, overwrite the output directory.
+	args : Namespace
+		When an Argparse Namespace object is supplied, save it to a to yaml file in the output directory.
+	"""
+	uniform_dir = os.path.join(output_dir, UNIFORM_FOLDER)
+	surface_dir = os.path.join(output_dir, SURFACE_FOLDER)
+	near_surface_dir = os.path.join(output_dir, NEAR_SURFACE_FOLDER)
+	metadata_path = os.path.join(output_dir, SETTINGS_FILE)
+
+	create_output_dir(output_dir, overwrite)
+	create_output_dir(uniform_dir, overwrite)
+	create_output_dir(surface_dir, overwrite)
+	create_output_dir(near_surface_dir, overwrite)
+
+	if args is not None:
+		with open(metadata_path, 'w') as out_path:
+			yaml.dump(args.__dict__, out_path, sort_keys=False)
+
+	return (uniform_dir, surface_dir, near_surface_dir)
 
 
 def filter_existing_paths(source_dir, target_dir, source_file_paths):

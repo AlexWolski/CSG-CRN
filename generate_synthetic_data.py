@@ -117,7 +117,6 @@ def generate_shape(csg_model, is_first_shape, no_blending, min_blending, max_ble
 
 # Generate a synthetic dataset of CSG model samples with random shapes and operations
 def generate_dataset(args):
-	# os.makedirs(args.output_dir, exist_ok=True)
 	create_output_dir(args.output_dir, args.overwrite)
 
 	for i in tqdm(range(args.num_samples)):

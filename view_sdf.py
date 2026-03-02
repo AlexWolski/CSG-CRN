@@ -4,11 +4,9 @@ import pyglet
 import torch
 
 from pyglet.gl import *
-from utilities.csg_model import add_sdf
 from utilities.csg_to_magica import prompt_and_export_to_magica
 from utilities.csg_to_mesh import prompt_and_export_to_mesh
 from utilities.file_loader import FileLoader
-from utilities.sampler_utils import sample_sdf_from_mesh_unit_sphere
 from utilities.file_utils import MESH_FILE_TYPES
 from utilities.sampler_utils import sample_points_mesh_surface, distance_to_mesh_surface
 

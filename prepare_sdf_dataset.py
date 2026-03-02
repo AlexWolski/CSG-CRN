@@ -3,12 +3,11 @@ import numpy as np
 import os
 import torch
 import trimesh
-import yaml
 from mesh_to_sdf import BadMeshException
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from tqdm import tqdm
-from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER, SETTINGS_FILE, SAMPLE_LIST_FILE, save_list
-from utilities.file_utils import create_output_dir, create_output_subdir, get_mesh_files
+from utilities.data_processing import SAMPLE_LIST_FILE, save_list
+from utilities.file_utils import create_output_subdir, get_mesh_files, init_dataset
 from utilities.sampler_utils import sample_from_mesh
 
 
@@ -44,24 +43,6 @@ def options():
 	args, remaining_args = data_parser.parse_known_args(args=remaining_args)
 
 	return args
-
-
-# Create dataset directories and metadata file
-def init_dataset(args):
-	uniform_dir = os.path.join(args.output_dir, UNIFORM_FOLDER)
-	surface_dir = os.path.join(args.output_dir, SURFACE_FOLDER)
-	near_surface_dir = os.path.join(args.output_dir, NEAR_SURFACE_FOLDER)
-	metadata_path = os.path.join(args.output_dir, SETTINGS_FILE)
-
-	create_output_dir(args.output_dir, args.overwrite)
-	create_output_dir(uniform_dir, args.overwrite)
-	create_output_dir(surface_dir, args.overwrite)
-	create_output_dir(near_surface_dir, args.overwrite)
-
-	with open(metadata_path, 'w') as out_path:
-		yaml.dump(args.__dict__, out_path, sort_keys=False)
-
-	return (uniform_dir, surface_dir, near_surface_dir)
 
 
 # Save sample to .npy file
@@ -104,7 +85,7 @@ def prepare_dataset(args):
 	# Convert all meshes
 	mesh_file_paths = get_mesh_files(args.data_dir)
 	sample_paths = []
-	(uniform_dir, surface_dir, near_surface_dir) = init_dataset(args)
+	(uniform_dir, surface_dir, near_surface_dir) = init_dataset(args.output_dir, args.overwrite, args)
 	print(f'Processing {len(mesh_file_paths)} files...')
 
 	for mesh_file_path in tqdm(mesh_file_paths):
