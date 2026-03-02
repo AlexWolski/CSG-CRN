@@ -133,7 +133,7 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 
 		try:
 			# Run the marching cubes algorithm
-			verts, faces = marching_cubes(distances, isolevel=0.0, return_local_coords=True)
+			verts, faces = marching_cubes(distances, isolevel=iso_level, return_local_coords=True)
 			# Convert the lists of vertices and faces to mesh objects
 			for i in range(csg_batch_size):
 				mesh_list.append(trimesh.Trimesh(verts[i].cpu(), faces[i].cpu()))
