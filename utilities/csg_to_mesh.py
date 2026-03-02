@@ -136,7 +136,8 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 			# Run the marching cubes algorithm
 			verts, faces = marching_cubes(distances, isolevel=iso_level, return_local_coords=True)
 
-			if not torch.is_tensor(verts) or not torch.is_tensor(faces):
+			# Check that a valid mesh was extracted
+			if not all(torch.is_tensor(x) for x in verts) or not all(torch.is_tensor(x) for x in faces):
 				return None
 
 			# Convert the lists of vertices and faces to mesh objects
