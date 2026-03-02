@@ -122,6 +122,7 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 	-------
 	[trimesh.Trimesh]
 		List containing B converted mesh objects, where B is the batch size of `csg_model`.
+		If no mesh could be extracted, returns None.
 
 	"""
 	torch.cuda.empty_cache()
@@ -134,6 +135,10 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 		try:
 			# Run the marching cubes algorithm
 			verts, faces = marching_cubes(distances, isolevel=iso_level, return_local_coords=True)
+
+			if not torch.is_tensor(verts) or not torch.is_tensor(faces):
+				return None
+
 			# Convert the lists of vertices and faces to mesh objects
 			for i in range(csg_batch_size):
 				mesh_list.append(trimesh.Trimesh(verts[i].cpu(), faces[i].cpu()))

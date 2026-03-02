@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from utilities import sampler_utils
 from utilities.data_augmentation import RotationAxis, ScaleAxis, random_rotation_batch, random_scale_batch
-from utilities.file_utils import create_output_dir
+from utilities.file_utils import create_output_dir, init_dataset
 from utilities.point_transform import center_point_cloud_batch
 from utilities.csg_model import CSGModel, add_sdf
 
@@ -118,10 +118,9 @@ def generate_shape(csg_model, is_first_shape, no_blending, min_blending, max_ble
 # Generate a synthetic dataset of CSG model samples with random shapes and operations
 def generate_dataset(args):
 	create_output_dir(args.output_dir, args.overwrite)
+	(uniform_dir, surface_dir, near_surface_dir) = init_dataset(args.output_dir, args.overwrite, args)
 
 	for i in tqdm(range(args.num_samples)):
-		output_path = os.path.join(args.output_dir, f'Sample {i}.npy')
-
 		device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 		csg_model = CSGModel(1, device)
 
@@ -131,20 +130,21 @@ def generate_dataset(args):
 			generate_shape(csg_model, is_first_shape, args.no_blending, args.min_blending, args.max_blending, args.no_roundness, args.min_roundness, args.max_roundness, args.min_scale, args.max_scale)
 
 		# Sample model
-		samples = sampler_utils.sample_sdf_from_csg_combined(csg_model, args.num_sample_points, args.sample_dist, args.surface_uniform_ratio)
+		(uniform_points, uniform_distances) = sampler_utils.sample_sdf_from_csg_uniform_sphere(csg_model, args.num_samples)
+		(near_surface_points, near_surface_distances) = sampler_utils.sample_sdf_near_csg_surface(csg_model, args.num_samples, args.sample_dist)
+		surface_points = sampler_utils.sample_points_csg_surface(csg_model, 64, 1000)
 
 		# Re-generate sample if there are no samples
-		if samples is None:
+		if surface_points is None:
 			i = i-1
 			continue
 
-		# Center sample
-		(sample_points, sample_distances) = samples
-		sample_points = center_point_cloud_batch(sample_points)
-
 		# Save model samples to file
-		samples = torch.cat((sample_points, sample_distances.unsqueeze(-1)), dim=-1).squeeze(0).cpu()
-		np.save(output_path, samples)
+		uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1).squeeze(0).cpu()
+		near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1).squeeze(0).cpu()
+		np.save(os.path.join(uniform_dir, f'Sample {i}.npy'), uniform_samples.cpu())
+		np.save(os.path.join(near_surface_dir, f'Sample {i}.npy'), near_surface_samples.cpu())
+		np.save(os.path.join(surface_dir, f'Sample {i}.npy'), surface_points.cpu())
 
 
 def main():

@@ -249,11 +249,15 @@ def sample_points_csg_surface(csg_model, resolution, num_sdf_samples):
 	torch.Tensor
 		Tensor of size (B, N, 3) where B=`csg_model`.batch_size and N=`num_sdf_samples`.
 		Each point in the tensor is on the surface of the given CSG model.
+		If no points could be extracted, return None.
 
 	"""
 	# Extract meshes from CSG models
 	mesh_list = csg_to_mesh(csg_model, resolution)
 	surface_points_list = []
+
+	if mesh_list == None:
+		return None
 
 	# Sample point clouds from meshes
 	for mesh in mesh_list:
