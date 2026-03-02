@@ -29,14 +29,15 @@ def options():
 
 	# Data settings
 	data_group.add_argument('--output_dir', type=str, default='./data/output', help='Output directory to store SDF samples')
-	data_group.add_argument('--num_samples', type=int, default=10000, help='Number of SDF samples to compute')
-	data_group.add_argument('--num_sample_points', type=int, default=10000, help='Number of points to sample for each SDF')
+	data_group.add_argument('--num_shape_samples', type=int, default=10000, help='Number of synthetic shapes to generate')
+	data_group.add_argument('--num_sdf_samples', type=int, default=4096, help='Number of uniform and near-surface SDF samples to generate')
+	data_group.add_argument('--num_surface_samples', type=int, default=30000, help='Number of surface samples to generate for accuracy computation')
+	data_group.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be > 0)')
+	data_group.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing surface samples.')
 	data_group.add_argument('--overwrite', default=False, action='store_true', help='Overwrite existing files in output directory')
 
 	# Shape generation parser
 	gen_group.add_argument('--num_shapes', type=int, default=1, help='Number of shapes to generate per CSG model')
-	gen_group.add_argument('--surface_uniform_ratio', type=float, default=0.5, help='Percentage of near-surface samples to select. 0 for only uniform samples and 1 for only near-surface samples')
-	gen_group.add_argument('--sample_dist', type=float, default=0.1, help='Maximum distance to object surface for near-surface sampling (must be >0)')
 	gen_group.add_argument('--min_scale', type=float, default=0.2, help='Lower bound on random scale value')
 	gen_group.add_argument('--max_scale', type=float, default=0.8, help='Upper bound on random scale value')
 	gen_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
@@ -120,7 +121,7 @@ def generate_dataset(args):
 	create_output_dir(args.output_dir, args.overwrite)
 	(uniform_dir, surface_dir, near_surface_dir) = init_dataset(args.output_dir, args.overwrite, args)
 
-	for i in tqdm(range(args.num_samples)):
+	for i in tqdm(range(args.num_shape_samples)):
 		device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 		csg_model = CSGModel(1, device)
 
@@ -130,9 +131,9 @@ def generate_dataset(args):
 			generate_shape(csg_model, is_first_shape, args.no_blending, args.min_blending, args.max_blending, args.no_roundness, args.min_roundness, args.max_roundness, args.min_scale, args.max_scale)
 
 		# Sample model
-		(uniform_points, uniform_distances) = sampler_utils.sample_sdf_from_csg_uniform_sphere(csg_model, args.num_samples)
-		(near_surface_points, near_surface_distances) = sampler_utils.sample_sdf_near_csg_surface(csg_model, args.num_samples, args.sample_dist)
-		surface_points = sampler_utils.sample_points_csg_surface(csg_model, 64, 1000)
+		(uniform_points, uniform_distances) = sampler_utils.sample_sdf_from_csg_uniform_sphere(csg_model, args.num_sdf_samples)
+		(near_surface_points, near_surface_distances) = sampler_utils.sample_sdf_near_csg_surface(csg_model, args.num_sdf_samples, args.sample_dist)
+		surface_points = sampler_utils.sample_points_csg_surface(csg_model, args.recon_resolution, args.num_surface_samples)
 
 		# Re-generate sample if there are no samples
 		if surface_points is None:
@@ -150,7 +151,7 @@ def generate_dataset(args):
 def main():
 	args = options()
 	print('')
-	print(f'Processing {args.num_samples} samples...')
+	print(f'Processing {args.num_shape_samples} samples...')
 	generate_dataset(args)
 
 
