@@ -145,9 +145,10 @@ def generate_dataset(args):
 		# Save model samples to file
 		uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1).squeeze(0).cpu()
 		near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1).squeeze(0).cpu()
-		np.save(os.path.join(uniform_dir, file_name), uniform_samples.cpu())
-		np.save(os.path.join(near_surface_dir, file_name), near_surface_samples.cpu())
-		np.save(os.path.join(surface_dir, file_name), surface_points.cpu())
+		surface_points = surface_points.squeeze(0).cpu()
+		np.save(os.path.join(uniform_dir, file_name), uniform_samples)
+		np.save(os.path.join(near_surface_dir, file_name), near_surface_samples)
+		np.save(os.path.join(surface_dir, file_name), surface_points)
 
 		output_file_name_list.append(file_name)
 
