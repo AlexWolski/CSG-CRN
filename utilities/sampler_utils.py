@@ -230,7 +230,7 @@ def sample_from_mesh(mesh, num_uniform_samples, num_surface_samples, num_near_su
 	)
 
 
-def sample_points_csg_surface(csg_model, resolution, num_sdf_samples):
+def sample_points_csg_surface(csg_model, resolution, num_sdf_samples, out_mesh_list=None):
 	"""
 	Uniformly sample points on the surface of a batch of CSG models.
 	Uses the marching cubes algorithm to extract an isosurface mesh, then uniformly samples the mesh faces.
@@ -243,6 +243,8 @@ def sample_points_csg_surface(csg_model, resolution, num_sdf_samples):
 		Voxel resolution to use for the marching cubes algorithm.
 	num_sdf_samples : int
 		Number of surface samples to generate.
+	out_mesh_list : []
+		Optional List parameter that gets populated with the mesh files generated from the CSG Model.
 
 	Returns
 	-------
@@ -264,7 +266,9 @@ def sample_points_csg_surface(csg_model, resolution, num_sdf_samples):
 		surface_points = sample_points_mesh_surface(mesh, num_sdf_samples).to(csg_model.device)
 		surface_points_list.append(surface_points)
 
-	# Compute average Chamfer distance
+		if out_mesh_list is not None:
+			out_mesh_list.append(mesh)
+
 	return torch.stack(surface_points_list).detach()
 
 

@@ -118,7 +118,9 @@ def generate_shape(csg_model, is_first_shape, no_blending, min_blending, max_ble
 
 # Generate a synthetic dataset of CSG model samples with random shapes and operations
 def generate_dataset(args):
+	mesh_dir = os.path.join(args.output_dir, "mesh")
 	create_output_dir(args.output_dir, args.overwrite)
+	create_output_dir(mesh_dir, args.overwrite)
 	(uniform_dir, surface_dir, near_surface_dir) = init_dataset(args.output_dir, args.overwrite, args)
 
 	output_file_name_list = []
@@ -128,6 +130,8 @@ def generate_dataset(args):
 	for output_shape_index in tqdm(range(args.num_shape_samples)):
 		surface_points = None
 		file_name = f'Sample {output_shape_index}.npy'
+		mesh_file_name = f'Sample {output_shape_index}.obj'
+		mesh_list = []
 
 		while surface_points is None:
 			csg_model = CSGModel(1, device)
@@ -140,7 +144,7 @@ def generate_dataset(args):
 			# Sample model
 			(uniform_points, uniform_distances) = sampler_utils.sample_sdf_from_csg_uniform_sphere(csg_model, args.num_sdf_samples)
 			(near_surface_points, near_surface_distances) = sampler_utils.sample_sdf_near_csg_surface(csg_model, args.num_sdf_samples, args.sample_dist)
-			surface_points = sampler_utils.sample_points_csg_surface(csg_model, args.recon_resolution, args.num_surface_samples)
+			surface_points = sampler_utils.sample_points_csg_surface(csg_model, args.recon_resolution, args.num_surface_samples, out_mesh_list=mesh_list)
 
 		# Save model samples to file
 		uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1).squeeze(0).cpu()
@@ -149,6 +153,7 @@ def generate_dataset(args):
 		np.save(os.path.join(uniform_dir, file_name), uniform_samples)
 		np.save(os.path.join(near_surface_dir, file_name), near_surface_samples)
 		np.save(os.path.join(surface_dir, file_name), surface_points)
+		mesh_list[0].export(os.path.join(mesh_dir, mesh_file_name))
 
 		output_file_name_list.append(file_name)
 
