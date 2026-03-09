@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from utilities.csg_model import CSGModel
+from utilities.csg_model import add_sdf, CSGModel
 
 
 # Tune Leaky ReLU slope for predicting negative values
@@ -116,6 +116,14 @@ class PrimitiveRegressor(nn.Module):
 		self.operation_weight = operation_weight
 
 
+	# Generate an operation tensor of size (BxO) where B is the batch size and O is the number of operations supported by the CSG model.
+	def get_add_op_tensor(self, batch_size, device):
+		add_op_index = CSGModel.operation_functions.index(add_sdf)
+		add_op_tensor = torch.zeros((batch_size, CSGModel.num_operations), device=device)
+		add_op_tensor[:,add_op_index] = 1
+		return add_op_tensor
+
+
 	# Scale operation vector
 	def scale_operations(self, operation):
 		if self.scale_op_id is None or self.replace_op_id is None or self.operation_weight is None:
@@ -128,8 +136,10 @@ class PrimitiveRegressor(nn.Module):
 
 
 	def forward(self, X, first_prim):
+		batch_size = X.size(dim=0)
+
 		shape = self.shape.forward(X)
-		operation = self.operation.forward(X)
+		operation = self.operation.forward(X) if not first_prim else self.get_add_op_tensor(batch_size, X.get_device())
 		translation = self.translation.forward(X)
 		rotation = self.rotation.forward(X)
 		scale = self.scale.forward(X)
@@ -156,6 +166,6 @@ def test():
 	feature_size = 256
 	inputs = torch.autograd.Variable(torch.rand(batch_size, feature_size))
 
-	network = PrimitiveRegressor(REGRESSOR_LAYER_SIZES, 3, 2)
+	network = PrimitiveRegressor([64], 3, 2)
 	outputs = network(inputs)
 	print('Combined Output Size:', len(outputs))

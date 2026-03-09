@@ -51,10 +51,11 @@ class CSG_CRN(nn.Module):
 
 	def forward(self, target_near_surface_samples, target_uniform_samples, csg_model=None):
 		batch_size = target_near_surface_samples.size(dim=0)
-		first_prim = csg_model is None
 
-		if first_prim:
+		if csg_model is None:
 			csg_model = CSGModel(batch_size, device=self.device)
+
+		first_prim = csg_model.num_commands == 0
 
 		# When using Unified sampling, generate near-surface samples by filtering by distance to both the target and reconstruction shapes.
 		if self.input_sampling_method == UNIFIED_SAMPLING:
