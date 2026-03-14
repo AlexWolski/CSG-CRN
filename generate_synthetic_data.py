@@ -120,8 +120,8 @@ def generate_shape(csg_model, is_first_shape, no_blending, min_blending, max_ble
 def generate_dataset(args):
 	mesh_dir = os.path.join(args.output_dir, "mesh")
 	create_output_dir(args.output_dir, args.overwrite)
-	create_output_dir(mesh_dir, args.overwrite)
-	(uniform_dir, surface_dir, near_surface_dir) = init_dataset(args.output_dir, args.overwrite, args)
+	create_output_dir(mesh_dir, allow_existing_dir=True)
+	(uniform_dir, surface_dir, near_surface_dir) = init_dataset(args.output_dir, True, args)
 
 	output_file_name_list = []
 	device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
