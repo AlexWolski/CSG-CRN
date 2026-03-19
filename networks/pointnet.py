@@ -8,7 +8,8 @@ import numpy as np
 import torch.nn.functional as F
 
 
-POINTNET_FEAT_OUTPUT_SIZE = 1024
+POINTNET_CONV_LAYER_SIZES = [64, 128, 1024]
+POINTNET_FEAT_OUTPUT_SIZE = POINTNET_CONV_LAYER_SIZES[-1]
 TRANS_CONV_LAYER_SIZES = [64, 128, 1024]
 TRANS_FC_LAYER_SIZES = [512, 256]
 
@@ -87,24 +88,14 @@ class STNkd(nn.Module):
 
 
 class PointNetfeat(nn.Module):
-	def __init__(self, k=4, global_feat=True, input_transform=False, feature_transform=False, no_batch_norm=False):
+	def __init__(self, k=6, global_feat=True, input_transform=False, feature_transform=False, no_batch_norm=False):
 		super(PointNetfeat, self).__init__()
-		self.conv1 = torch.nn.Conv1d(k, 64, 1)
-		self.conv2 = torch.nn.Conv1d(64, 128, 1)
-		self.conv3 = torch.nn.Conv1d(128, 1024, 1)
-
-		if no_batch_norm:
-			self.bn1 = nn.Identity()
-			self.bn2 = nn.Identity()
-			self.bn3 = nn.Identity()
-		else:
-			self.bn1 = nn.BatchNorm1d(64)
-			self.bn2 = nn.BatchNorm1d(128)
-			self.bn3 = nn.BatchNorm1d(1024)
-
+		self.conv_layer_sizes = [k] + POINTNET_CONV_LAYER_SIZES
 		self.global_feat = global_feat
 		self.input_transform = input_transform
 		self.feature_transform = feature_transform
+		self.no_batch_norm = no_batch_norm
+		self._init_layers()
 
 		if self.input_transform:
 			self.stn = STNkd(k=k, no_batch_norm=no_batch_norm)
@@ -112,38 +103,67 @@ class PointNetfeat(nn.Module):
 		if self.feature_transform:
 			self.fstn = STNkd(k=64, no_batch_norm=no_batch_norm)
 
-	def forward(self, x):
-		n_pts = x.size()[2]
+
+	def _init_layers(self):
+		self.conv_list = nn.ModuleList()
+		self.bn_list = nn.ModuleList() if not self.no_batch_norm else None
+		self.relu = nn.ReLU()
+
+		# Initialize convolutional and batch normalization layers
+		for i in range(len(self.conv_layer_sizes) - 1):
+			prev_layer_size = self.conv_layer_sizes[i]
+			curr_layer_size = self.conv_layer_sizes[i+1]
+			self.conv_list.append(torch.nn.Conv1d(prev_layer_size, curr_layer_size, 1))
+
+			if not self.no_batch_norm:
+				self.bn_list.append(nn.BatchNorm1d(curr_layer_size))
+
+
+	def forward(self, X):
+		n_pts = X.size()[2]
 
 		if self.input_transform:
-			trans_input = self.stn(x)
-			x = x.transpose(2, 1)
-			x = torch.bmm(x, trans_input)
-			x = x.transpose(2, 1)
+			trans_input = self.stn(X)
+			X = X.transpose(2, 1)
+			X = torch.bmm(X, trans_input)
+			X = X.transpose(2, 1)
 		else:
 			trans_input = None
 
-		x = F.relu(self.bn1(self.conv1(x)))
+		# First convolutional layer
+		if len(self.conv_list):
+			bn_layer = self.bn_list[0] if not self.no_batch_norm else nn.Identity()
+			X = F.relu(bn_layer(self.conv_list[0](X)))
 
 		if self.feature_transform:
-			trans_feat = self.fstn(x)
-			x = x.transpose(2,1)
-			x = torch.bmm(x, trans_feat)
-			x = x.transpose(2,1)
+			trans_feat = self.fstn(X)
+			X = X.transpose(2,1)
+			X = torch.bmm(X, trans_feat)
+			X = X.transpose(2,1)
 		else:
 			trans_feat = None
 
-		pointfeat = x
-		x = F.relu(self.bn2(self.conv2(x)))
-		x = self.bn3(self.conv3(x))
-		x = torch.max(x, 2, keepdim=True)[0]
-		x = x.view(-1, 1024)
+		pointfeat = X
+		bn_index = 1
+
+		# Middle convolutional layers
+		for conv_layer in self.conv_list[1:-1]:
+			bn_layer = self.bn_list[bn_index] if not self.no_batch_norm else nn.Identity()
+			bn_index += 1
+			X = self.relu(bn_layer(conv_layer(X)))
+
+		# Last convolutional layer
+		if len(self.conv_list):
+			X = self.bn_list[-1](self.conv_list[-1](X))
+
+		X = torch.max(X, 2, keepdim=True)[0]
+		X = X.view(-1, 1024)
 
 		if self.global_feat:
-			return x, trans_input, trans_feat
+			return X, trans_input, trans_feat
 		else:
-			x = x.view(-1, 1024, 1).repeat(1, 1, n_pts)
-			return torch.cat([x, pointfeat], 1), trans_input, trans_feat
+			X = X.view(-1, 1024, 1).repeat(1, 1, n_pts)
+			return torch.cat([X, pointfeat], 1), trans_input, trans_feat
 
 
 def feature_transform_regularizer(trans):
