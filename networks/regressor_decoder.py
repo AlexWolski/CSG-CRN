@@ -23,7 +23,7 @@ class RegressorNetwork(nn.Module):
 		self.activ_func_args = activ_func_args
 		self.norm_func = norm_func
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
-		self.init_layers(no_batch_norm);
+		self.init_layers(no_batch_norm)
 
 
 	def init_layers(self, no_batch_norm=False):
