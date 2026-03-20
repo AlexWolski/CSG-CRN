@@ -1,7 +1,7 @@
 import copy
 import torch
 import torch.nn as nn
-from networks.pointnet import PointNetfeat, POINTNET_FEAT_OUTPUT_SIZE
+from networks.pointnet import PointNetfeat
 from networks.regressor_decoder import PrimitiveRegressor
 from utilities.constants import NEAR_SURFACE_SAMPLE_FACTOR, UNIFIED_SAMPLING
 from utilities.csg_model import CSGModel, subtract_sdf, smooth_max
@@ -11,7 +11,7 @@ from utilities.sampler_utils import select_near_surface_samples
 class CSG_CRN(nn.Module):
 	def __init__(
 			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, input_sampling_method, surface_uniform_ratio, device,
-			decoder_layers=[], extended_input=False, predict_blending=True, predict_roundness=True, no_batch_norm=False):
+			encoder_layers, encoder_trans_conv_layers, encoder_trans_fc_layers, decoder_layers, extended_input=False, predict_blending=True, predict_roundness=True, no_batch_norm=False):
 		super(CSG_CRN, self).__init__()
 
 		self.num_prims = num_prims
@@ -29,13 +29,25 @@ class CSG_CRN(nn.Module):
 		self.no_batch_norm = no_batch_norm
 
 		num_feature_dims = 6 if self.extended_input else 4
-		self.point_encoder = PointNetfeat(k=num_feature_dims, global_feat=True, input_transform=True, feature_transform=True, no_batch_norm=no_batch_norm)
 		self.regressor_decoder_list = nn.ModuleList()
+
+		self.point_encoder = PointNetfeat(
+			k=num_feature_dims,
+			conv_layer_sizes=encoder_layers,
+			trans_conv_layer_sizes=encoder_trans_conv_layers,
+			trans_fc_layer_sizes=encoder_trans_fc_layers,
+			global_feat=True,
+			input_transform=True,
+			feature_transform=True,
+			no_batch_norm=no_batch_norm
+		)
+
+		pointnet_output_size = encoder_layers[-1]
 
 		# Initialize a separate decoder for each primitive
 		for i in range(self.num_prims):
 			regressor_decoder = PrimitiveRegressor(
-				POINTNET_FEAT_OUTPUT_SIZE,
+				pointnet_output_size,
 				self.num_shapes,
 				self.num_operations,
 				layer_sizes=self.decoder_layers,
