@@ -231,7 +231,7 @@ def get_device(device=None):
 def process_continue(args):
 	if getattr(args, 'continue'):
 		# Get output directory from argumnets
-		(args.output_dir, args.checkpoint_dir, args.cascade_models_dir) = create_out_dir(args)
+		(args.output_dir, args.checkpoint_dir, args.cascade_models_dir) = create_out_dir(args, exist_ok=True)
 
 		# Check that the directory exists
 		if not os.path.exists(args.output_dir):

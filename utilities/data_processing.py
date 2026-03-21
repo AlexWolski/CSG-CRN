@@ -33,14 +33,14 @@ def get_out_dir(args):
 
 
 # Create output directory for trained model and temporary files
-def create_out_dir(args):
+def create_out_dir(args, exist_ok=False):
 	# Use parent directory name as dataset name
 	output_dir = get_out_dir(args)
 
 	# Create output directory
 	if not os.path.exists(output_dir):
 		os.makedirs(output_dir)
-	elif len(os.listdir(output_dir)) != 0 and not args.overwrite:
+	elif len(os.listdir(output_dir)) != 0 and not args.overwrite and not exist_ok:
 		err_msg = f'The output folder "{output_dir}" is already populated. Choose another directory, use the --overwrite option, or use the --resume option.'
 		raise Exception(err_msg)
 
