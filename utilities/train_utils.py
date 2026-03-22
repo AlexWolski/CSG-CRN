@@ -180,7 +180,7 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 
 			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
-			total_chamfer_dist += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist)
+			total_chamfer_dist += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist).item()
 
 	# Return model to its previous mode
 	model.train() if was_training else model.eval()
