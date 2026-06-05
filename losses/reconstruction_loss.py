@@ -14,9 +14,10 @@ class ReconstructionLoss(nn.Module):
 	L1_LOSS_FUNC = "L1"
 	MSE_LOSS_FUNC = "MSE"
 	LOG_LOSS_FUNC = "LOG"
+	SIG_LOSS_FUNC = "SIG"
 	OCC_LOSS_FUNC = "OCC"
 	CHAMFER_LOSS_FUNC = "CHAMFER"
-	loss_metrics = [L1_LOSS_FUNC, MSE_LOSS_FUNC, LOG_LOSS_FUNC, OCC_LOSS_FUNC, CHAMFER_LOSS_FUNC]
+	loss_metrics = [L1_LOSS_FUNC, MSE_LOSS_FUNC, LOG_LOSS_FUNC, SIG_LOSS_FUNC, OCC_LOSS_FUNC, CHAMFER_LOSS_FUNC]
 
 
 	def __init__(self, loss_metric, clamp_dist=None):
@@ -33,6 +34,8 @@ class ReconstructionLoss(nn.Module):
 				self.loss_func = torch.nn.MSELoss(reduction='none')
 			case self.LOG_LOSS_FUNC:
 				self.loss_func = LogLoss(reduction='none')
+			case self.SIG_LOSS_FUNC:
+				self.loss_func = SigLoss(reduction='none')
 			case self.OCC_LOSS_FUNC:
 				self.loss_func = OccLoss(reduction='none')
 			case self.CHAMFER_LOSS_FUNC:
@@ -104,7 +107,36 @@ class LogLoss(_Loss):
 				return torch.mean(log_loss)
 
 
+# Compute loss on the number of samples that are within a narrow margin of the target sample
+class SigLoss(_Loss):
+	def __init__(self, reduction: str = 'mean'):
+		super(SigLoss, self).__init__(None, None, reduction)
+
+
+	def forward(self, input: Tensor, target: Tensor) -> Tensor:
+		return SigLoss.sigmoid_loss(input, target, self.reduction)
+	
+
+	def sigmoid_loss(target_sdf, predicted_sdf, reduction='mean'):
+		SIGMOID_EXPONENT = -500
+		X_OFFSET = 5
+
+		expanded_target, expanded_predicted = torch.broadcast_tensors(target_sdf, predicted_sdf)
+		absolute_error = torch.abs(expanded_target - predicted_sdf)
+		sig_loss = 1 / (1 + torch.exp(SIGMOID_EXPONENT * absolute_error + X_OFFSET))
+		sig_l1_loss = (sig_loss + absolute_error) / 2
+
+		match reduction:
+			case 'none':
+				return sig_l1_loss
+			case 'sum':
+				return torch.sum(sig_l1_loss)
+			case 'mean':
+				return torch.mean(sig_l1_loss)
+
+
 class OccLoss(_Loss):
+
 	def __init__(self, reduction: str = 'mean'):
 		super(OccLoss, self).__init__(None, None, reduction)
 
@@ -133,6 +165,7 @@ class OccLoss(_Loss):
 
 		# Compute binary cross entropy of occupancy values.
 		return nn.functional.binary_cross_entropy(predicted_occupancy, target_occupancy, reduction=reduction)
+
 
 
 # Chamfer distance loss function
