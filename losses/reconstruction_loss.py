@@ -68,15 +68,14 @@ class ReconstructionLoss(nn.Module):
 
 		# Clamp the predicted SDF values to have a maximum difference of clamp_dist*2
 		if self.clamp_dist != None:
-			clamped_target_sdf = torch.clamp(target_sdf, min=target_sdf-self.clamp_dist, max=target_sdf+self.clamp_dist)
-			clamped_predicted_sdf = torch.clamp(predicted_sdf, min=predicted_sdf-self.clamp_dist, max=predicted_sdf+self.clamp_dist)
+			clamped_target_sdf = torch.clamp(target_sdf, min=-self.clamp_dist, max=self.clamp_dist)
+			clamped_predicted_sdf = torch.clamp(predicted_sdf, min=-self.clamp_dist, max=self.clamp_dist)
 		else:
 			clamped_target_sdf = target_sdf
 			clamped_predicted_sdf = predicted_sdf
 
 		# Compute the loss
 		return (clamped_target_sdf, clamped_predicted_sdf)
-		return self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
 
 
 # Log loss function roughly intersecting (0,0)
