@@ -4,7 +4,7 @@ import torch
 import math
 from torch.distributions.uniform import Uniform
 from utilities.csg_to_mesh import csg_to_mesh, csg_to_mesh_differentiable
-from utilities.csg_model import MIN_BOUND, MAX_BOUND
+from utilities.csg_model import MIN_BOUND, MAX_BOUND, add_sdf
 
 
 def sample_uniform_points_cube(num_points, side_length=2, batch_size=None):
@@ -507,7 +507,8 @@ def select_near_surface_samples(target_uniform_samples, num_near_surface_samples
 	target_distances = target_uniform_samples[..., 3]
 
 	# Compute the reconstruction shape distances and apply a union with the target shape distances.
-	combined_distances = csg_model.sample_csg(target_points, initial_distances=target_distances)
+	recon_distances = csg_model.sample_csg(target_points)
+	combined_distances = add_sdf(target_distances, recon_distances)
 	combined_distances = target_distances if combined_distances == None else combined_distances
 	(_, near_surface_points, _, near_surface_indices) = select_nearest_samples(target_points, combined_distances, num_near_surface_samples)
 
