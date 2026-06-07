@@ -485,6 +485,7 @@ def select_near_surface_samples(target_uniform_samples, num_near_surface_samples
 	"""
 	Select samples from the given SDF point cloud that are near the surface of both the target and reconstruction shapes.
 	No minimum sample distance is guaranteed. The uniform samples are binned according to their distance and the closest samples are returned.
+	A subset of `target_uniform_samples` is returned with the original distance values.
 	
 	Parameters
 	----------
@@ -499,6 +500,7 @@ def select_near_surface_samples(target_uniform_samples, num_near_surface_samples
 	-------
 	torch.Tensor
 		Tensor of size (B, `num_near_surface_samples`, 4) containing the filtered set of samples closest to either the target or reconstruction shapes.
+		The distance values are the same as the values in `target_uniform_samples`.
 
 	"""
 	target_points = target_uniform_samples[..., :3]
