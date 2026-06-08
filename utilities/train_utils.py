@@ -127,10 +127,15 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 					with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
 						csg_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), csg_model)
 
+					# Compute the loss for this cascade.
 					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+					# Backpropagate through each cascade separately but do not optimize weightsyet.
+					scaler.scale(cascade_loss).backward()
 
-					# Back propagate through each cascade separately
-					_backpropagate(scaler, optimizer, cascade_loss)
+				# Update model parameters after all forward passes to prevent earlier cascades afecting later cascades.
+				scaler.step(optimizer)
+				optimizer.zero_grad(set_to_none=True)
+				scaler.update()
 
 			# Update model parameters after all cascade iterations
 			else:
