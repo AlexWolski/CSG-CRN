@@ -166,13 +166,16 @@ def _backpropagate(scaler, optimizer, batch_loss):
 	scaler.update()
 
 
-def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list=None):
+def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list=None, init_model=None):
 	total_val_loss = 0
 	total_chamfer_dist = 0
 
 	# Set the model to Eval mode as to not modify the BatchNorm layer
 	was_training = model.training
 	model.eval()
+
+	if init_model != None:
+		init_model.eval()
 
 	with torch.no_grad():
 		for data_sample in val_loader:
@@ -184,10 +187,16 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 				surface_samples
 			) = data_sample
 
+			# If an initial CSGCRN model exists, use that to initialize the CSG model
+			if init_model != None:
+				csg_model = init_model.forward_cascade(uniform_input_samples, near_surface_input_samples, 0)
+			else:
+				csg_model = None
+
 			if args.cascade_training_mode == SEPARATE_PARAMS:
 				csg_model = model.forward_separate_cascades(uniform_input_samples, near_surface_input_samples, prev_cascades_list)
 			else:
-				csg_model = model.forward_cascade(uniform_input_samples, near_surface_input_samples, num_cascades)
+				csg_model = model.forward_cascade(uniform_input_samples, near_surface_input_samples, num_cascades, csg_model)
 
 			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
@@ -304,7 +313,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model)
-		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list)
+		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list, init_model)
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results

@@ -138,18 +138,15 @@ class CSG_CRN(nn.Module):
 		return torch.cat((target_input_points, missing_volume_sdf, filled_volume_sdf, excess_volume_sdf), -1)
 
 
-	def forward_cascade(self, target_near_surface_samples, target_uniform_samples, num_cascades):
-		csg_model = self.forward(target_near_surface_samples, target_uniform_samples)
-
-		for i in range(num_cascades):
+	def forward_cascade(self, target_near_surface_samples, target_uniform_samples, num_cascades, csg_model=None):
+		for i in range(num_cascades+1):
 			csg_model = self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
 
 		return csg_model
 
 
 	# Train only the current cascade. Preivous cascades have trained parameters accessed through the `prev_cascades_list` parameter.
-	def forward_separate_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list):
-		csg_model = None
+	def forward_separate_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model=None):
 		current_params = None
 		is_training = self.training
 
