@@ -1,6 +1,6 @@
 import os
 import yaml
-from utilities.constants import SEPARATE_PARAMS, SHARED_PARAMS
+from utilities.constants import INIT_RECON, SEPARATE_PARAMS, SHARED_PARAMS
 
 # Subdirectory names
 UNIFORM_FOLDER = 'uniform'
@@ -48,7 +48,7 @@ def create_out_dir(args, exist_ok=False):
 	cascade_models_dir = None
 
 	# Create checkpoint folder
-	if args.cascade_training_mode == SHARED_PARAMS:
+	if args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
 		checkpoint_dir = os.path.join(output_dir, 'checkpoints')
 		os.makedirs(checkpoint_dir, exist_ok=True)
 	# Create trained cascade models folder

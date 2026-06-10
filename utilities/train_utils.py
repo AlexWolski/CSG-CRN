@@ -1,3 +1,4 @@
+import copy
 import os
 import torch
 import shutil
@@ -13,7 +14,7 @@ from tqdm import tqdm
 
 from networks.csg_crn import CSG_CRN
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
-from utilities.constants import SHARED_PARAMS, SEPARATE_PARAMS
+from utilities.constants import SHARED_PARAMS, SEPARATE_PARAMS, INIT_RECON
 from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
 from utilities.data_processing import get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE
 from utilities.data_augmentation import RotationAxis
@@ -96,7 +97,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None):
+def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None, init_model=None):
 	total_train_loss = 0
 
 	for data_sample in tqdm(train_loader, desc=desc):
@@ -114,12 +115,17 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 			_backpropagate(scaler, optimizer, cascade_loss)
-		elif args.cascade_training_mode == SHARED_PARAMS:
+		elif args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
 			# Update model parameters after each refinement step
 			if not args.backprop_all_cascades:
 				csg_model = None
+				num_train_loops = num_cascades + 1
 
-				for i in range(num_cascades + 1):
+				# If a trained initial model is available, use it to generate the first reconstruction.
+				if init_model != None:
+					csg_model = init_model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), None).detach()
+
+				for i in range(num_train_loops):
 					if csg_model != None:
 						csg_model = csg_model.detach()
 
@@ -129,7 +135,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 					# Compute the loss for this cascade.
 					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
-					# Backpropagate through each cascade separately but do not optimize weightsyet.
+					# Backpropagate through each cascade separately but do not optimize weights yet.
 					scaler.scale(cascade_loss).backward()
 
 				# Update model parameters after all forward passes to prevent earlier cascades afecting later cascades.
@@ -196,10 +202,11 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 
 
 # Save the checkpoint of a model with shared parameters for all cascades
-def save_shared_model_checkpoint(model, args, data_splits, training_logger):
+def save_shared_model_checkpoint(model, args, data_splits, training_logger, init_model=None):
 	checkpoint_path = os.path.join(args.checkpoint_dir, f'epoch_{training_logger.get_last_epoch()}.pt')
-	save_model(model, args, data_splits, training_logger.get_results(), checkpoint_path)
+	save_model(model, args, data_splits, training_logger.get_results(), checkpoint_path, init_model=init_model)
 	print(f'Checkpoint saved to: {checkpoint_path}\n')
+	return checkpoint_path
 
 
 # Save a model trained on a specific cascade
@@ -219,15 +226,14 @@ def save_separate_trained(model, args, data_splits, training_logger, prev_cascad
 
 	print(f'Cascade {cascade_index} model saved to: {cascade_path}\n')
 
-	# Return the trained model parameters for the previous cascade
-	(_, prev_cascade_params) = load_saved_settings(cascade_path)
-	return prev_cascade_params
+	return cascade_path
 
 
 # Save the model and settings to file
-def save_model(model, args, data_splits, training_results, model_path, prev_cascades_list=None):
+def save_model(model, args, data_splits, training_results, model_path, prev_cascades_list=None, init_model=None):
 	torch.save({
 		'model': model.state_dict(),
+		'init_model': init_model.state_dict() if init_model != None else None,
 		'prev_cascades_list': prev_cascades_list,
 		'args': args,
 		'data_dir': args.data_dir,
@@ -248,7 +254,11 @@ def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch)
 def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device):
 	model.train(True)
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
+
+	# List of trained models for all previous cascades when using SEPARATE training mode.
 	prev_cascades_list = []
+	# Trained model for the first reconstruction output when using INIT_RECOND training mode.
+	init_model = None
 
 	# Initalize training time ellapsed counter
 	saved_time_ellapsed = training_logger.get_last_time_ellapsed()
@@ -257,7 +267,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	# Initialize early stopper
 	trained_model_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
 	latest_model_path = os.path.join(args.output_dir, LATEST_MODEL_FILE)
-	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path, prev_cascades_list)
+	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path, prev_cascades_list, init_model)
 	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
 
 	# Train until model stops improving or a maximum number of epochs is reached
@@ -273,18 +283,27 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
 		# When using the same model parameters for all cascades, use the schedule to control the number of cascades
-		if args.cascade_training_mode == SHARED_PARAMS:
-			# Schedule number of cascades
-			if args.no_schedule_cascades:
+		if args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
+			# When training the initial model, always set the number of cascades to 0
+			if args.cascade_training_mode == INIT_RECON and init_model == None:
+				num_cascades = 0
+			# When scheduling is disabled, all epochs are trained with all cascades enabled
+			elif args.no_schedule_cascades:
 				num_cascades = args.num_cascades
+			# Determine number of cascades to train according to scheduler
 			else:
 				cascade_scheduler_current = max(epoch - args.sub_schedule_start_epoch, 0) if args.schedule_sub_weight else epoch
 				num_cascades = cascade_scheduler_current // args.cascade_schedule_epochs
+				
+				# If the initial model is trained, add an additional cascade to compensate
+				if init_model != None:
+					num_cascades += 1
+
 				num_cascades = min(num_cascades, args.num_cascades)
 
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
-		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list)
+		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model)
 		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list)
 		learning_rate = optimizer.param_groups[0]['lr']
 
@@ -294,7 +313,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		training_logger.add_result(epoch, num_cascades, train_loss, val_loss, chamfer_dist, learning_rate, time_ellapsed)
 
 		weight_scheduling_in_progress = args.schedule_sub_weight and args.sub_weight < 1
-		cascade_scheduling_in_progress = not args.no_schedule_cascades and num_cascades < args.num_cascades
+		initial_training_in_progress = args.cascade_training_mode == INIT_RECON and init_model == None
+		cascade_scheduling_in_progress = not args.no_schedule_cascades and not initial_training_in_progress and num_cascades < args.num_cascades
 
 		# Update learning rate scheduler and early stopping
 		if not weight_scheduling_in_progress and not cascade_scheduling_in_progress:
@@ -321,23 +341,44 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			print(f"LR Patience:        {scheduler.num_bad_epochs}/{scheduler.patience}")
 			print(f"Early Stop:         {early_stopping.counter}/{early_stopping.patience}")
 
+		# Initial-Reconstruction model training status
+		if args.cascade_training_mode == INIT_RECON:
+			training_model = "Initial" if init_model == None else "Reconstruction"
+			print(f"Training Model:     {training_model}")
+
 		print("Ellapsed Time:      {}:{:02d}:{:02d}".format(time_ellapsed.seconds // 3600, (time_ellapsed.seconds // 60) % 60, time_ellapsed.seconds % 60))
 		print()
 
 		# Check for early stopping
 		if early_stopping.early_stop:
 			separate_params_training = args.cascade_training_mode == SEPARATE_PARAMS
+			init_model_training = args.cascade_training_mode == INIT_RECON and num_cascades == 0
 			last_cascade = num_cascades >= args.num_cascades
 
 			# When training cascades separately and training completes,
 			# save the model parameters and reset the training management
 			if separate_params_training:
-				cascade_params = save_separate_trained(model, args, data_splits, training_logger, prev_cascades_list)
+				# Save the model parameters for the current cascade
+				cascade_path = save_separate_trained(model, args, data_splits, training_logger, prev_cascades_list)
+				# Load the pickled model parameters for this cascade from disk and save them in memory
+				(_, cascade_params) = load_saved_settings(cascade_path)
 				prev_cascades_list.append(cascade_params)
+
 				early_stopping.reset()
 				optimizer = init_optimizer(model, args.init_lr)
 				scheduler = init_scheduler(optimizer, args)
 				num_cascades += 1
+
+			# When using the INIT_RECON training mode, save the first trained cascade model and reset early stopping
+			if init_model_training:
+				init_model = copy.deepcopy(model)
+				# Early stop, optimization, and scheduling runs once for the initial model, then once for the refinement model
+				early_stopping.reset()
+				optimizer = init_optimizer(model, args.init_lr)
+				scheduler = init_scheduler(optimizer, args)
+
+				# Start cascade scheduling after the initial model is trained
+				args.sub_schedule_start_epoch = epoch
 
 			# Training is complete when the model stops improving on the last cascade
 			if last_cascade:
@@ -345,11 +386,11 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 				break
 
 		# Save checkpoint parameters
-		if epoch % args.checkpoint_freq == 0 and args.cascade_training_mode == SHARED_PARAMS:
-				save_shared_model_checkpoint(model, args, data_splits, training_logger)
+		if epoch % args.checkpoint_freq == 0 and args.cascade_training_mode != SEPARATE_PARAMS:
+			save_shared_model_checkpoint(model, args, data_splits, training_logger, init_model)
 
 		# Save latest model parameters
-		save_model(model, args, data_splits, training_logger.get_results(), latest_model_path, prev_cascades_list)
+		save_model(model, args, data_splits, training_logger.get_results(), latest_model_path, prev_cascades_list, init_model)
 
 	print('\nTraining complete! Model parameters saved to:')
 	print(trained_model_path)

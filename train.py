@@ -108,7 +108,7 @@ def options():
 	if args.cascade_schedule_epochs <= 0:
 		args.no_schedule_cascades = True
 
-	# Disable cascade scheduling when separate model parameters are used for each cascade
+	# Disable cascade scheduling when separate model parameters are used for each cascade.
 	if args.cascade_training_mode == SEPARATE_PARAMS:
 		args.no_schedule_cascades = True
 

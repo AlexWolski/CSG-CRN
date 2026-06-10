@@ -1,9 +1,11 @@
 # Network cascading training method.
 # SHARED mode keeps the same CSG-CRN network parameters for each cascade. One model produces all of the results.
 # SEPARATE mode trains a new network for each cascade.
+# INIT_RECON mode trains one model for the first cascade and trains a second model that keeps the same network parameters for all refinement cascades.
 SHARED_PARAMS = "SHARED"
 SEPARATE_PARAMS = "SEPARATE"
-CASCADE_MODEL_MODES = [SHARED_PARAMS, SEPARATE_PARAMS]
+INIT_RECON = "INIT_RECON"
+CASCADE_MODEL_MODES = [SHARED_PARAMS, SEPARATE_PARAMS, INIT_RECON]
 
 # Loss sampling methods for near-surface samples.
 # TARGET only includes samples near the target shape. 
