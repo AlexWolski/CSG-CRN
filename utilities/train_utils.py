@@ -189,7 +189,7 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 
 			# If an initial CSGCRN model exists, use that to initialize the CSG model
 			if init_model != None:
-				csg_model = init_model.forward_cascade(uniform_input_samples, near_surface_input_samples, 0)
+				csg_model = init_model.forward(uniform_input_samples, near_surface_input_samples)
 			else:
 				csg_model = None
 
@@ -328,8 +328,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# The number of cascades use by the schedule and the number recorded are different when using the INIT_RECON training mode.
 		initial_training_in_progress = args.cascade_training_mode == INIT_RECON and init_model == None
 		recon_training_in_progress = args.cascade_training_mode == INIT_RECON and init_model != None
-		recorded_num_cascades = num_cascades + 1 if recon_training_in_progress else 0
-		recorded_total_cascades = args.num_cascades + 1 if recon_training_in_progress else 0
+		recorded_num_cascades = num_cascades + 1 if recon_training_in_progress else num_cascades
+		recorded_total_cascades = args.num_cascades + 1 if recon_training_in_progress else args.num_cascades
 		training_logger.add_result(epoch, recorded_num_cascades, train_loss, val_loss, chamfer_dist, learning_rate, time_ellapsed)
 
 		weight_scheduling_in_progress = args.schedule_sub_weight and args.sub_weight < 1
