@@ -284,6 +284,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	# Initialize current number of cascades from train logger
 	num_cascades = training_logger.get_last_cascade() if training_logger.get_last_cascade() else 0
 
+	# Number of cascades spent training the initial model in INIT_RECON mode
+	recon_training_start_epochs = 0
+
 	for epoch in range(init_epoch, args.max_epochs+1):
 
 		# Set operation weight
@@ -301,13 +304,15 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 				num_cascades = args.num_cascades
 			# Determine number of cascades to train according to scheduler
 			else:
-				cascade_scheduler_current = max(epoch - args.sub_schedule_start_epoch, 0) if args.schedule_sub_weight else epoch
-				num_cascades = cascade_scheduler_current // args.cascade_schedule_epochs
-				
-				# If the initial model is trained, add an additional cascade to compensate
-				if init_model != None:
-					num_cascades += 1
+				# Start cascade scheduling after the intial model is trained when in INIT_RECON mode
+				cascade_scheduler_epoch = epoch - recon_training_start_epochs
 
+				# Do cascade scheduling after subtract operation scheduling
+				if args.schedule_sub_weight:
+					cascade_scheduler_epoch = max(cascade_scheduler_epoch - args.sub_schedule_start_epoch, 0)
+
+				# When using INIT_RECON training mode, subtract the number of epochs spend training the initial model
+				num_cascades = cascade_scheduler_epoch // args.cascade_schedule_epochs
 				num_cascades = min(num_cascades, args.num_cascades)
 
 		# Train model
@@ -319,10 +324,15 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Record epoch training results
 		current_time = dt.now()
 		time_ellapsed = current_time - train_start_time
-		training_logger.add_result(epoch, num_cascades, train_loss, val_loss, chamfer_dist, learning_rate, time_ellapsed)
+
+		# The number of cascades use by the schedule and the number recorded are different when using the INIT_RECON training mode.
+		initial_training_in_progress = args.cascade_training_mode == INIT_RECON and init_model == None
+		recon_training_in_progress = args.cascade_training_mode == INIT_RECON and init_model != None
+		recorded_num_cascades = num_cascades + 1 if recon_training_in_progress else 0
+		recorded_total_cascades = args.num_cascades + 1 if recon_training_in_progress else 0
+		training_logger.add_result(epoch, recorded_num_cascades, train_loss, val_loss, chamfer_dist, learning_rate, time_ellapsed)
 
 		weight_scheduling_in_progress = args.schedule_sub_weight and args.sub_weight < 1
-		initial_training_in_progress = args.cascade_training_mode == INIT_RECON and init_model == None
 		cascade_scheduling_in_progress = not args.no_schedule_cascades and not initial_training_in_progress and num_cascades < args.num_cascades
 
 		# Update learning rate scheduler and early stopping
@@ -342,8 +352,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			print(f"Weight Scheduler:  {epoch}/{args.sub_schedule_end_epoch}")
 		# Cascade scheduler runs after subtract weight scheduler completes
 		elif cascade_scheduling_in_progress:
-			print(f"Number of Cascades: {num_cascades}/{args.num_cascades}")
-			print(f"Cascades Scheduler: {(cascade_scheduler_current) % args.cascade_schedule_epochs}/{args.cascade_schedule_epochs}")
+			print(f"Number of Cascades: {recorded_num_cascades}/{recorded_total_cascades}")
+			print(f"Cascades Scheduler: {(cascade_scheduler_epoch) % args.cascade_schedule_epochs}/{args.cascade_schedule_epochs}")
 		# Learning rate scheduling and early stopping runs after all other schedulers
 		else:
 			print(f"Best Chamfer Dist:  {scheduler.best}")
@@ -381,13 +391,14 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			# When using the INIT_RECON training mode, save the first trained cascade model and reset early stopping
 			if init_model_training:
 				init_model = copy.deepcopy(model)
+				
 				# Early stop, optimization, and scheduling runs once for the initial model, then once for the refinement model
 				early_stopping.reset()
 				optimizer = init_optimizer(model, args.init_lr)
 				scheduler = init_scheduler(optimizer, args)
 
 				# Start cascade scheduling after the initial model is trained
-				args.sub_schedule_start_epoch = epoch
+				recon_training_start_epochs = epoch
 
 			# Training is complete when the model stops improving on the last cascade
 			if last_cascade:

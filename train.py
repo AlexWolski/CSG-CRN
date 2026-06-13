@@ -9,7 +9,7 @@ from torch.utils.data import Subset
 
 from losses.reconstruction_loss import ReconstructionLoss
 from wakepy import keep
-from utilities.constants import SEPARATE_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
+from utilities.constants import INIT_RECON, SEPARATE_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.train_utils import load_data_splits, load_saved_settings, train, init_training_params
@@ -111,6 +111,10 @@ def options():
 	# Disable cascade scheduling when separate model parameters are used for each cascade.
 	if args.cascade_training_mode == SEPARATE_PARAMS:
 		args.no_schedule_cascades = True
+
+	# When using the INIT_RECON training mode, decrease num_cascades to account for the separately trained initial model.
+	if args.cascade_training_mode == INIT_RECON:
+		args.num_cascades = max(args.num_cascades - 1, 0)
 
 	# Print arguments
 	print('\nArguments:')
