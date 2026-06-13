@@ -14,7 +14,7 @@ from networks.csg_crn import CSG_CRN
 from mesh_to_sdf.utils import scale_to_unit_sphere
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
-from utilities.constants import SEPARATE_PARAMS
+from utilities.constants import SEPARATE_PARAMS, INIT_RECON
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name, add_sdf, subtract_sdf
 from utilities.data_augmentation import RotationAxis
 from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface
@@ -55,6 +55,7 @@ def load_model(args):
 	save_data = torch.load(args.model_params, weights_only=True)
 	state_dict = save_data['model']
 	saved_args = save_data['args']
+	init_model_state_dict = save_data['init_model']
 	prev_cascades_list = save_data['prev_cascades_list']
 
 	# Load training args
@@ -97,7 +98,7 @@ def load_model(args):
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 	model.eval()
 
-	return (model, prev_cascades_list)
+	return (model, init_model_state_dict, prev_cascades_list)
 
 
 # Load sample points from file
@@ -183,13 +184,24 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 	print('')
 
 
-def construct_csg_model(model, input_file, args, prev_cascades_list=None):
+def construct_csg_model(model, input_file, args, init_model_state_dict=None, prev_cascades_list=None):
 	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args)
+	csg_model = None
+
+	print(f'{args.num_cascades}')
+
+	if args.cascade_training_mode == INIT_RECON:
+		# Run a forward pass on the inital reconstruciton model.
+		current_state_dict = model.state_dict()
+		model.load_state_dict(init_model_state_dict, strict=False)
+		csg_model = model.forward(uniform_samples, near_surface_samples)
+		# Revert the CSGCRN model to the reconstruction weights.
+		model.load_state_dict(current_state_dict)
 
 	if args.cascade_training_mode == SEPARATE_PARAMS:
 		csg_model = model.forward_separate_cascades(uniform_samples, near_surface_samples, prev_cascades_list)
 	else:
-		csg_model = model.forward_cascade(uniform_samples, near_surface_samples, args.num_cascades)
+		csg_model = model.forward_cascade(uniform_samples, near_surface_samples, args.num_cascades, csg_model)
 
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
@@ -209,11 +221,11 @@ def main():
 
 	# Run model
 	args.device = get_device(args.device)
-	(model, prev_cascades_list) = load_model(args)
+	(model, init_model_state_dict, prev_cascades_list) = load_model(args)
 
 	# View reconstruction
-	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args, prev_cascades_list)
-	window_title = "Reconstruct: " + os.path.basename(args.input_file)
+	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args, init_model_state_dict, prev_cascades_list)
+	_window_title = "Reconstruct: " + os.path.basename(args.input_file)
 
 	try:
 		viewer = SdfModelViewer("Reconstructed SDF", args.point_size, args.num_view_points, args.input_file, args.sample_dist, get_mesh_and_csg_model)
