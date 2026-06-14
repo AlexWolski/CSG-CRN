@@ -391,6 +391,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			# When using the INIT_RECON training mode, save the first trained cascade model and reset early stopping
 			if init_model_training:
 				init_model = copy.deepcopy(model)
+				init_model.eval()
 				
 				# Early stop, optimization, and scheduling runs once for the initial model, then once for the refinement model
 				early_stopping.reset()
