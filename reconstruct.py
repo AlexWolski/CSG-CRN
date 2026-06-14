@@ -188,8 +188,6 @@ def construct_csg_model(model, input_file, args, init_model_state_dict=None, pre
 	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args)
 	csg_model = None
 
-	print(f'{args.num_cascades}')
-
 	if args.cascade_training_mode == INIT_RECON:
 		# Run a forward pass on the inital reconstruciton model.
 		current_state_dict = model.state_dict()

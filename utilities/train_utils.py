@@ -64,6 +64,11 @@ def load_saved_settings(model_path):
 		return (None, None)
 
 
+# Load CSG-CRN network model with configuration inferred from args.
+def load_model_from_args(args, device, model_params=None):
+	return load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params)
+
+
 # Load CSG-CRN network model
 def load_model(num_prims, num_shapes, num_operations, device, args, model_params=None):
 	predict_blending = not args.no_blending
@@ -390,7 +395,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 			# When using the INIT_RECON training mode, save the first trained cascade model and reset early stopping
 			if init_model_training:
-				init_model = copy.deepcopy(model)
+				# Initialize a second model to run the initial reconstruction in inference mode.
+				(_, best_model_state_dict) = load_saved_settings(trained_model_path)
+				init_model = load_model_from_args(args, device, best_model_state_dict)
 				init_model.eval()
 				
 				# Early stop, optimization, and scheduling runs once for the initial model, then once for the refinement model
@@ -419,7 +426,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 def init_training_params(training_logger, data_splits, args, device, model_params=None):
 	# Initialize model
-	model = load_model(args.num_prims, CSGModel.num_shapes, CSGModel.num_operations, device, args, model_params if args.resume_training else None)
+	model = load_model_from_args(args, device, model_params if args.resume_training else None)
 	loss_func = Loss(args.loss_metric, args.num_loss_points, args.clamp_dist, args.loss_sampling_method).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = init_optimizer(model, current_lr)
