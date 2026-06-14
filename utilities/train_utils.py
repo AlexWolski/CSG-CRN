@@ -130,13 +130,22 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 				if init_model != None:
 					csg_model = init_model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), None).detach()
 
-				for i in range(num_train_loops):
-					if csg_model != None:
-						csg_model = csg_model.detach()
+				# Generate inital reconstructions to train on in inference mode.
+				csg_model_list = [csg_model]
+				model.eval()
 
+				for i in range(num_train_loops - 1):
+					new_csg_moel = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), csg_model_list[-1])
+					csg_model_list.append(new_csg_moel.detach())
+				
+
+				# Train on initial reconstructions
+				model.train()
+
+				for i in range(num_train_loops):
 					# Forward
 					with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-						csg_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), csg_model)
+						model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), csg_model_list[i])
 
 					# Compute the loss for this cascade.
 					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
