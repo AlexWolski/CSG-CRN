@@ -153,7 +153,8 @@ class PointNetfeat(nn.Module):
 
 		# Last convolutional layer
 		if len(self.conv_list):
-			X = self.bn_list[-1](self.conv_list[-1](X))
+			bn_layer = self.bn_list[-1] if not self.no_batch_norm else nn.Identity()
+			X = bn_layer(self.conv_list[-1](X))
 
 		X = torch.max(X, 2, keepdim=True)[0]
 		X = X.view(-1, 1024)
