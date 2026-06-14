@@ -383,9 +383,9 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			# save the model parameters and reset the training management
 			if separate_params_training:
 				# Save the model parameters for the current cascade
-				cascade_path = save_separate_trained(model, args, data_splits, training_logger, prev_cascades_list)
-				# Load the pickled model parameters for this cascade from disk and save them in memory
-				(_, cascade_params) = load_saved_settings(cascade_path)
+				save_separate_trained(model, args, data_splits, training_logger, prev_cascades_list)
+				# Load the pickled model parameters of the best model for this cascade from disk and save them in memory.
+				(_, cascade_params) = load_saved_settings(trained_model_path)
 				prev_cascades_list.append(cascade_params)
 
 				early_stopping.reset()
