@@ -123,21 +123,22 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		elif args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
 			# Update model parameters after each refinement step
 			if not args.backprop_all_cascades:
-				csg_model = None
+				init_csg_model = None
 				num_train_loops = num_cascades + 1
 
 				# If a trained initial model is available, use it to generate the first reconstruction.
 				if init_model != None:
-					csg_model = init_model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), None).detach()
+					with torch.no_grad():
+						init_csg_model = init_model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), None).detach()
 
 				# Generate inital reconstructions to train on in inference mode.
-				csg_model_list = [csg_model]
+				input_csg_list = [init_csg_model]
 				model.eval()
 
-				for i in range(num_train_loops - 1):
-					new_csg_moel = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), csg_model_list[-1])
-					csg_model_list.append(new_csg_moel.detach())
-				
+				with torch.no_grad():
+					for i in range(num_train_loops - 1):
+						new_csg_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), input_csg_list[-1])
+						input_csg_list.append(new_csg_model.detach().clone())
 
 				# Train on initial reconstructions
 				model.train()
@@ -145,7 +146,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 				for i in range(num_train_loops):
 					# Forward
 					with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-						model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), csg_model_list[i])
+						csg_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), input_csg_list[i])
 
 					# Compute the loss for this cascade.
 					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
@@ -166,7 +167,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 				_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Only record the loss for the completed reconstruction
-		total_train_loss += cascade_loss
+		total_train_loss += cascade_loss.detach()
 
 	total_train_loss /= train_loader.__len__()
 	return total_train_loss.cpu().item()
