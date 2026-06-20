@@ -123,22 +123,22 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		elif args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
 			# Update model parameters after each refinement step
 			if not args.backprop_all_cascades:
-				init_csg_model = None
+				curernt_model = None
 				num_train_loops = num_cascades + 1
 
 				# If a trained initial model is available, use it to generate the first reconstruction.
 				if init_model != None:
 					with torch.no_grad():
-						init_csg_model = init_model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), None).detach()
+						curernt_model = init_model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), None).detach()
 
 				# Generate inital reconstructions to train on in inference mode.
-				input_csg_list = [init_csg_model]
+				input_csg_list = [None if curernt_model == None else curernt_model.clone()]
 				model.eval()
 
 				with torch.no_grad():
 					for i in range(num_train_loops - 1):
-						new_csg_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), input_csg_list[-1])
-						input_csg_list.append(new_csg_model.detach().clone())
+						curernt_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), curernt_model).detach()
+						input_csg_list.append(None if curernt_model == None else curernt_model.clone())
 
 				# Train on initial reconstructions
 				model.train()
