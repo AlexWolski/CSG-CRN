@@ -7,9 +7,9 @@ from utilities.sampler_utils import select_near_surface_samples
 
 
 class Loss(nn.Module):
-	def __init__(self, loss_metric, num_loss_samples, clamp_dist=None, loss_sampling_method=TARGET_SAMPLING):
+	def __init__(self, loss_metric, num_loss_samples, clamp_dist=None, excess_loss_weight=None, loss_sampling_method=TARGET_SAMPLING):
 		super(Loss, self).__init__()
-		self.recon_loss = ReconstructionLoss(loss_metric, clamp_dist)
+		self.recon_loss = ReconstructionLoss(loss_metric, excess_loss_weight, clamp_dist)
 		self.proximity_loss = ProximityLoss()
 
 		self.num_loss_samples = num_loss_samples

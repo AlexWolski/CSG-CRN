@@ -63,6 +63,7 @@ def load_model(args):
 	args.sample_dist = saved_args.sample_dist
 	args.surface_uniform_ratio = saved_args.surface_uniform_ratio
 	args.loss_metric = saved_args.loss_metric
+	args.excess_loss_weight = saved_args.excess_loss_weight if 'excess_loss_weight' in saved_args else None
 	args.input_sampling_method = saved_args.input_sampling_method
 	args.clamp_dist = saved_args.clamp_dist
 	args.sub_weight = saved_args.sub_weight
@@ -168,8 +169,8 @@ def print_csg_commands(csg_model):
 		count += 1
 
 
-def print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, loss_metric):
-	recon_loss = ReconstructionLoss(loss_metric)
+def print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, loss_metric, excess_loss_weight):
+	recon_loss = ReconstructionLoss(loss_metric, excess_loss_weight)
 	print(f'Reconstruction {loss_metric} Loss:')
 	print(recon_loss.forward(near_surface_samples, uniform_samples, surface_points, csg_model))
 	print('')
@@ -206,7 +207,7 @@ def construct_csg_model(model, input_file, args, init_model_state_dict=None, pre
 	# Pretty print csg commands
 	print_csg_commands(csg_model)
 	# Print reconstruction loss
-	print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, args.loss_metric)
+	print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, args.loss_metric, args.excess_loss_weight)
 	# Print reconstruction accuracy
 	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, args.device)
 

@@ -437,7 +437,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 def init_training_params(training_logger, data_splits, args, device, model_params=None):
 	# Initialize model
 	model = load_model_from_args(args, device, model_params if args.resume_training else None)
-	loss_func = Loss(args.loss_metric, args.num_loss_points, args.clamp_dist, args.loss_sampling_method).to(device)
+	loss_func = Loss(args.loss_metric, args.num_loss_points, args.clamp_dist, args.excess_loss_weight, args.loss_sampling_method).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = init_optimizer(model, current_lr)
 	scheduler = init_scheduler(optimizer, args)

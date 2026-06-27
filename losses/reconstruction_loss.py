@@ -20,11 +20,12 @@ class ReconstructionLoss(nn.Module):
 	loss_metrics = [L1_LOSS_FUNC, MSE_LOSS_FUNC, LOG_LOSS_FUNC, SIG_LOSS_FUNC, OCC_LOSS_FUNC, CHAMFER_LOSS_FUNC]
 
 
-	def __init__(self, loss_metric, clamp_dist=None):
+	def __init__(self, loss_metric, excess_loss_weight=None, clamp_dist=None):
 		super(ReconstructionLoss, self).__init__()
 
 		self.clamp_dist = clamp_dist
 		self.loss_metric = loss_metric
+		self.excess_loss_weight = excess_loss_weight
 
 		# Select loss function
 		match loss_metric:
@@ -51,12 +52,23 @@ class ReconstructionLoss(nn.Module):
 		# The Chamfer distance metric does not require uniform samples, but does require near-surface samples and a CSG model.
 		if self.loss_metric == self.CHAMFER_LOSS_FUNC:
 			recon_loss = self.loss_func(target_surface_samples, csg_model)
+			return torch.mean(recon_loss)
 		# All other loss metrics require a mix of near-surface and uniform samples.
 		else:
 			(clamped_target_sdf, clamped_predicted_sdf) = self.cat_and_clamp_samples(target_near_surface_samples, target_uniform_samples, csg_model)
-			recon_loss = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
 
-		return torch.mean(recon_loss)
+			# Unweighted loss
+			if self.excess_loss_weight is None or self.excess_loss_weight is 1.0:
+				recon_loss = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
+				return torch.mean(recon_loss)
+			else:
+				excess_samples_mask = (clamped_target_sdf > 0.0) & (clamped_predicted_sdf < 0.0)
+				other_samples_mask = ~excess_samples_mask
+				excess_samples_loss = self.loss_func(clamped_target_sdf[excess_samples_mask], clamped_predicted_sdf[excess_samples_mask])
+				other_samples_loss = self.loss_func(clamped_target_sdf[other_samples_mask], clamped_predicted_sdf[other_samples_mask])
+				combined_samples_loss = torch.cat((excess_samples_loss * self.excess_loss_weight, other_samples_loss))
+				recon_loss = torch.mean(combined_samples_loss)
+				return recon_loss
 
 
 	def cat_and_clamp_samples(self, target_near_surface_samples, target_uniform_samples, csg_model):
