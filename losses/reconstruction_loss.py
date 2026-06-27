@@ -58,11 +58,12 @@ class ReconstructionLoss(nn.Module):
 			(clamped_target_sdf, clamped_predicted_sdf) = self.cat_and_clamp_samples(target_near_surface_samples, target_uniform_samples, csg_model)
 
 			# Unweighted loss
-			if self.excess_loss_weight is None or self.excess_loss_weight is 1.0:
+			if self.excess_loss_weight == None or self.excess_loss_weight == 1.0:
 				recon_loss = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
 				return torch.mean(recon_loss)
 			else:
-				excess_samples_mask = (clamped_target_sdf > 0.0) & (clamped_predicted_sdf < 0.0)
+				# Whenever a positive distance to the predicted shape is shorter than the 
+				excess_samples_mask = (clamped_target_sdf > 0.0) & (clamped_predicted_sdf > 0.0) & (clamped_target_sdf - clamped_predicted_sdf > 0)
 				other_samples_mask = ~excess_samples_mask
 				excess_samples_loss = self.loss_func(clamped_target_sdf[excess_samples_mask], clamped_predicted_sdf[excess_samples_mask])
 				other_samples_loss = self.loss_func(clamped_target_sdf[other_samples_mask], clamped_predicted_sdf[other_samples_mask])
