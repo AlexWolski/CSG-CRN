@@ -11,7 +11,7 @@ from utilities.sampler_utils import select_near_surface_samples
 class CSG_CRN(nn.Module):
 	def __init__(
 			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, input_sampling_method, surface_uniform_ratio, device,
-			encoder_layers, encoder_trans_conv_layers, encoder_trans_fc_layers, decoder_layers, extended_input=False, predict_blending=True, predict_roundness=True, no_batch_norm=False):
+			encoder_layers, encoder_trans_conv_layers, encoder_trans_fc_layers, decoder_layers, extended_input=False, predict_blending=True, predict_roundness=True, no_batch_norm=False, feature_vec_noise=0.0):
 		super(CSG_CRN, self).__init__()
 
 		self.num_prims = num_prims
@@ -27,6 +27,7 @@ class CSG_CRN(nn.Module):
 		self.predict_blending = predict_blending
 		self.predict_roundness = predict_roundness
 		self.no_batch_norm = no_batch_norm
+		self.feature_vec_noise = feature_vec_noise
 
 		num_feature_dims = 6 if self.extended_input else 4
 		self.regressor_decoder_list = nn.ModuleList()
@@ -84,6 +85,10 @@ class CSG_CRN(nn.Module):
 
 		# Encode target point cloud features
 		features, _, _ = self.point_encoder(input_tensor)
+
+		# Add noise to the feature vector when training
+		if self.training and self.feature_vec_noise:
+			features = features + (torch.randn_like(features) * features.std(dim=0, keepdim=True).detach() * self.feature_vec_noise)
 
 		# Decode primitive predictions
 		for decoder in self.regressor_decoder_list:

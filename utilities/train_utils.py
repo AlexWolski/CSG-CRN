@@ -91,7 +91,8 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 		not args.no_extended_input,
 		predict_blending,
 		predict_roundness,
-		args.no_batch_norm
+		args.no_batch_norm,
+		args.feature_vec_noise
 	)
 
 	# Load model parameters if available
