@@ -8,13 +8,15 @@ import numpy as np
 import torch.nn.functional as F
 
 
-POINTNET_CONV_LAYER_SIZES = [64, 128, 1024]
+POINTNET_CONV_LAYER_SIZES = [64, 64, 128, 1024]
+LOCAL_FEATURE_SIZE = POINTNET_CONV_LAYER_SIZES[1]
+GLOBAL_FEATURE_SIZE = POINTNET_CONV_LAYER_SIZES[-1]
 TRANS_CONV_LAYER_SIZES = [64, 128, 1024]
 TRANS_FC_LAYER_SIZES = [512, 256]
 
 
 class STNkd(nn.Module):
-	def __init__(self, k, conv_layer_sizes=[64, 128, 1024], fc_layer_sizes=[512, 256], no_batch_norm=False):
+	def __init__(self, k, conv_layer_sizes, fc_layer_sizes, no_batch_norm=False):
 		super(STNkd, self).__init__()
 		self.conv_layer_sizes = [k] + conv_layer_sizes
 		self.fc_layer_sizes = ([self.conv_layer_sizes[-1]] if len(self.conv_layer_sizes) else []) + fc_layer_sizes + [k*k]
@@ -87,10 +89,10 @@ class STNkd(nn.Module):
 
 
 class PointNetfeat(nn.Module):
-	def __init__(self, k=6, conv_layer_sizes=[64, 128, 1024], trans_conv_layer_sizes=[64, 128, 1024], trans_fc_layer_sizes=[512, 256], global_feat=True, input_transform=False, feature_transform=False, no_batch_norm=False):
+	def __init__(self, k=6, conv_layer_sizes=POINTNET_CONV_LAYER_SIZES, trans_conv_layer_sizes=TRANS_CONV_LAYER_SIZES, trans_fc_layer_sizes=TRANS_FC_LAYER_SIZES, global_only=True, input_transform=False, feature_transform=False, no_batch_norm=False):
 		super(PointNetfeat, self).__init__()
 		self.conv_layer_sizes = [k] + conv_layer_sizes
-		self.global_feat = global_feat
+		self.global_only = global_only
 		self.input_transform = input_transform
 		self.feature_transform = feature_transform
 		self.no_batch_norm = no_batch_norm
@@ -101,6 +103,13 @@ class PointNetfeat(nn.Module):
 
 		if self.feature_transform:
 			self.fstn = STNkd(64, trans_conv_layer_sizes, trans_fc_layer_sizes, no_batch_norm)
+
+
+	def get_output_size(self):
+		if self.global_only:
+			return GLOBAL_FEATURE_SIZE
+		else:
+			return GLOBAL_FEATURE_SIZE + LOCAL_FEATURE_SIZE
 
 
 	def _init_layers(self):
@@ -119,8 +128,6 @@ class PointNetfeat(nn.Module):
 
 
 	def forward(self, X):
-		n_pts = X.size()[2]
-
 		if self.input_transform:
 			trans_input = self.stn(X)
 			X = X.transpose(2, 1)
@@ -157,13 +164,14 @@ class PointNetfeat(nn.Module):
 			X = bn_layer(self.conv_list[-1](X))
 
 		X = torch.max(X, 2, keepdim=True)[0]
-		X = X.view(-1, 1024)
+		global_feat = X.view(-1, GLOBAL_FEATURE_SIZE)
 
-		if self.global_feat:
-			return X, trans_input, trans_feat
+		if self.global_only:
+			return global_feat, trans_input, trans_feat
 		else:
-			X = X.view(-1, 1024, 1).repeat(1, 1, n_pts)
-			return torch.cat([X, pointfeat], 1), trans_input, trans_feat
+			num_points = pointfeat.size(-1)
+			global_feat = global_feat.view(-1, GLOBAL_FEATURE_SIZE, 1).repeat(1, 1, num_points)
+			return torch.cat([pointfeat, global_feat], 1), trans_input, trans_feat
 
 
 def feature_transform_regularizer(trans):
@@ -177,15 +185,15 @@ def feature_transform_regularizer(trans):
 
 if __name__ == '__main__':
 	sim_data = Variable(torch.rand(32,5,2500))
-	trans = STNkd(5)
+	trans = STNkd(5, TRANS_CONV_LAYER_SIZES, TRANS_FC_LAYER_SIZES)
 	out = trans(sim_data)
 	print('stn', out.size())
 	print('loss', feature_transform_regularizer(out))
 
-	pointfeat = PointNetfeat(global_feat=True)
+	pointfeat = PointNetfeat(global_only=True)
 	out, _, _ = pointfeat(sim_data)
 	print('global feat', out.size())
 
-	pointfeat = PointNetfeat(global_feat=False)
+	pointfeat = PointNetfeat(global_only=False)
 	out, _, _ = pointfeat(sim_data)
 	print('point feat', out.size())

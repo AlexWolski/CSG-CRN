@@ -37,13 +37,13 @@ class CSG_CRN(nn.Module):
 			conv_layer_sizes=encoder_layers,
 			trans_conv_layer_sizes=encoder_trans_conv_layers,
 			trans_fc_layer_sizes=encoder_trans_fc_layers,
-			global_feat=True,
+			global_only=True,
 			input_transform=True,
 			feature_transform=True,
 			no_batch_norm=no_batch_norm
 		)
 
-		pointnet_output_size = encoder_layers[-1]
+		pointnet_output_size = self.point_encoder.get_output_size()
 
 		# Initialize a separate decoder for each primitive
 		for i in range(self.num_prims):
