@@ -10,8 +10,8 @@ from utilities.sampler_utils import select_near_surface_samples
 
 class CSG_CRN(nn.Module):
 	def __init__(
-			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, input_sampling_method, surface_uniform_ratio, device,
-			encoder_layers, encoder_trans_conv_layers, encoder_trans_fc_layers, decoder_layers, extended_input=False, predict_blending=True, predict_roundness=True, no_batch_norm=False, feature_vec_noise=0.0):
+			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, input_sampling_method, surface_uniform_ratio, device, encoder_layers, encoder_trans_conv_layers, encoder_trans_fc_layers, decoder_layers,
+			extended_input=False, predict_blending=True, predict_roundness=True, extended_pooling=True, no_batch_norm=False, feature_vec_noise=0.0):
 		super(CSG_CRN, self).__init__()
 
 		self.num_prims = num_prims
@@ -26,6 +26,7 @@ class CSG_CRN(nn.Module):
 		self.extended_input = extended_input
 		self.predict_blending = predict_blending
 		self.predict_roundness = predict_roundness
+		self.extended_pooling = extended_pooling
 		self.no_batch_norm = no_batch_norm
 		self.feature_vec_noise = feature_vec_noise
 
@@ -38,6 +39,7 @@ class CSG_CRN(nn.Module):
 			trans_conv_layer_sizes=encoder_trans_conv_layers,
 			trans_fc_layer_sizes=encoder_trans_fc_layers,
 			global_only=True,
+			extended_pooling=extended_pooling,
 			input_transform=True,
 			feature_transform=True,
 			no_batch_norm=no_batch_norm

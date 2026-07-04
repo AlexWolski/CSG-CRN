@@ -11,6 +11,8 @@ import torch.nn.functional as F
 POINTNET_CONV_LAYER_SIZES = [64, 64, 128, 1024]
 LOCAL_FEATURE_SIZE = POINTNET_CONV_LAYER_SIZES[1]
 GLOBAL_FEATURE_SIZE = POINTNET_CONV_LAYER_SIZES[-1]
+NUM_POOLS = 3
+TOPK_POOL_SIZE = 16
 TRANS_CONV_LAYER_SIZES = [64, 128, 1024]
 TRANS_FC_LAYER_SIZES = [512, 256]
 
@@ -89,10 +91,11 @@ class STNkd(nn.Module):
 
 
 class PointNetfeat(nn.Module):
-	def __init__(self, k=6, conv_layer_sizes=POINTNET_CONV_LAYER_SIZES, trans_conv_layer_sizes=TRANS_CONV_LAYER_SIZES, trans_fc_layer_sizes=TRANS_FC_LAYER_SIZES, global_only=True, input_transform=False, feature_transform=False, no_batch_norm=False):
+	def __init__(self, k=6, conv_layer_sizes=POINTNET_CONV_LAYER_SIZES, trans_conv_layer_sizes=TRANS_CONV_LAYER_SIZES, trans_fc_layer_sizes=TRANS_FC_LAYER_SIZES, global_only=True, extended_pooling=True, input_transform=False, feature_transform=False, no_batch_norm=False):
 		super(PointNetfeat, self).__init__()
 		self.conv_layer_sizes = [k] + conv_layer_sizes
 		self.global_only = global_only
+		self.extended_pooling = extended_pooling
 		self.input_transform = input_transform
 		self.feature_transform = feature_transform
 		self.no_batch_norm = no_batch_norm
@@ -106,10 +109,15 @@ class PointNetfeat(nn.Module):
 
 
 	def get_output_size(self):
-		if self.global_only:
-			return GLOBAL_FEATURE_SIZE
+		if self.extended_pooling:
+			global_feature_size = GLOBAL_FEATURE_SIZE * NUM_POOLS
 		else:
-			return GLOBAL_FEATURE_SIZE + LOCAL_FEATURE_SIZE
+			global_feature_size = GLOBAL_FEATURE_SIZE
+
+		if self.global_only:
+			return global_feature_size
+		else:
+			return global_feature_size + LOCAL_FEATURE_SIZE
 
 
 	def _init_layers(self):
@@ -125,6 +133,17 @@ class PointNetfeat(nn.Module):
 
 			if not self.no_batch_norm:
 				self.bn_list.append(nn.BatchNorm1d(curr_layer_size))
+
+
+	def global_pooling(self, X):
+		# Max Pooling
+		max_feat = torch.max(X, dim=2)[0]
+		# Mean Pooling
+		mean_feat = torch.mean(X, dim=2)
+		# TopK-Mean Pooling
+		topk_feat = torch.topk(X, k=TOPK_POOL_SIZE, dim=2)[0].mean(dim=2)
+		# Combined pool
+		return torch.cat([max_feat, mean_feat, topk_feat], dim=1)
 
 
 	def forward(self, X):
@@ -163,14 +182,14 @@ class PointNetfeat(nn.Module):
 			bn_layer = self.bn_list[-1] if not self.no_batch_norm else nn.Identity()
 			X = bn_layer(self.conv_list[-1](X))
 
-		X = torch.max(X, 2, keepdim=True)[0]
-		global_feat = X.view(-1, GLOBAL_FEATURE_SIZE)
+		global_feat = self.global_pooling(X)
+		global_feature_size = global_feat.size(1)
 
 		if self.global_only:
 			return global_feat, trans_input, trans_feat
 		else:
 			num_points = pointfeat.size(-1)
-			global_feat = global_feat.view(-1, GLOBAL_FEATURE_SIZE, 1).repeat(1, 1, num_points)
+			global_feat = global_feat.view(-1, global_feature_size, 1).repeat(1, 1, num_points)
 			return torch.cat([pointfeat, global_feat], 1), trans_input, trans_feat
 
 
@@ -190,10 +209,10 @@ if __name__ == '__main__':
 	print('stn', out.size())
 	print('loss', feature_transform_regularizer(out))
 
-	pointfeat = PointNetfeat(global_only=True)
+	pointfeat = PointNetfeat(k=5, global_only=True)
 	out, _, _ = pointfeat(sim_data)
 	print('global feat', out.size())
 
-	pointfeat = PointNetfeat(global_only=False)
+	pointfeat = PointNetfeat(k=5, global_only=False)
 	out, _, _ = pointfeat(sim_data)
 	print('point feat', out.size())

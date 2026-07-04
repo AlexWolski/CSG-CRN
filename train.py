@@ -170,6 +170,7 @@ def get_model_parser():
 	model_group.add_argument('--no_extended_input', default=False, action='store_true', help='Exclude the additional volume parameters from the model input.')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
+	model_group.add_argument('--no_extended_pooling', default=False, action='store_true', help='Disable the Mean Pool and TopK-Mean Pool operations in the POintNet encoder. Only Max Pool will be applied.')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
 	model_group.add_argument('--loss_sampling_method', type=str.upper, default=[UNIFIED_SAMPLING], choices=sampling_methods, nargs=1, help="TARGET_SAMPLING samples loss points from only the target shape and UNIFIED_SAMPLING samples from both target and output reconstruction shapes.")
 	model_group.add_argument('--input_sampling_method', type=str.upper, default=[TARGET_SAMPLING], choices=sampling_methods, nargs=1, help="TARGET_SAMPLING generates input points from only the target shape and UNIFIED_SAMPLING generates from both target and initial reconstruction shapes.")
