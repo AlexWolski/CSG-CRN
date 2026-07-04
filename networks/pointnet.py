@@ -91,10 +91,9 @@ class STNkd(nn.Module):
 
 
 class PointNetfeat(nn.Module):
-	def __init__(self, k=6, conv_layer_sizes=POINTNET_CONV_LAYER_SIZES, trans_conv_layer_sizes=TRANS_CONV_LAYER_SIZES, trans_fc_layer_sizes=TRANS_FC_LAYER_SIZES, global_only=True, extended_pooling=True, input_transform=False, feature_transform=False, no_batch_norm=False):
+	def __init__(self, k=6, conv_layer_sizes=POINTNET_CONV_LAYER_SIZES, trans_conv_layer_sizes=TRANS_CONV_LAYER_SIZES, trans_fc_layer_sizes=TRANS_FC_LAYER_SIZES, extended_pooling=True, input_transform=False, feature_transform=False, no_batch_norm=False):
 		super(PointNetfeat, self).__init__()
 		self.conv_layer_sizes = [k] + conv_layer_sizes
-		self.global_only = global_only
 		self.extended_pooling = extended_pooling
 		self.input_transform = input_transform
 		self.feature_transform = feature_transform
@@ -110,14 +109,9 @@ class PointNetfeat(nn.Module):
 
 	def get_output_size(self):
 		if self.extended_pooling:
-			global_feature_size = GLOBAL_FEATURE_SIZE * NUM_POOLS
+			return GLOBAL_FEATURE_SIZE * NUM_POOLS
 		else:
-			global_feature_size = GLOBAL_FEATURE_SIZE
-
-		if self.global_only:
-			return global_feature_size
-		else:
-			return global_feature_size + LOCAL_FEATURE_SIZE
+			return GLOBAL_FEATURE_SIZE
 
 
 	def _init_layers(self):
@@ -183,14 +177,7 @@ class PointNetfeat(nn.Module):
 			X = bn_layer(self.conv_list[-1](X))
 
 		global_feat = self.global_pooling(X)
-		global_feature_size = global_feat.size(1)
-
-		if self.global_only:
-			return global_feat, trans_input, trans_feat
-		else:
-			num_points = pointfeat.size(-1)
-			global_feat = global_feat.view(-1, global_feature_size, 1).repeat(1, 1, num_points)
-			return torch.cat([pointfeat, global_feat], 1), trans_input, trans_feat
+		return global_feat, trans_input, trans_feat
 
 
 def feature_transform_regularizer(trans):
@@ -209,10 +196,10 @@ if __name__ == '__main__':
 	print('stn', out.size())
 	print('loss', feature_transform_regularizer(out))
 
-	pointfeat = PointNetfeat(k=5, global_only=True)
+	pointfeat = PointNetfeat(k=5)
 	out, _, _ = pointfeat(sim_data)
 	print('global feat', out.size())
 
-	pointfeat = PointNetfeat(k=5, global_only=False)
+	pointfeat = PointNetfeat(k=5)
 	out, _, _ = pointfeat(sim_data)
 	print('point feat', out.size())

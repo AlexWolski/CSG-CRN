@@ -38,7 +38,6 @@ class CSG_CRN(nn.Module):
 			conv_layer_sizes=encoder_layers,
 			trans_conv_layer_sizes=encoder_trans_conv_layers,
 			trans_fc_layer_sizes=encoder_trans_fc_layers,
-			global_only=True,
 			extended_pooling=extended_pooling,
 			input_transform=True,
 			feature_transform=True,
