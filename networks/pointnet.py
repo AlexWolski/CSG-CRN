@@ -17,9 +17,9 @@ TRANS_CONV_LAYER_SIZES = [64, 128, 1024]
 TRANS_FC_LAYER_SIZES = [512, 256]
 
 
-class STNkd(nn.Module):
+class TNet(nn.Module):
 	def __init__(self, k, conv_layer_sizes, fc_layer_sizes, no_batch_norm=False):
-		super(STNkd, self).__init__()
+		super(TNet, self).__init__()
 		self.conv_layer_sizes = [k] + conv_layer_sizes
 		self.fc_layer_sizes = ([self.conv_layer_sizes[-1]] if len(self.conv_layer_sizes) else []) + fc_layer_sizes + [k*k]
 		self.k = k
@@ -101,10 +101,10 @@ class PointNetfeat(nn.Module):
 		self._init_layers()
 
 		if self.input_transform:
-			self.stn = STNkd(k, trans_conv_layer_sizes, trans_fc_layer_sizes, no_batch_norm)
+			self.stn = TNet(k, trans_conv_layer_sizes, trans_fc_layer_sizes, no_batch_norm)
 
 		if self.feature_transform:
-			self.fstn = STNkd(64, trans_conv_layer_sizes, trans_fc_layer_sizes, no_batch_norm)
+			self.fstn = TNet(64, trans_conv_layer_sizes, trans_fc_layer_sizes, no_batch_norm)
 
 
 	def get_output_size(self):
@@ -141,28 +141,25 @@ class PointNetfeat(nn.Module):
 
 
 	def forward(self, X):
+		# Input transform
 		if self.input_transform:
 			trans_input = self.stn(X)
 			X = X.transpose(2, 1)
 			X = torch.bmm(X, trans_input)
 			X = X.transpose(2, 1)
-		else:
-			trans_input = None
 
 		# First convolutional layer
 		if len(self.conv_list):
 			bn_layer = self.bn_list[0] if not self.no_batch_norm else nn.Identity()
 			X = F.relu(bn_layer(self.conv_list[0](X)))
 
+		# Feature transform
 		if self.feature_transform:
 			trans_feat = self.fstn(X)
 			X = X.transpose(2,1)
 			X = torch.bmm(X, trans_feat)
 			X = X.transpose(2,1)
-		else:
-			trans_feat = None
 
-		pointfeat = X
 		bn_index = 1
 
 		# Middle convolutional layers
@@ -177,7 +174,7 @@ class PointNetfeat(nn.Module):
 			X = bn_layer(self.conv_list[-1](X))
 
 		global_feat = self.global_pooling(X)
-		return global_feat, trans_input, trans_feat
+		return global_feat
 
 
 def feature_transform_regularizer(trans):
@@ -191,15 +188,15 @@ def feature_transform_regularizer(trans):
 
 if __name__ == '__main__':
 	sim_data = Variable(torch.rand(32,5,2500))
-	trans = STNkd(5, TRANS_CONV_LAYER_SIZES, TRANS_FC_LAYER_SIZES)
+	trans = TNet(5, TRANS_CONV_LAYER_SIZES, TRANS_FC_LAYER_SIZES)
 	out = trans(sim_data)
 	print('stn', out.size())
 	print('loss', feature_transform_regularizer(out))
 
 	pointfeat = PointNetfeat(k=5)
-	out, _, _ = pointfeat(sim_data)
+	out = pointfeat(sim_data)
 	print('global feat', out.size())
 
 	pointfeat = PointNetfeat(k=5)
-	out, _, _ = pointfeat(sim_data)
+	out = pointfeat(sim_data)
 	print('point feat', out.size())

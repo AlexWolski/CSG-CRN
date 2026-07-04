@@ -85,7 +85,7 @@ class CSG_CRN(nn.Module):
 		input_tensor = input_tensor.permute(0, 2, 1)
 
 		# Encode target point cloud features
-		features, _, _ = self.point_encoder(input_tensor)
+		features = self.point_encoder(input_tensor)
 
 		# Add noise to the feature vector when training
 		if self.training and self.feature_vec_noise:
