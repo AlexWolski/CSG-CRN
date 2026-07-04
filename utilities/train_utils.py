@@ -141,6 +141,9 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 						curernt_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), curernt_model).detach()
 						input_csg_list.append(None if curernt_model == None else curernt_model.clone())
 
+						if args.prim_dropout_percent:
+							input_csg_list[-1].set_dropout(args.prim_dropout_percent)
+
 				# Train on initial reconstructions
 				model.train()
 
@@ -154,7 +157,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 					# Backpropagate through each cascade separately but do not optimize weights yet.
 					scaler.scale(cascade_loss).backward()
 
-				# Update model parameters after all forward passes to prevent earlier cascades afecting later cascades.
+				# Update model parameters after all forward passes to avoid bias.
 				scaler.step(optimizer)
 				optimizer.zero_grad(set_to_none=True)
 				scaler.update()

@@ -93,6 +93,11 @@ class CSGModel():
 		self.batch_size = batch_size
 		self.device = device
 
+		# Boolean Tensor of shape (B, N) where B is batch_size and N is the number of commands. True for commands that should be dropped.
+		self.primitive_dropout_mask = None
+		# Percentage of csg commands that are dropped from the model.
+		self.dropout_percent = 0
+
 
 	def clone(self):
 		cloned_model = CSGModel(self.batch_size, self.device)
@@ -107,6 +112,9 @@ class CSGModel():
 				command['blending'],
 				command['roundness']
 			)
+
+		cloned_model.dropout_percent = self.dropout_percent
+		cloned_model.primitive_dropout_mask = self.primitive_dropout_mask.clone() if self.primitive_dropout_mask is not None else None
 
 		return cloned_model
 
@@ -142,7 +150,7 @@ class CSGModel():
 
 
 	# Add a primitive to the CSG model
-	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending=None, roundness=None):
+	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending=None, roundness=None, apply_dropout=False):
 		command = {
 			'shape weights': shape_weights,
 			'operation weights': operation_weights,
@@ -156,6 +164,38 @@ class CSGModel():
 		self._validate_batch_size(command)
 		self.csg_commands.append(command)
 		self.num_commands += 1
+
+		# Append to the primitive dropout mask when new commands are added.
+		if self.primitive_dropout_mask is not None:
+			if apply_dropout:
+				new_column = torch.rand(self.batch_size, 1, device=self.device) <= self.dropout_percent
+			else:
+				new_column = torch.full((self.batch_size, 1), False, device=self.device)
+
+			self.primitive_dropout_mask = torch.cat((self.primitive_dropout_mask, new_column), dim=1)
+
+
+	def set_dropout(self, drop_percent):
+		self.dropout_percent = drop_percent
+
+		# In the edge case that `set_dropout` is called when no commands were added, set it to null.
+		if self.num_commands == 0:
+			self.primitive_dropout_mask = None
+			return
+
+		# Compute dropout mask
+		self.primitive_dropout_mask = torch.rand(self.batch_size, self.num_commands, device=self.device) <= self.dropout_percent
+
+		# For csg models where all commands were dropped, randomly add one command back.
+		empty_models = self.primitive_dropout_mask.all(dim=1)
+		empty_indices = empty_models.nonzero(as_tuple=True)[0]
+		restored_commands = torch.randint(self.num_commands, (empty_indices.size(0),), device=self.device)
+		self.primitive_dropout_mask[empty_indices, restored_commands] = True
+
+
+	def clear_dropout(self):
+		self.dropout_percent = 0
+		self.primitive_dropout_mask = None
 
 
 	# Add batches of commands from another other CSG model to this model
@@ -226,7 +266,7 @@ class CSGModel():
 
 	# Sample signed distances from a set of query points given a list of CSG commands
 	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
-	def sample_csg_commands(query_points, csg_commands, initial_distances=None, out_primitive_samples=None):
+	def sample_csg_commands(query_points, csg_commands, initial_distances=None, out_primitive_samples=None, primitive_dropout_mask=None):
 		# Return None if there are no csg commands
 		if not csg_commands:
 			return None
@@ -240,14 +280,21 @@ class CSGModel():
 			distances = torch.full((batch_size, num_points), MAX_SDF_VALUE, device=query_points.device)
 
 		# Compute combined SDF
-		for command in csg_commands:
+		for command_index, command in enumerate(csg_commands):
 			new_distances = CSGModel.sample_sdf(query_points, command)
 
 			# Populate out parameter
 			if out_primitive_samples is not None:
 				out_primitive_samples.append(new_distances)
 
-			distances = CSGModel.apply_operation(distances, new_distances, command)
+			combined_distances = CSGModel.apply_operation(distances, new_distances, command)
+
+			if primitive_dropout_mask is None:
+				distances = combined_distances
+			else:
+				# Dropped samples retain their pre-command distance
+				drop_indices = primitive_dropout_mask[:, command_index].unsqueeze(-1)
+				distances = torch.where(drop_indices, distances, combined_distances)
 
 		return distances
 
@@ -255,7 +302,7 @@ class CSGModel():
 	# Sample signed distances from a set of query points
 	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
 	def sample_csg(self, query_points, initial_distances=None, out_primitive_samples=None):
-		return CSGModel.sample_csg_commands(query_points, self.csg_commands, initial_distances=initial_distances, out_primitive_samples=out_primitive_samples)
+		return CSGModel.sample_csg_commands(query_points, self.csg_commands, initial_distances=initial_distances, out_primitive_samples=out_primitive_samples, primitive_dropout_mask=self.primitive_dropout_mask)
 
 
 # Test SDFs
