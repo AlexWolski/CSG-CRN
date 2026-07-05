@@ -14,28 +14,23 @@ DEFAULT_MIN_BLENDING = 0.001
 DEFAULT_MAX_BLENDING = 1
 
 
-# Parent regressor network class to generalize network building
-class RegressorNetwork(nn.Module):
-	def __init__(self, layer_sizes, activ_func=None, activ_func_args=None, norm_func=None, no_batch_norm=False):
-		super(RegressorNetwork, self).__init__()
-		self.layer_sizes = layer_sizes
-		self.activ_func = activ_func
-		self.activ_func_args = activ_func_args
-		self.norm_func = norm_func
-		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
-		self.init_layers(no_batch_norm)
-
-
-	def init_layers(self, no_batch_norm=False):
+# Simple fully-connected MLP network with optional batch-normalization and Leaky-Relu activation.
+class MLPNetwork(nn.Module):
+	def __init__(self, layer_sizes, no_batch_norm=False):
+		super(MLPNetwork, self).__init__()
 		self.fc_list = nn.ModuleList()
 		self.bn_list = nn.ModuleList() if not no_batch_norm else None
+		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
+		self._init_fc_layers(layer_sizes)
 
-		for i in range(len(self.layer_sizes) - 1):
-			prev_layer_size = self.layer_sizes[i]
-			curr_layer_size = self.layer_sizes[i+1]
+
+	def _init_fc_layers(self, layer_sizes):
+		for i in range(len(layer_sizes) - 1):
+			prev_layer_size = layer_sizes[i]
+			curr_layer_size = layer_sizes[i+1]
 			self.fc_list.append(nn.Linear(prev_layer_size, curr_layer_size))
 
-			if self.bn_list != None and i+1 < len(self.layer_sizes) - 1:
+			if self.bn_list != None and i+1 < len(layer_sizes) - 1:
 				self.bn_list.append(nn.BatchNorm1d(curr_layer_size))
 
 
@@ -50,13 +45,32 @@ class RegressorNetwork(nn.Module):
 				if self.bn_list != None:
 					bn_layer = self.bn_list[i]
 					X = bn_layer(X)
+		
+		return X
 
-			elif self.activ_func != None:
-				if self.activ_func_args:
-					X = self.activ_func(X, **self.activ_func_args)
-				else:
-					X = self.activ_func(X)
 
+# Parent regressor network class to generalize network building
+class RegressorNetwork(nn.Module):
+	def __init__(self, layer_sizes, activ_func=None, activ_func_args=None, norm_func=None, no_batch_norm=False):
+		super(RegressorNetwork, self).__init__()
+		self.activ_func = activ_func
+		self.activ_func_args = activ_func_args
+		self.norm_func = norm_func
+		self.fc_network = MLPNetwork(layer_sizes, no_batch_norm=no_batch_norm)
+
+
+	def forward(self, X):
+		# Forward MLP layers.
+		X = self.fc_network.forward(X)
+
+		# Apply activation function.
+		if self.activ_func != None:
+			if self.activ_func_args:
+				X = self.activ_func(X, **self.activ_func_args)
+			else:
+				X = self.activ_func(X)
+
+		# Apply regressor normalization function.
 		if self.norm_func != None:
 			X = self.norm_func(X)
 
@@ -81,7 +95,8 @@ class PrimitiveRegressor(nn.Module):
 	def __init__(self,
 		input_feature_size,
 		num_shapes, num_operations,
-		layer_sizes=[],
+		prim_decoder_layer_sizes=[],
+		regressor_layer_sizes=[],
 		translation_scale=DEFAULT_TRANSLATION_SCALE,
 		min_scale=DEFAULT_MIN_SCALE,
 		max_scale=DEFAULT_MAX_SCALE,
@@ -94,15 +109,20 @@ class PrimitiveRegressor(nn.Module):
 		super(PrimitiveRegressor, self).__init__()
 
 		gumbel_softmax_args = {'hard': True, 'tau': 0.5, 'dim': -1}
-		layer_sizes = [input_feature_size] + layer_sizes
+		prim_decoder_layer_sizes = [input_feature_size] + prim_decoder_layer_sizes
+		regressor_layer_sizes = [prim_decoder_layer_sizes[-1]] + regressor_layer_sizes
 
-		self.shape = RegressorNetwork(layer_sizes + [num_shapes], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
-		self.operation = RegressorNetwork(layer_sizes + [num_operations], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
-		self.translation = RegressorNetwork(layer_sizes + [3], activ_func=nn.Tanh(), norm_func=self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
-		self.rotation = RegressorNetwork(layer_sizes + [4], activ_func=None, norm_func=self._normalizeRotation(), no_batch_norm=no_batch_norm)
-		self.scale = RegressorNetwork(layer_sizes + [3], activ_func=torch.sigmoid, norm_func=self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
-		self.blending = RegressorNetwork(layer_sizes + [1], activ_func=torch.sigmoid, norm_func=self._normalizeBlending(min_blending, max_blending), no_batch_norm=no_batch_norm) if (predict_blending) else (None)
-		self.roundness = RegressorNetwork(layer_sizes + [1], activ_func=torch.sigmoid, no_batch_norm=no_batch_norm) if (predict_roundness) else (None)
+		# Primitive feature vector decoder network.
+		self.prim_feat_network = MLPNetwork(prim_decoder_layer_sizes, no_batch_norm=no_batch_norm)
+
+		# Primitive attribute regressor networks.
+		self.shape = RegressorNetwork(regressor_layer_sizes + [num_shapes], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
+		self.operation = RegressorNetwork(regressor_layer_sizes + [num_operations], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
+		self.translation = RegressorNetwork(regressor_layer_sizes + [3], activ_func=nn.Tanh(), norm_func=self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
+		self.rotation = RegressorNetwork(regressor_layer_sizes + [4], activ_func=None, norm_func=self._normalizeRotation(), no_batch_norm=no_batch_norm)
+		self.scale = RegressorNetwork(regressor_layer_sizes + [3], activ_func=torch.sigmoid, norm_func=self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
+		self.blending = RegressorNetwork(regressor_layer_sizes + [1], activ_func=torch.sigmoid, norm_func=self._normalizeBlending(min_blending, max_blending), no_batch_norm=no_batch_norm) if (predict_blending) else (None)
+		self.roundness = RegressorNetwork(regressor_layer_sizes + [1], activ_func=torch.sigmoid, no_batch_norm=no_batch_norm) if (predict_roundness) else (None)
 
 		self.scale_op_id = None
 		self.replace_op_id = None
@@ -138,6 +158,10 @@ class PrimitiveRegressor(nn.Module):
 	def forward(self, X, first_prim):
 		batch_size = X.size(dim=0)
 
+		# Forward MLP layers.
+		X = self.prim_feat_network.forward(X)
+
+		# Decode primitive attributes.
 		shape = self.shape.forward(X)
 		operation = self.operation.forward(X) if not first_prim else self.get_add_op_tensor(batch_size, X.get_device())
 		translation = self.translation.forward(X)
