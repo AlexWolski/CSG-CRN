@@ -92,6 +92,7 @@ def load_model(args):
 		not saved_args.no_extended_input,
 		predict_blending,
 		predict_roundness,
+		not saved_args.no_extended_pooling,
 		saved_args.no_batch_norm
 	)
 
