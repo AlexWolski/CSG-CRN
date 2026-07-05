@@ -16,8 +16,9 @@ DEFAULT_MAX_BLENDING = 1
 
 # Simple fully-connected MLP network with optional batch-normalization and Leaky-Relu activation.
 class MLPNetwork(nn.Module):
-	def __init__(self, layer_sizes, no_batch_norm=False):
+	def __init__(self, layer_sizes, no_batch_norm=False, last_layer_activation=True):
 		super(MLPNetwork, self).__init__()
+		self.last_layer_activation = last_layer_activation
 		self.fc_list = nn.ModuleList()
 		self.bn_list = nn.ModuleList() if not no_batch_norm else None
 		self.LeReLU = nn.LeakyReLU(LEAKY_RELU_NEGATIVE_SLOPE, True)
@@ -30,7 +31,10 @@ class MLPNetwork(nn.Module):
 			curr_layer_size = layer_sizes[i+1]
 			self.fc_list.append(nn.Linear(prev_layer_size, curr_layer_size))
 
-			if self.bn_list != None and i+1 < len(layer_sizes) - 1:
+			last_layer = i+1 == len(layer_sizes) - 1
+
+			# Never apply batch normalization to the last layer.
+			if self.bn_list != None and not last_layer:
 				self.bn_list.append(nn.BatchNorm1d(curr_layer_size))
 
 
@@ -39,12 +43,16 @@ class MLPNetwork(nn.Module):
 			fc_layer = self.fc_list[i]
 			X = fc_layer(X)
 
-			if i < len(self.fc_list) - 1:
+			last_layer = i == len(self.fc_list) - 1
+
+			# Only apply ReLU and to the last layer when last_layer_activation is true.
+			if not last_layer or self.last_layer_activation:
 				X = self.LeReLU(X)
 
-				if self.bn_list != None:
-					bn_layer = self.bn_list[i]
-					X = bn_layer(X)
+			# Never apply batch normalization to the last layer.
+			if self.bn_list != None and not last_layer:
+				bn_layer = self.bn_list[i]
+				X = bn_layer(X)
 		
 		return X
 
@@ -56,7 +64,7 @@ class RegressorNetwork(nn.Module):
 		self.activ_func = activ_func
 		self.activ_func_args = activ_func_args
 		self.norm_func = norm_func
-		self.fc_network = MLPNetwork(layer_sizes, no_batch_norm=no_batch_norm)
+		self.fc_network = MLPNetwork(layer_sizes, no_batch_norm=no_batch_norm, last_layer_activation=False)
 
 
 	def forward(self, X):
@@ -113,7 +121,7 @@ class PrimitiveRegressor(nn.Module):
 		regressor_layer_sizes = [prim_decoder_layer_sizes[-1]] + regressor_layer_sizes
 
 		# Primitive feature vector decoder network.
-		self.prim_feat_network = MLPNetwork(prim_decoder_layer_sizes, no_batch_norm=no_batch_norm)
+		self.prim_feat_network = MLPNetwork(prim_decoder_layer_sizes, no_batch_norm=no_batch_norm, last_layer_activation=True)
 
 		# Primitive attribute regressor networks.
 		self.shape = RegressorNetwork(regressor_layer_sizes + [num_shapes], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
