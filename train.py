@@ -178,7 +178,7 @@ def get_model_parser():
 	model_group.add_argument('--encoder_layers', nargs='+', type=int, default=[64, 128, 1024], help='List of hidden layers to add to the encoder network')
 	model_group.add_argument('--encoder_trans_conv_layers', nargs='+', type=int, default=[64, 128, 1024], help='List of hidden convolutional layers of the encoder transformation sub-network.')
 	model_group.add_argument('--encoder_trans_fc_layers', nargs='+', type=int, default=[512, 256], help='List of hidden fully-connected layers of the encoder transformation sub-network.')
-	model_group.add_argument('--prim_decoder_layers', nargs='+', type=int, default=[2048, 1024, 512], help='List of hidden layers to add to the primitive feature decoder that outputs a primitive feature vector.')
+	model_group.add_argument('--prim_decoder_layers', nargs='+', type=int, default=[1024, 512], help='List of hidden layers to add to the primitive feature decoder that outputs a primitive feature vector.')
 	model_group.add_argument('--regressor_layers', nargs='+', type=int, default=[128, 64], help='List of hidden layers to add to each regressor network decoding the primitive attributes.')
 	model_group.add_argument('--back_prop_recon_input', default=False, action='store_true', help='Backpropagate through the reconstruction input sample and all previous refinement iterations.')
 

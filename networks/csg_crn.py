@@ -156,7 +156,6 @@ class CSG_CRN(nn.Module):
 	# Train only the current cascade. Preivous cascades have trained parameters accessed through the `prev_cascades_list` parameter.
 	def forward_separate_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model=None):
 		current_params = None
-		is_training = self.training
 
 		if len(prev_cascades_list) > 0:
 			self.eval()
@@ -174,7 +173,7 @@ class CSG_CRN(nn.Module):
 			self.load_state_dict(current_params)
 
 		# Run a forward pass on the current cascade
-		self.train() if is_training else self.eval()
+		self.train() if self.training else self.eval()
 		return self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
 
 
