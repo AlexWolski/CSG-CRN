@@ -508,8 +508,7 @@ def select_near_surface_samples(target_uniform_samples, num_near_surface_samples
 
 	# Compute the reconstruction shape distances and apply a union with the target shape distances.
 	recon_distances = csg_model.sample_csg(target_points)
-	combined_distances = add_sdf(target_distances, recon_distances)
-	combined_distances = target_distances if combined_distances == None else combined_distances
+	combined_distances = target_distances if recon_distances is None else add_sdf(target_distances, recon_distances)
 	(_, near_surface_points, _, near_surface_indices) = select_nearest_samples(target_points, combined_distances, num_near_surface_samples)
 
 	# Select the near-surface points and distances to target shape.
