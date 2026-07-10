@@ -65,6 +65,8 @@ class PointDataset(Dataset):
 				self.num_near_surface_input_samples = max_unified_samples
 			elif num_unified_loss_samples:
 				self.num_near_surface_loss_samples = max_unified_samples
+			
+			num_uniform_samples_for_unified = max_unified_samples
 		# Dataset contain sufficient samples for generating all near-surface samples
 		else:
 			if num_unified_input_samples:
