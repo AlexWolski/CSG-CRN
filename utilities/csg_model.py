@@ -190,7 +190,7 @@ class CSGModel():
 		empty_models = self.primitive_dropout_mask.all(dim=1)
 		empty_indices = empty_models.nonzero(as_tuple=True)[0]
 		restored_commands = torch.randint(self.num_commands, (empty_indices.size(0),), device=self.device)
-		self.primitive_dropout_mask[empty_indices, restored_commands] = True
+		self.primitive_dropout_mask[empty_indices, restored_commands] = False
 
 
 	def clear_dropout(self):
