@@ -91,7 +91,7 @@ class CSG_CRN(nn.Module):
 
 		# Add noise to the feature vector when training
 		if self.training and self.feature_vec_noise:
-			features = features + (torch.randn_like(features) * features.std(dim=0, keepdim=True).detach() * self.feature_vec_noise)
+			features = features + (torch.randn_like(features) * self.feature_vec_noise)
 
 		# Decode primitive predictions
 		for decoder in self.regressor_decoder_list:
