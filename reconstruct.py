@@ -195,14 +195,14 @@ def construct_csg_model(model, input_file, args, init_model_state_dict=None, pre
 		# Run a forward pass on the inital reconstruciton model.
 		current_state_dict = model.state_dict()
 		model.load_state_dict(init_model_state_dict, strict=False)
-		csg_model = model.forward(uniform_samples, near_surface_samples)
+		csg_model = model.forward(near_surface_samples, uniform_samples)
 		# Revert the CSGCRN model to the reconstruction weights.
 		model.load_state_dict(current_state_dict)
 
 	if args.cascade_training_mode == SEPARATE_PARAMS:
-		csg_model = model.forward_separate_cascades(uniform_samples, near_surface_samples, prev_cascades_list)
+		csg_model = model.forward_separate_cascades(near_surface_samples, uniform_samples, prev_cascades_list)
 	else:
-		csg_model = model.forward_cascade(uniform_samples, near_surface_samples, args.num_cascades, csg_model)
+		csg_model = model.forward_cascade(near_surface_samples, uniform_samples, args.num_cascades, csg_model)
 
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 

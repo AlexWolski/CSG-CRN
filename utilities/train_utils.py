@@ -118,7 +118,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 		if args.cascade_training_mode == SEPARATE_PARAMS:
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-				csg_model = model.forward_separate_cascades(uniform_input_samples.detach(), near_surface_input_samples.detach(), prev_cascades_list)
+				csg_model = model.forward_separate_cascades(near_surface_input_samples.detach(), uniform_input_samples.detach(), prev_cascades_list)
 
 			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 			_backpropagate(scaler, optimizer, cascade_loss)
@@ -131,7 +131,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 				# If a trained initial model is available, use it to generate the first reconstruction.
 				if init_model != None:
 					with torch.no_grad():
-						curernt_model = init_model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), None).detach()
+						curernt_model = init_model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), None).detach()
 
 				# Generate inital reconstructions to train on in inference mode.
 				input_csg_list = [None if curernt_model == None else curernt_model.clone()]
@@ -139,7 +139,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 				with torch.no_grad():
 					for i in range(num_train_loops - 1):
-						curernt_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), curernt_model).detach()
+						curernt_model = model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
 						input_csg_list.append(None if curernt_model == None else curernt_model.clone())
 
 						if args.prim_dropout_percent:
@@ -151,7 +151,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 				for i in range(num_train_loops):
 					# Forward
 					with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-						csg_model = model.forward(uniform_input_samples.detach(), near_surface_input_samples.detach(), input_csg_list[i])
+						csg_model = model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), input_csg_list[i])
 
 					# Compute the loss for this cascade.
 					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
@@ -166,7 +166,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 			# Update model parameters after all cascade iterations
 			else:
 				with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-					csg_model = model.forward_cascade(uniform_input_samples.detach(), near_surface_input_samples.detach(), num_cascades)
+					csg_model = model.forward_cascade(near_surface_input_samples.detach(), uniform_input_samples.detach(), num_cascades)
 
 				cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
 				_backpropagate(scaler, optimizer, cascade_loss)
@@ -209,14 +209,14 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 
 			# If an initial CSGCRN model exists, use that to initialize the CSG model
 			if init_model != None:
-				csg_model = init_model.forward(uniform_input_samples, near_surface_input_samples)
+				csg_model = init_model.forward(near_surface_input_samples, uniform_input_samples)
 			else:
 				csg_model = None
 
 			if args.cascade_training_mode == SEPARATE_PARAMS:
-				csg_model = model.forward_separate_cascades(uniform_input_samples, near_surface_input_samples, prev_cascades_list)
+				csg_model = model.forward_separate_cascades(near_surface_input_samples, uniform_input_samples, prev_cascades_list)
 			else:
-				csg_model = model.forward_cascade(uniform_input_samples, near_surface_input_samples, num_cascades, csg_model)
+				csg_model = model.forward_cascade(near_surface_input_samples, uniform_input_samples, num_cascades, csg_model)
 
 			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
