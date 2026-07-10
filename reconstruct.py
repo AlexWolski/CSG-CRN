@@ -28,7 +28,7 @@ def options():
 
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file.')
 	parser.add_argument('--input_file', type=str, required=True, help='Model file to reconstruct.')
-	parser.add_argument('--num_cascades', type=int, help='Number of refinement passes before back-propagating (Total generated primitives = num_prims * num_cascades)')
+	parser.add_argument('--num_cascades', type=int, help='Number of refinement passes before back-propagating. Total generated primitives = num_prims + (num_prims * num_cascades)')
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--num_view_points', type=int, default=10000, help='Number of points to visualize the output.')
@@ -69,7 +69,7 @@ def load_model(args):
 	args.sub_weight = saved_args.sub_weight
 	args.cascade_training_mode = saved_args.cascade_training_mode
 
-	if args.num_cascades == None:
+	if args.num_cascades is None:
 		args.num_cascades = saved_args.num_cascades
 
 	predict_blending = not saved_args.no_blending
