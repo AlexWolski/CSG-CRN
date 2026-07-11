@@ -1,5 +1,6 @@
 import os
 import sys
+import copy
 import math
 import signal
 import argparse
@@ -193,7 +194,7 @@ def construct_csg_model(model, input_file, args, init_model_state_dict=None, pre
 
 	if args.cascade_training_mode == INIT_RECON:
 		# Run a forward pass on the inital reconstruciton model.
-		current_state_dict = model.state_dict()
+		current_state_dict = copy.deepcopy(model.state_dict())
 		model.load_state_dict(init_model_state_dict, strict=False)
 		csg_model = model.forward(near_surface_samples, uniform_samples)
 		# Revert the CSGCRN model to the reconstruction weights.
