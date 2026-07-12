@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 # Square the minimum distance between the primitive and the closest sample point
-# Loss function inspired by CSGNet
+# Loss function inspired by CSGStumpNet
 # https://github.com/kimren227/CSGStumpNet/blob/main/loss.py#L4-L12
 class ProximityLoss(nn.Module):
 	def __init__(self):
