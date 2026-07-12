@@ -83,6 +83,7 @@ def options():
 	# Expand paths
 	args.data_dir = os.path.abspath(args.data_dir) if args.data_dir else None
 	args.model_path = os.path.abspath(args.model_path) if args.model_path else None
+	args.supervisor_model_path = os.path.abspath(args.supervisor_model_path) if args.supervisor_model_path else None
 	args.output_dir = os.path.abspath(args.output_dir)
 
 	# Disable batch norm for SGD
@@ -200,6 +201,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--backprop_all_cascades', default=False, action='store_true', help='When disabled, backpropagate through each cascade separately. When enabled, backpropagate through all cascades. Enabling the setting uses more GPU memory but gives the model more context. Not applicable when `cascade_training_mode` is set to SEPARATE.')
 	training_group.add_argument('--feature_vec_noise', type=float, default=0.0, help='Amount of gaussian noise to add to the latent vector before training the decoder. Useful for preventing shared weight refinement cascades from converging on identical outputs. Set to 0.0 for no noise, 1.0 for one standard deviation of noise, ect.')
 	training_group.add_argument('--prim_dropout_percent', type=float, default=None, help='Percentage of primitives to drop out from the initial reconstruction when in SHARED or INIT_RECON training modes. Set to None or 0 to disable.')
+	training_group.add_argument('--supervisor_model_path', type=str, default='', help='Model for generating initial reconstruction input data. Only applied when training with SHARED parameters. The number of primitives generated per cascade by the supervisor should match the model being trained. Intended for testing purposes.')
 	training_group.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 	training_group.add_argument('--lr_factor', type=float, default=0.1, help='Learning rate reduction factor')
 	training_group.add_argument('--lr_patience', type=int, default=20, help='Number of training epochs without improvement before the learning rate is adjusted')

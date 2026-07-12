@@ -104,7 +104,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None, init_model=None):
+def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None, init_model=None, trained_supervisor=None):
 	total_train_loss = 0
 
 	for data_sample in tqdm(train_loader, desc=desc):
@@ -133,13 +133,16 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 					with torch.no_grad():
 						curernt_model = init_model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), None).detach()
 
+				# Use the supervisor to generate initial reconstructions when provided, otherwise use the model being trained.
+				generator_model = trained_supervisor if trained_supervisor != None else model
+
 				# Generate inital reconstructions to train on in inference mode.
 				input_csg_list = [None if curernt_model == None else curernt_model.clone()]
 				model.eval()
 
 				with torch.no_grad():
 					for i in range(num_train_loops - 1):
-						curernt_model = model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
+						curernt_model = generator_model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
 						input_csg_list.append(None if curernt_model == None else curernt_model.clone())
 
 						if args.prim_dropout_percent:
@@ -286,8 +289,15 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 	# List of trained models for all previous cascades when using SEPARATE training mode.
 	prev_cascades_list = []
-	# Trained model for the first reconstruction output when using INIT_RECOND training mode.
+	# Trained model for the first reconstruction output when using INIT_RECON training mode.
 	init_model = None
+	# Trained model for generating initial reconstruction inputs when using SHARED training mode.
+	trained_supervisor = None
+
+	if args.cascade_training_mode != SEPARATE_PARAMS and args.supervisor_model_path:
+		(supervisor_settings, supervisor_params) = load_saved_settings(args.supervisor_model_path)
+		trained_supervisor = load_model_from_args(supervisor_settings['args'], device, supervisor_params)
+		trained_supervisor.eval()
 
 	# Initalize training time ellapsed counter
 	saved_time_ellapsed = training_logger.get_last_time_ellapsed()
@@ -337,7 +347,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
-		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model)
+		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model, trained_supervisor)
 		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list, init_model)
 		learning_rate = optimizer.param_groups[0]['lr']
 
