@@ -93,7 +93,8 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 		predict_roundness,
 		not args.no_extended_pooling,
 		args.no_batch_norm,
-		args.feature_vec_noise
+		args.feature_vec_noise,
+		args.init_recon_noise
 	)
 
 	# Load model parameters if available

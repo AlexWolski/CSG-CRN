@@ -11,7 +11,7 @@ from utilities.sampler_utils import select_near_surface_samples
 class CSG_CRN(nn.Module):
 	def __init__(
 			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, input_sampling_method, surface_uniform_ratio, device, encoder_layers, encoder_trans_conv_layers, encoder_trans_fc_layers, prim_decoder_layers, regressor_layers,
-			extended_input=False, predict_blending=True, predict_roundness=True, extended_pooling=True, no_batch_norm=False, feature_vec_noise=0.0):
+			extended_input=False, predict_blending=True, predict_roundness=True, extended_pooling=True, no_batch_norm=False, feature_vec_noise=0.0, init_recon_noise=None):
 		super(CSG_CRN, self).__init__()
 
 		self.num_prims = num_prims
@@ -30,6 +30,7 @@ class CSG_CRN(nn.Module):
 		self.extended_pooling = extended_pooling
 		self.no_batch_norm = no_batch_norm
 		self.feature_vec_noise = feature_vec_noise
+		self.init_recon_noise = init_recon_noise
 
 		num_feature_dims = 6 if self.extended_input else 4
 		self.regressor_decoder_list = nn.ModuleList()
@@ -72,6 +73,10 @@ class CSG_CRN(nn.Module):
 			csg_model = CSGModel(batch_size, device=self.device)
 
 		first_prim = csg_model.num_commands == 0
+
+		# Add noise to the initial reconstruction primitives when training.
+		if self.training and self.init_recon_noise and not first_prim:
+			apply_init_recon_noise(csg_model, self.init_recon_noise)
 
 		# When using Unified sampling, generate near-surface samples by filtering by distance to both the target and reconstruction shapes.
 		# target_near_surface_samples contains uniform samples that need to be filtered down.
@@ -187,6 +192,15 @@ class CSG_CRN(nn.Module):
 		input_samples = torch.cat((uniform_samples, near_surface_samples), 1)
 		input_samples = input_samples[:, torch.randperm(input_samples.size(dim=1))]
 		return input_samples
+
+
+# Apply gaussian noise to the transform parameters of every primitive in a CSG model.
+def apply_init_recon_noise(csg_model, noise):
+	for command in csg_model.csg_commands:
+		command['translations'] = command['translations'] + torch.randn_like(command['translations']) * noise
+		command['scales'] = command['scales'] + torch.randn_like(command['scales']) * noise
+		noisy_rotations = command['rotations'] + torch.randn_like(command['rotations']) * noise
+		command['rotations'] = noisy_rotations / noisy_rotations.norm(dim=-1, keepdim=True)
 
 
 # Test network
