@@ -36,7 +36,7 @@ class Loss(nn.Module):
 
 		# Compute spread loss
 		if self.spread_loss_weight is not None and self.spread_loss_weight > 0:
-			spread_loss = self.spread_loss(csg_model)
+			spread_loss = self.spread_loss_weight * self.spread_loss(csg_model)
 		else:
 			spread_loss = 0
 
