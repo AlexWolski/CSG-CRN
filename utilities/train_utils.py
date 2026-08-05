@@ -94,7 +94,8 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 		not args.no_extended_pooling,
 		args.no_batch_norm,
 		args.feature_vec_noise,
-		args.init_recon_noise
+		args.init_recon_noise,
+		getattr(args, 'residual_only_training', False)
 	)
 
 	# Load model parameters if available
@@ -143,7 +144,10 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 				with torch.no_grad():
 					for i in range(num_train_loops - 1):
-						curernt_model = generator_model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
+						if generator_model.residual_only_training:
+							curernt_model = generator_model.forward_residual(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
+						else:
+							curernt_model = generator_model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
 						input_csg_list.append(None if curernt_model == None else curernt_model.clone())
 
 						if args.prim_dropout_percent:
@@ -155,7 +159,10 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 				for i in range(num_train_loops):
 					# Forward
 					with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-						csg_model = model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), input_csg_list[i])
+						if args.residual_only_training:
+							csg_model = model.forward_residual(near_surface_input_samples.detach(), uniform_input_samples.detach(), input_csg_list[i])
+						else:
+							csg_model = model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), input_csg_list[i])
 
 					# Compute the loss for this cascade.
 					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
@@ -453,7 +460,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 def init_training_params(training_logger, data_splits, args, device, model_params=None):
 	# Initialize model
 	model = load_model_from_args(args, device, model_params if args.resume_training else None)
-	loss_func = Loss(args.loss_metric, args.num_loss_points, args.num_prims, args.spread_loss_weight, args.clamp_dist, args.excess_loss_weight, args.loss_sampling_method).to(device)
+	loss_func = Loss(args.loss_metric, args.num_loss_points, args.num_prims, args.spread_loss_weight, args.clamp_dist, args.excess_loss_weight, args.loss_sampling_method, args.residual_only_training).to(device)
 	current_lr = training_logger.get_last_lr() if training_logger.get_last_lr() else args.init_lr
 	optimizer = init_optimizer(model, current_lr)
 	scheduler = init_scheduler(optimizer, args)

@@ -69,6 +69,7 @@ def load_model(args):
 	args.clamp_dist = saved_args.clamp_dist
 	args.sub_weight = saved_args.sub_weight
 	args.cascade_training_mode = saved_args.cascade_training_mode
+	args.residual_only_training = saved_args.residual_only_training if 'residual_only_training' in saved_args else False
 
 	if args.num_cascades is None:
 		args.num_cascades = saved_args.num_cascades
@@ -95,7 +96,8 @@ def load_model(args):
 		predict_blending,
 		predict_roundness,
 		not saved_args.no_extended_pooling,
-		saved_args.no_batch_norm
+		saved_args.no_batch_norm,
+		residual_only_training=args.residual_only_training
 	)
 
 	model.load_state_dict(state_dict, strict=False)

@@ -1,17 +1,18 @@
 import copy
+import math
 import torch
 import torch.nn as nn
 from networks.pointnet import PointNetfeat
 from networks.regressor_decoder import PrimitiveRegressor
 from utilities.constants import NEAR_SURFACE_SAMPLE_FACTOR, UNIFIED_SAMPLING
 from utilities.csg_model import CSGModel, subtract_sdf, smooth_max
-from utilities.sampler_utils import select_near_surface_samples
+from utilities.sampler_utils import select_near_surface_samples, select_nearest_samples
 
 
 class CSG_CRN(nn.Module):
 	def __init__(
 			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, input_sampling_method, surface_uniform_ratio, device, encoder_layers, encoder_trans_conv_layers, encoder_trans_fc_layers, prim_decoder_layers, regressor_layers,
-			extended_input=False, predict_blending=True, predict_roundness=True, extended_pooling=True, no_batch_norm=False, feature_vec_noise=0.0, init_recon_noise=None):
+			extended_input=False, predict_blending=True, predict_roundness=True, extended_pooling=True, no_batch_norm=False, feature_vec_noise=0.0, init_recon_noise=None, residual_only_training=False):
 		super(CSG_CRN, self).__init__()
 
 		self.num_prims = num_prims
@@ -31,6 +32,10 @@ class CSG_CRN(nn.Module):
 		self.no_batch_norm = no_batch_norm
 		self.feature_vec_noise = feature_vec_noise
 		self.init_recon_noise = init_recon_noise
+		self.residual_only_training = residual_only_training
+
+		# Number of near-surface input samples the network expects, matching the split used to load the dataset.
+		self.num_near_surface_input_points = self.num_input_points - math.ceil(self.num_input_points * self.surface_uniform_ratio)
 
 		num_feature_dims = 6 if self.extended_input else 4
 		self.regressor_decoder_list = nn.ModuleList()
@@ -151,9 +156,35 @@ class CSG_CRN(nn.Module):
 		return torch.cat((target_input_points, missing_volume_sdf, filled_volume_sdf, excess_volume_sdf), -1)
 
 
+	# Reconstruct the residual volume after the initial reconstruction is subtracted from the target volume.
+	def forward_residual(self, target_near_surface_samples, target_uniform_samples, csg_model=None):
+		# On the first cascade, the entire target shape is the residual.
+		if csg_model is None or csg_model.num_commands == 0:
+			return self.forward(target_near_surface_samples, target_uniform_samples, None)
+
+		# Subtract the reconstruction from the target to compute the residual volume.
+		residual_near_surface_distances = subtract_sdf(target_near_surface_samples[..., 3], csg_model.sample_csg(target_near_surface_samples[..., :3]), blending=0.2)
+		residual_uniform_distances = subtract_sdf(target_uniform_samples[..., 3], csg_model.sample_csg(target_uniform_samples[..., :3]), blending=0.2)
+		residual_near_surface_samples = torch.cat((target_near_surface_samples[..., :3], residual_near_surface_distances.unsqueeze(-1)), dim=-1)
+		residual_uniform_samples = torch.cat((target_uniform_samples[..., :3], residual_uniform_distances.unsqueeze(-1)), dim=-1)
+
+		# When using Unified sampling, generate near-surface samples by filtering by distance to the residual shape.
+		# residual_near_surface_samples contains uniform samples that need to be filtered down.
+		if self.input_sampling_method == UNIFIED_SAMPLING:
+			num_near_surface_samples = residual_near_surface_samples.size(1) // NEAR_SURFACE_SAMPLE_FACTOR
+			(_, near_surface_points, near_surface_distances, _) = select_nearest_samples(residual_near_surface_samples[..., :3], residual_near_surface_distances, num_near_surface_samples)
+			residual_near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1)
+
+		# Reconstruct the residual volume.
+		return self.forward(residual_near_surface_samples, residual_uniform_samples, csg_model)
+
+
 	def forward_cascade(self, target_near_surface_samples, target_uniform_samples, num_cascades, csg_model=None):
 		for i in range(num_cascades+1):
-			csg_model = self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
+			if self.residual_only_training:
+				csg_model = self.forward_residual(target_near_surface_samples, target_uniform_samples, csg_model)
+			else:
+				csg_model = self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
 
 		return csg_model
 
