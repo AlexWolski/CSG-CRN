@@ -86,8 +86,7 @@ class CSG_CRN(nn.Module):
 		# When using Unified sampling, generate near-surface samples by filtering by distance to both the target and reconstruction shapes.
 		# target_near_surface_samples contains uniform samples that need to be filtered down.
 		if self.input_sampling_method == UNIFIED_SAMPLING:
-			num_near_surface_samples = target_near_surface_samples.size(1) // NEAR_SURFACE_SAMPLE_FACTOR
-			target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, num_near_surface_samples, csg_model)
+			target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, self.num_near_surface_input_points, csg_model)
 
 		target_input_samples = self.combine_and_shuffle_samples(target_near_surface_samples, target_uniform_samples)
 		input_tensor = self._get_input_tensor(target_input_samples, csg_model, first_prim, self.extended_input)
@@ -171,8 +170,7 @@ class CSG_CRN(nn.Module):
 		# When using Unified sampling, generate near-surface samples by filtering by distance to the residual shape.
 		# residual_near_surface_samples contains uniform samples that need to be filtered down.
 		if self.input_sampling_method == UNIFIED_SAMPLING:
-			num_near_surface_samples = residual_near_surface_samples.size(1) // NEAR_SURFACE_SAMPLE_FACTOR
-			(_, near_surface_points, near_surface_distances, _) = select_nearest_samples(residual_near_surface_samples[..., :3], residual_near_surface_distances, num_near_surface_samples)
+			(_, near_surface_points, near_surface_distances, _) = select_nearest_samples(residual_near_surface_samples[..., :3], residual_near_surface_distances, self.num_near_surface_input_points)
 			residual_near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1)
 
 		# Reconstruct the residual volume.

@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 from losses.proximity_loss import ProximityLoss
@@ -10,17 +12,21 @@ from utilities.sampler_utils import select_near_surface_samples
 
 
 class Loss(nn.Module):
-	def __init__(self, loss_metric, num_loss_samples, prims_per_cascade, spread_loss_weight=None, clamp_dist=None, excess_loss_weight=None, loss_sampling_method=TARGET_SAMPLING, residual_only_training=False):
+	def __init__(self, loss_metric, num_loss_samples, prims_per_cascade, spread_loss_weight=None, clamp_dist=None, excess_loss_weight=None, loss_sampling_method=TARGET_SAMPLING, surface_uniform_ratio=1.0, residual_only_training=False):
 		super(Loss, self).__init__()
 		self.recon_loss = ReconstructionLoss(loss_metric, excess_loss_weight, clamp_dist)
 		self.proximity_loss = ProximityLoss()
 		self.spread_loss = SpreadLoss(prims_per_cascade)
 		self.spread_loss_weight = spread_loss_weight
 		self.prims_per_cascade = prims_per_cascade
+		self.surface_uniform_ratio = surface_uniform_ratio
 		self.residual_only_training = residual_only_training
 
 		self.num_loss_samples = num_loss_samples
 		self.loss_sampling_method = loss_sampling_method
+
+		# Number of near-surface input samples the network expects, matching the split used to load the dataset.
+		self.num_near_surface_input_points = self.num_loss_samples - math.ceil(self.num_loss_samples * self.surface_uniform_ratio)
 
 
 	# Compute reconstruction and primitive loss
@@ -51,8 +57,7 @@ class Loss(nn.Module):
 
 		# When using Unified sampling, generate near-surface samples by filtering by distance to both the target and reconstruction shapes.
 		if self.loss_sampling_method == UNIFIED_SAMPLING:
-			num_near_surface_samples = target_near_surface_samples.size(1) // NEAR_SURFACE_SAMPLE_FACTOR
-			target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, num_near_surface_samples, recon_csg_model)
+			target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, self.num_near_surface_input_points, recon_csg_model)
 
 		# Compute reconstruction loss
 		recon_loss = self.recon_loss(target_near_surface_samples, target_uniform_samples, target_surface_samples, recon_csg_model)
