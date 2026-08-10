@@ -102,6 +102,7 @@ def options():
 	# Enforce no_extended_input settings when training on the residual only.
 	if args.residual_only_training:
 		args.no_extended_input = True
+		args.no_blending = True
 
 	# Configure subtract operation
 	if args.disable_sub_operation or args.schedule_sub_weight:
@@ -204,7 +205,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--clamp_dist', type=float, default=None, help='Restrict the loss computation to a maximum specified distance from the target shape. Default is None, disabling clamp.')
 	training_group.add_argument('--cascade_training_mode', type=str.upper, default=[SEPARATE_PARAMS], choices=CASCADE_MODEL_MODES, nargs=1, help='SHARED mode uses the same model parameters for all cascades while the SEPARATE mode retrains the model parameters on each cascades.')
 	training_group.add_argument('--backprop_all_cascades', default=False, action='store_true', help='When disabled, backpropagate through each cascade separately. When enabled, backpropagate through all cascades. Enabling the setting uses more GPU memory but gives the model more context. Not applicable when `cascade_training_mode` is set to SEPARATE.')
-	training_group.add_argument('--residual_only_training', default=False, action='store_true', help='Only input and train on the target shape minus the initial reconstruction. no_extended_input is enabled. Intended for use with SHARED parameter training mode.')
+	training_group.add_argument('--residual_only_training', default=False, action='store_true', help='Only input and train on the target shape minus the initial reconstruction. no_extended_input is enabled. no_blending is enabled. Intended for use with SHARED parameter training mode.')
 	training_group.add_argument('--feature_vec_noise', type=float, default=0.0, help='Amount of gaussian noise to add to the latent vector before training the decoder. Useful for preventing shared weight refinement cascades from converging on identical outputs. Set to 0.0 for no noise, 1.0 for one standard deviation of noise, ect.')
 	training_group.add_argument('--init_recon_noise', type=float, default=0.0, help='Amount of gaussian noise to add to the primitives of the initial reconstruction CSG Model before training. Only applied when using a cascading training such as INIT_RECON or SHARED.')
 	training_group.add_argument('--prim_dropout_percent', type=float, default=None, help='Percentage of primitives to drop out from the initial reconstruction when in SHARED or INIT_RECON training modes. Set to None or 0 to disable.')
