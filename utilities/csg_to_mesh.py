@@ -1,4 +1,5 @@
 import math
+import psutil
 import torch
 import trimesh
 import tkinter as tk
@@ -67,7 +68,10 @@ def sample_csg_grid(csg_model, resolution):
 	(x, y, z) = get_grid_points(MIN_BOUND, MAX_BOUND, resolution, csg_model.device)
 
 	# Calculate number of batches needed to compute SDF values given memory restrictions
-	(free_memory, total_memory) = torch.cuda.mem_get_info(device=x.device.index)
+	if x.is_cuda:
+		(free_memory, total_memory) = torch.cuda.mem_get_info(device=x.device.index)
+	else:
+		free_memory = psutil.virtual_memory().available
 	csg_batch_size = csg_model.batch_size
 	num_samples = resolution**3
 	input_bytes = num_samples * 3 * x.element_size()

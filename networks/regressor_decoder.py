@@ -171,7 +171,7 @@ class PrimitiveRegressor(nn.Module):
 
 		# Decode primitive attributes.
 		shape = self.shape.forward(X)
-		operation = self.operation.forward(X) if not first_prim else self.get_add_op_tensor(batch_size, X.get_device())
+		operation = self.operation.forward(X) if not first_prim else self.get_add_op_tensor(batch_size, X.device)
 		translation = self.translation.forward(X)
 		rotation = self.rotation.forward(X)
 		scale = self.scale.forward(X)
