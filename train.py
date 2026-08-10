@@ -12,6 +12,7 @@ from wakepy import keep
 from utilities.constants import INIT_RECON, SEPARATE_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
+from utilities.device_utils import get_device
 from utilities.train_utils import load_data_splits, load_saved_settings, train, init_training_params
 from utilities.training_logger import TrainingLogger
 
@@ -233,18 +234,6 @@ def get_online_augment_parser(suppress_default=False):
 	return get_augment_parser('ONLINE AUGMENT SETTINGS', suppress_default)
 
 
-# Determine device to train on
-def get_device(device=None):
-	if device == 'cpu':
-		raise Exception('Only CUDA devices are supported.')
-	elif device:
-		return torch.device(device)
-	elif torch.cuda.is_available():
-		return torch.device('cuda')
-	else:
-		raise Exception('No CUDA devices are available.')
-
-
 # Set model_path, resume_training, and overwrite options if continue option is provided
 def process_continue(args):
 	if getattr(args, 'continue'):
@@ -290,7 +279,7 @@ def main():
 	print('')
 
 	# Set training device
-	device = get_device(args.device)
+	device = get_device(args.device, cpu_allowed=False)
 
 	# Initialize options and output
 	process_continue(args)

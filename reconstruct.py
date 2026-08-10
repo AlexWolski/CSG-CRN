@@ -18,6 +18,7 @@ from view_sdf import SdfModelViewer
 from utilities.constants import SEPARATE_PARAMS, INIT_RECON
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name, add_sdf, subtract_sdf
 from utilities.data_augmentation import RotationAxis
+from utilities.device_utils import get_device
 from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface
 from utilities.accuracy_metrics import compute_chamfer_distance
 from utilities.csg_to_mesh import csg_to_mesh
@@ -38,16 +39,6 @@ def options():
 
 	args = parser.parse_args()
 	return args
-
-
-# Determine device to train on
-def get_device(device=None):
-	if device:
-		return torch.device(device)
-	elif torch.cuda.is_available():
-		return torch.device('cuda')
-	else:
-		return torch.device('cpu')
 
 
 def load_model(args):
@@ -224,7 +215,7 @@ def main():
 	print('')
 
 	# Run model
-	args.device = get_device(args.device)
+	args.device = get_device(args.device, cpu_allowed=True)
 	(model, init_model_state_dict, prev_cascades_list) = load_model(args)
 
 	# View reconstruction
