@@ -175,7 +175,7 @@ def csg_to_mesh_differentiable(csg_model, resolution):
 	"""
 	batch_sdf_distances = sample_csg_grid(csg_model, resolution)
 	batch_size = batch_sdf_distances.size(0)
-	diffdmc = DiffDMC(dtype=torch.float32).cuda()
+	diffdmc = DiffDMC(dtype=torch.float32).to(csg_model.device)
 	mesh_list = []
 
 	for batch in range(batch_size):
