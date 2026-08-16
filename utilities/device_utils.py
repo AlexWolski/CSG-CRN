@@ -26,9 +26,17 @@ def get_device(device=None, cpu_allowed=False):
 
 # Determine list of devices to train on
 def get_devices(devices=None, cpu_allowed=False):
-	# When no devices are not specified, automatically select one
+	# When no devices are not specified, automatically select one.
 	if not devices:
 		return [get_device(None, cpu_allowed)]
+
+	# When "all" is specified use all available cuda devices.
+	if 'all' in devices:
+		devices = get_all_cuda_devices()
+
+		# Check that valid CUDA devices were found.
+		if devices is None or len(devices) == 0:
+			raise Exception('The "all" keyword was selected but no CUDA devices were found. Select an available device:' + get_available_devices(cpu_allowed))
 
 	# Convert string parameter to list
 	if isinstance(devices, str):
@@ -69,3 +77,11 @@ def get_available_devices(cpu_allowed):
 	connector = ' or ' if num_cuda and cpu_device else ''
 
 	return cpu_device + connector + cuda_deivce
+
+# Return a list of all available cuda devices.
+def get_all_cuda_devices():
+	if not torch.cuda.is_available():
+		return None
+
+	num_cuda = torch.cuda.device_count()
+	return ["cuda:" + str(i) for i in range(num_cuda)]

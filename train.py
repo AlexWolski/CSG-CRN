@@ -230,7 +230,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--no_schedule_cascades', default=False, action='store_true', help='Begin training with all refinement iterations enabled rather than progressively added with a scheduler. Not applicable when `cascade_training_mode` is set to SEPARATE.')
 	training_group.add_argument('--cascade_schedule_epochs', type=int, default=10, help='Number of epochs to train before adding a new refinement iteration. Not applicable when `cascade_training_mode` is set to SEPARATE.')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
-	training_group.add_argument('--device', type=str.lower, default=[], nargs='*', help='Select one or more training devices. The first device is used for storing the network model. CPU and GPU devices cannot be mixed.')
+	training_group.add_argument('--device', type=str.lower, default=[], nargs='*', help='Select one or more training devices. The first device is used for storing the network model. CPU and GPU devices cannot be mixed. Select "all" to use all available cuda devices.')
 	training_group.add_argument('--enable_amp', default=False, action='store_true', help='Enable Automatic Mixed Precision')
 
 	return training_parser
@@ -304,7 +304,6 @@ def main():
 	print('')
 
 	# Train model
-	# TEMP: select first device in the list. TO-DO: Pass whole list and implement multi-device training.
 	training_params = init_training_params(training_logger, data_splits, args, devices[0], model_params)
 	train(*training_params, training_logger, data_splits, args, device)
 
