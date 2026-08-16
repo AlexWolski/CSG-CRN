@@ -75,7 +75,7 @@ class CSG_CRN(nn.Module):
 		batch_size = target_near_surface_samples.size(dim=0)
 
 		if csg_model is None:
-			csg_model = CSGModel(batch_size, device=self.device)
+			csg_model = CSGModel(batch_size, device=target_near_surface_samples.device)
 
 		first_prim = csg_model.num_commands == 0
 
@@ -129,7 +129,7 @@ class CSG_CRN(nn.Module):
 		batch_size = target_input_samples.size(dim=0)
 		num_points = target_input_samples.size(dim=1)
 
-		null_volume_sdf = torch.ones((batch_size, num_points, 1), device=self.device)
+		null_volume_sdf = torch.ones((batch_size, num_points, 1), device=target_input_samples.device)
 		return torch.cat((target_input_samples, null_volume_sdf, null_volume_sdf), -1)
 
 
@@ -187,27 +187,33 @@ class CSG_CRN(nn.Module):
 		return csg_model
 
 
-	# Train only the current cascade. Preivous cascades have trained parameters accessed through the `prev_cascades_list` parameter.
-	def forward_separate_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model=None):
+	# Run inference on the previous cascades using the model parameters provided in `prev_cascades_list`.
+	def forward_prev_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model=None):
 		current_params = None
 
 		if len(prev_cascades_list) > 0:
 			self.eval()
 			current_params = copy.deepcopy(self.state_dict())
 
-		# Generate previous cascasdes in inference mode. forward_separate_cascades will be called recursively on all cascades.
+		# Generate previous cascasdes in inference mode.
 		for model_params in prev_cascades_list:
 			with torch.no_grad():
 				self.eval()
 				self.load_state_dict(model_params)
 				csg_model = self.forward(target_near_surface_samples, target_uniform_samples, csg_model).detach()
 
-		# Generate current cascade
+		# Restore model parameters
 		if current_params != None:
 			self.load_state_dict(current_params)
 
-		# Run a forward pass on the current cascade
 		self.train() if self.training else self.eval()
+
+		return csg_model
+
+
+	# Run inference on all each previous cascade model parameter in `prev_cascades_list`, then run a forward pass for the current cascade.
+	def forward_separate_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model=None):
+		csg_model = self.forward_prev_cascades(target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model)
 		return self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
 
 
