@@ -40,7 +40,7 @@ def get_devices(devices=None, cpu_allowed=False):
 
 	# Resolve all devices
 	for device in devices:
-		resolved_devices.push(get_device(device, cpu_allowed))
+		resolved_devices.append(get_device(device, cpu_allowed))
 		has_cpu_device = True if device == 'cpu' else has_cpu_device
 		has_cuda_device = True if device.startswith('cuda') else has_cuda_device
 
