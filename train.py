@@ -5,6 +5,7 @@ import sys
 import torch
 import traceback
 
+from datetime import timedelta
 from torch.utils.data import Subset
 
 from losses.reconstruction_loss import ReconstructionLoss
@@ -12,7 +13,7 @@ from wakepy import keep
 from utilities.constants import INIT_RECON, SEPARATE_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
 from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
-from utilities.device_utils import get_device
+from utilities.device_utils import get_devices
 from utilities.train_utils import load_data_splits, load_saved_settings, train, init_training_params
 from utilities.training_logger import TrainingLogger
 
@@ -57,7 +58,7 @@ def options():
 		data_args = args
 
 		# Load arguments from model file
-		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis])
+		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis, timedelta])
 		args = torch.load(args.model_path, weights_only=True)['args']
 
 		# Apply data settings
@@ -87,8 +88,9 @@ def options():
 	args.supervisor_model_path = os.path.abspath(args.supervisor_model_path) if args.supervisor_model_path else None
 	args.output_dir = os.path.abspath(args.output_dir)
 
-	# Disable batch norm for SGD
-	args.no_batch_norm = True if args.batch_size == 1 else args.no_batch_norm
+	# Disable batch norm for SGD. Each device must receive at least two samples from its batch split.
+	num_devices = len(args.device) if isinstance(args.device, list) else 1
+	args.no_batch_norm = True if args.batch_size < 2 * max(num_devices, 1) else args.no_batch_norm
 
 	# Retrieve loss metric
 	args.loss_metric = parse_arg_choice(args.loss_metric)
@@ -228,7 +230,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--no_schedule_cascades', default=False, action='store_true', help='Begin training with all refinement iterations enabled rather than progressively added with a scheduler. Not applicable when `cascade_training_mode` is set to SEPARATE.')
 	training_group.add_argument('--cascade_schedule_epochs', type=int, default=10, help='Number of epochs to train before adding a new refinement iteration. Not applicable when `cascade_training_mode` is set to SEPARATE.')
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
-	training_group.add_argument('--device', type=str.lower, default='', help='Select preferred training device')
+	training_group.add_argument('--device', type=str.lower, default=[], nargs='*', help='Select one or more training devices. The first device is used for storing the network model. CPU and GPU devices cannot be mixed.')
 	training_group.add_argument('--enable_amp', default=False, action='store_true', help='Enable Automatic Mixed Precision')
 
 	return training_parser
@@ -282,8 +284,9 @@ def main():
 	args = options()
 	print('')
 
-	# Set training device
-	device = get_device(args.device, cpu_allowed=False)
+	# Parse devices. The first device is used for for storing the network model.
+	devices = get_devices(args.device, cpu_allowed=False)
+	device = devices[0]
 
 	# Initialize options and output
 	process_continue(args)
@@ -301,7 +304,8 @@ def main():
 	print('')
 
 	# Train model
-	training_params = init_training_params(training_logger, data_splits, args, device, model_params)
+	# TEMP: select first device in the list. TO-DO: Pass whole list and implement multi-device training.
+	training_params = init_training_params(training_logger, data_splits, args, devices[0], model_params)
 	train(*training_params, training_logger, data_splits, args, device)
 
 

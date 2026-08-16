@@ -35,7 +35,7 @@ def options():
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--num_view_points', type=int, default=10000, help='Number of points to visualize the output.')
 	parser.add_argument('--point_size', type=int, default=3, help='Size to render each point of the point cloud.')
-	parser.add_argument('--device', type=str, default='', help='Select preferred inference device')
+	parser.add_argument('--device', type=str, default=[], nargs='*', help='Select preferred inference device. Reconstruction only supports a single device')
 
 	args = parser.parse_args()
 	return args
@@ -214,8 +214,13 @@ def main():
 	args = options()
 	print('')
 
+	# Assert a single inference device.
+	if len(args.device) > 1:
+		print('Reconstruction only supports one device for inference. Select one device or select "None" to automatically select one.')
+		exit()
+
 	# Run model
-	args.device = get_device(args.device, cpu_allowed=True)
+	args.device = get_device(None, cpu_allowed=True)[0]
 	(model, init_model_state_dict, prev_cascades_list) = load_model(args)
 
 	# View reconstruction
