@@ -91,14 +91,14 @@ def options():
 	args.no_batch_norm = True if args.batch_size == 1 else args.no_batch_norm
 
 	# Retrieve loss metric
-	args.loss_metric = args.loss_metric[0] if len(args.loss_metric) > 0 else None
+	args.loss_metric = parse_arg_choice(args.loss_metric)
 
 	# Retrieve sampling methods
-	args.loss_sampling_method = args.loss_sampling_method[0] if len(args.loss_sampling_method) > 0 else None
-	args.input_sampling_method = args.input_sampling_method[0] if len(args.input_sampling_method) > 0 else None
+	args.loss_sampling_method = parse_arg_choice(args.loss_sampling_method)
+	args.input_sampling_method = parse_arg_choice(args.input_sampling_method)
 
 	# Retrieve cascade training mode
-	args.cascade_training_mode = args.cascade_training_mode[0] if len(args.cascade_training_mode) > 0 else None
+	args.cascade_training_mode = parse_arg_choice(args.cascade_training_mode)
 
 	# Enforce no_extended_input settings when training on the residual only.
 	if args.residual_only_training:
@@ -132,6 +132,10 @@ def options():
 
 	return args
 
+
+# Parse an nargs type argument. Return None if no choise was selected, otherwise unwrap the argument.
+def parse_arg_choice(arg):
+	return arg[0] if len(arg) > 0 else None
 
 def print_help():
 	parsers = [get_data_parser(), get_model_parser(), get_training_parser(), get_online_augment_parser()]
