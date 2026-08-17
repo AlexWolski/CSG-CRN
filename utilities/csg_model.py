@@ -99,6 +99,38 @@ class CSGModel():
 		self.dropout_percent = 0
 
 
+	# Export all class instance members in a dictionary.
+	def get_class_data(self):
+		return {
+			'csg_commands': self.csg_commands,
+			'batch_size': self.batch_size,
+			'device': self.device,
+			'dropout_percent': self.dropout_percent
+		}
+
+
+	# Instantiate a new CSGModel object given a dictionary of instance members. `batch_size` and `device` can be overwritten.
+	def from_class_data(class_data, batch_size=None, device=None):
+		if not class_data:
+			return None
+
+		# Populate batch_size and device from the overrides if available, otherwise use the stored values.
+		batch_size = batch_size if batch_size is not None else class_data['batch_size']
+		device = device if device is not None else class_data['device']
+
+		# Instantiate a new CSGModel object.
+		csg_model = CSGModel(batch_size, device)
+
+		# Add each command to the new CSGModel obejct.
+		for csg_command in class_data['csg_commands']:
+			csg_model.add_command_dict(csg_command)
+
+		# Recompute `primitive_dropout_mask`
+		csg_model.set_dropout(class_data['dropout_percent'])
+
+		return csg_model
+
+
 	def clone(self):
 		cloned_model = CSGModel(self.batch_size, self.device)
 
@@ -149,7 +181,7 @@ class CSGModel():
 			raise Exception(f'Expected batch size of {self.batch_size} but was given a command with batch size of {batch_size}.')
 
 
-	# Add a primitive to the CSG model
+	# Add a primitive to the CSG model given the individual command values.
 	def add_command(self, shape_weights, operation_weights, translations, rotations, scales, blending=None, roundness=None, apply_dropout=False):
 		command = {
 			'shape weights': shape_weights,
@@ -161,6 +193,11 @@ class CSGModel():
 			'roundness': roundness
 		}
 
+		self.add_command_dict(command, apply_dropout)
+
+
+	# Add a primitive to the CSG model given a dict of command values.
+	def add_command_dict(self, command, apply_dropout=False):
 		self._validate_batch_size(command)
 		self.csg_commands.append(command)
 		self.num_commands += 1
@@ -176,10 +213,13 @@ class CSGModel():
 
 
 	def set_dropout(self, drop_percent):
+		if drop_percent is None:
+			drop_percent = 0
+
 		self.dropout_percent = drop_percent
 
-		# In the edge case that `set_dropout` is called when no commands were added, set it to null.
-		if self.num_commands == 0:
+		# In the edge case that `set_dropout` is called when no commands were added or drop_percent is 0, set it to null.
+		if self.num_commands == 0 or self.dropout_percent == 0.0:
 			self.primitive_dropout_mask = None
 			return
 
