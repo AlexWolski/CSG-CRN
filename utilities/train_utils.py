@@ -108,7 +108,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, train_step, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None, init_model=None, trained_supervisor=None):
+def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None, init_model=None, trained_supervisor=None):
 	total_train_loss = 0
 
 	for data_sample in tqdm(train_loader, desc=desc):
@@ -126,7 +126,7 @@ def train_one_epoch(model, train_step, optimizer, scaler, train_loader, num_casc
 				input_csg_model = model.forward_prev_cascades(near_surface_input_samples.detach(), uniform_input_samples.detach(), prev_cascades_list)
 
 			# Run the forward pass and and compute the loss for the current cascade.
-			cascade_loss = forward_train_step(train_step, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_model, TrainStep.FORWARD)
+			cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_model, TrainStep.FORWARD)
 			_backpropagate(scaler, optimizer, cascade_loss)
 		elif args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
 			# Update model parameters after each refinement step
@@ -163,7 +163,7 @@ def train_one_epoch(model, train_step, optimizer, scaler, train_loader, num_casc
 
 				for i in range(num_train_loops):
 					# Run the forward pass for this cascade and compute the loss.
-					cascade_loss = forward_train_step(train_step, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_list[i], forward_mode)
+					cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_list[i], forward_mode)
 					# Backpropagate through each cascade separately but do not optimize weights yet.
 					scaler.scale(cascade_loss).backward()
 
@@ -174,7 +174,7 @@ def train_one_epoch(model, train_step, optimizer, scaler, train_loader, num_casc
 
 			# Update model parameters after all cascade iterations
 			else:
-				cascade_loss = forward_train_step(train_step, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, TrainStep.FORWARD_CASCADE, num_cascades)
+				cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, TrainStep.FORWARD_CASCADE, num_cascades)
 				_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Only record the loss for the completed reconstruction
@@ -286,7 +286,7 @@ def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch)
 
 
 # Train model for max_epochs or until stopped early
-def train(model, train_step, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device):
+def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device):
 	model.train(True)
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
@@ -350,7 +350,7 @@ def train(model, train_step, loss_func, optimizer, scheduler, scaler, train_load
 
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
-		train_loss = train_one_epoch(model, train_step, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model, trained_supervisor)
+		train_loss = train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model, trained_supervisor)
 		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list, init_model)
 		learning_rate = optimizer.param_groups[0]['lr']
 
@@ -465,11 +465,11 @@ def init_training_params(training_logger, data_splits, args, devices, model_para
 	scaler = torch.amp.GradScaler(enabled=args.enable_amp)
 
 	# Initialize the trianing step singleton.
-	train_step = TrainStep(model, loss_func, args.enable_amp)
+	TrainStep.initialize(model, loss_func, args.enable_amp)
 
 	# Enable multi-GPU training.
 	if len(devices) > 1:
-		train_step = nn.DataParallel(train_step, device_ids=devices)
+		TrainStep.apply_parallel(devices)
 
 	# Load training set.
 	(train_split, val_split, _test_split) = data_splits
@@ -490,7 +490,6 @@ def init_training_params(training_logger, data_splits, args, devices, model_para
 
 	return (
 		model,
-		train_step,
 		loss_func,
 		optimizer,
 		scheduler,

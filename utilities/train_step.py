@@ -11,11 +11,32 @@ class TrainStep(nn.Module):
 	FORWARD_CASCADE = 'forward_cascade'
 	FORWARD_RESIDUAL = 'forward_residual'
 
+	# Singleton instance
+	_train_step_instance = None
+
+	# Constructor should not be invoked outside of this class.
 	def __init__(self, model, loss_func, enable_amp):
 		super(TrainStep, self).__init__()
 		self.model = model
 		self.loss_func = loss_func
 		self.enable_amp = enable_amp
+
+
+	# Factory method that creates the singleton instance.
+	def initialize(model, loss_func, enable_amp):
+		TrainStep._train_step_instance = TrainStep(model, loss_func, enable_amp)
+
+
+	# Return singleton instance.
+	def get_instance():
+		return TrainStep._train_step_instance
+
+
+	# Wrap the singleton in an DataParallel instance.
+	def apply_parallel(devices):
+		if TrainStep._train_step_instance is not None:
+			TrainStep._train_step_instance = nn.DataParallel(TrainStep._train_step_instance, device_ids=devices)
+
 
 	def forward(self, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_class_data=None, forward_mode=FORWARD, num_cascades=None):
 		# Each tensor of training data is split by DataParallel. Reconstruct a CSGModel instance using the split tensors.
@@ -34,8 +55,12 @@ class TrainStep(nn.Module):
 
 
 # Helper method that calls TrainStep forward method.
-def forward_train_step(train_step, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_model=None, forward_mode=TrainStep.FORWARD, num_cascades=None):
+def forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_model=None, forward_mode=TrainStep.FORWARD, num_cascades=None):
 	csg_class_data = input_csg_model.get_class_data() if input_csg_model is not None else None
+	train_step = TrainStep.get_instance()
+
+	if train_step is None:
+		raise Exception('TrainStep singleton must be initialized before `forward_train_step` can be used.')
 
 	loss = train_step(
 		near_surface_input_samples.detach(),
