@@ -304,7 +304,7 @@ def main():
 	print('')
 
 	# Train model
-	training_params = init_training_params(training_logger, data_splits, args, devices[0], model_params)
+	training_params = init_training_params(training_logger, data_splits, args, devices, model_params)
 	train(*training_params, training_logger, data_splits, args, device)
 
 

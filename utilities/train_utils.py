@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.nn as nn
 import shutil
 
 from argparse import Namespace
@@ -19,6 +20,7 @@ from utilities.data_processing import get_data_files, BEST_MODEL_FILE, LATEST_MO
 from utilities.data_augmentation import RotationAxis
 from utilities.datasets import PointDataset
 from utilities.early_stopping import EarlyStopping
+from utilities.train_step import TrainStep, forward_train_step
 
 
 # Prepare data files and load training dataset
@@ -106,7 +108,7 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 
 
 # Iteratively predict primitives and propagate average loss
-def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None, init_model=None, trained_supervisor=None):
+def train_one_epoch(model, train_step, optimizer, scaler, train_loader, num_cascades, args, device, desc='', prev_cascades_list=None, init_model=None, trained_supervisor=None):
 	total_train_loss = 0
 
 	for data_sample in tqdm(train_loader, desc=desc):
@@ -119,10 +121,12 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 		) = data_sample
 
 		if args.cascade_training_mode == SEPARATE_PARAMS:
+			# Create the initial reconstruction in inference mode.
 			with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-				csg_model = model.forward_separate_cascades(near_surface_input_samples.detach(), uniform_input_samples.detach(), prev_cascades_list)
+				input_csg_model = model.forward_prev_cascades(near_surface_input_samples.detach(), uniform_input_samples.detach(), prev_cascades_list)
 
-			cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+			# Run the forward pass and and compute the loss for the current cascade.
+			cascade_loss = forward_train_step(train_step, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_model, TrainStep.FORWARD)
 			_backpropagate(scaler, optimizer, cascade_loss)
 		elif args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
 			# Update model parameters after each refinement step
@@ -153,19 +157,13 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 						if args.prim_dropout_percent:
 							input_csg_list[-1].set_dropout(args.prim_dropout_percent)
 
-				# Train on initial reconstructions
+				# Use the initial reconstructions as input data for training.
 				model.train()
+				forward_mode = TrainStep.FORWARD_RESIDUAL if args.residual_only_training else TrainStep.FORWARD
 
 				for i in range(num_train_loops):
-					# Forward
-					with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-						if args.residual_only_training:
-							csg_model = model.forward_residual(near_surface_input_samples.detach(), uniform_input_samples.detach(), input_csg_list[i])
-						else:
-							csg_model = model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), input_csg_list[i])
-
-					# Compute the loss for this cascade.
-					cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+					# Run the forward pass for this cascade and compute the loss.
+					cascade_loss = forward_train_step(train_step, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_list[i], forward_mode)
 					# Backpropagate through each cascade separately but do not optimize weights yet.
 					scaler.scale(cascade_loss).backward()
 
@@ -176,10 +174,7 @@ def train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_casca
 
 			# Update model parameters after all cascade iterations
 			else:
-				with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-					csg_model = model.forward_cascade(near_surface_input_samples.detach(), uniform_input_samples.detach(), num_cascades)
-
-				cascade_loss = loss_func(near_surface_loss_samples.detach(), uniform_loss_samples.detach(), surface_samples.detach(), csg_model)
+				cascade_loss = forward_train_step(train_step, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, TrainStep.FORWARD_CASCADE, num_cascades)
 				_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Only record the loss for the completed reconstruction
@@ -291,7 +286,7 @@ def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch)
 
 
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device):
+def train(model, train_step, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device):
 	model.train(True)
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
@@ -355,7 +350,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
-		train_loss = train_one_epoch(model, loss_func, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model, trained_supervisor)
+		train_loss = train_one_epoch(model, train_step, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model, trained_supervisor)
 		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list, init_model)
 		learning_rate = optimizer.param_groups[0]['lr']
 
@@ -457,7 +452,10 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	print(trained_model_path)
 
 
-def init_training_params(training_logger, data_splits, args, device, model_params=None):
+def init_training_params(training_logger, data_splits, args, devices, model_params=None):
+	# Use the first device to store the neural network model and data.
+	device = devices[0]
+
 	# Initialize model
 	model = load_model_from_args(args, device, model_params if args.resume_training else None)
 	loss_func = Loss(args.loss_metric, args.num_loss_points, args.num_prims, args.spread_loss_weight, args.clamp_dist, args.excess_loss_weight, args.loss_sampling_method, args.surface_uniform_ratio, args.residual_only_training).to(device)
@@ -466,8 +464,15 @@ def init_training_params(training_logger, data_splits, args, device, model_param
 	scheduler = init_scheduler(optimizer, args)
 	scaler = torch.amp.GradScaler(enabled=args.enable_amp)
 
-	# Load training set
-	(train_split, val_split, test_split) = data_splits
+	# Initialize the trianing step singleton.
+	train_step = TrainStep(model, loss_func, args.enable_amp)
+
+	# Enable multi-GPU training.
+	if len(devices) > 1:
+		train_step = nn.DataParallel(train_step, device_ids=devices)
+
+	# Load training set.
+	(train_split, val_split, _test_split) = data_splits
 
 	if not (train_dataset := PointDataset(train_split, device, args, augment_data=args.augment_data, loss_sampling_method=args.loss_sampling_method, input_sampling_method=args.input_sampling_method, dataset_name="Training Set")):
 		return
@@ -485,6 +490,7 @@ def init_training_params(training_logger, data_splits, args, device, model_param
 
 	return (
 		model,
+		train_step,
 		loss_func,
 		optimizer,
 		scheduler,
