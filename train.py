@@ -88,10 +88,6 @@ def options():
 	args.supervisor_model_path = os.path.abspath(args.supervisor_model_path) if args.supervisor_model_path else None
 	args.output_dir = os.path.abspath(args.output_dir)
 
-	# Disable batch norm for SGD. Each device must receive at least two samples from its batch split.
-	num_devices = len(args.device) if isinstance(args.device, list) else 1
-	args.no_batch_norm = True if args.batch_size < 2 * max(num_devices, 1) else args.no_batch_norm
-
 	# Retrieve loss metric
 	args.loss_metric = parse_arg_choice(args.loss_metric)
 
@@ -285,8 +281,11 @@ def main():
 	print('')
 
 	# Parse devices. The first device is used for for storing the network model.
-	devices = get_devices(args.device, cpu_allowed=False)
+	devices = get_devices(args.device, cpu_allowed=True)
 	device = devices[0]
+
+	# Disable batch norm for SGD. Each device must receive at least two samples from its batch split.
+	args.no_batch_norm = True if args.batch_size < 2 * len(devices) else args.no_batch_norm
 
 	# Initialize options and output
 	process_continue(args)

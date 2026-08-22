@@ -174,7 +174,7 @@ def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, 
 
 			# Update model parameters after all cascade iterations
 			else:
-				cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, TrainStep.FORWARD_CASCADE, num_cascades)
+				cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, None, TrainStep.FORWARD_CASCADE, num_cascades)
 				_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Only record the loss for the completed reconstruction
