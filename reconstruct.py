@@ -219,8 +219,11 @@ def main():
 		print('Reconstruction only supports one device for inference. Select one device or select "None" to automatically select one.')
 		exit()
 
+	if len(args.device) > 0:
+		args.device = args.device[0]
+
 	# Run model
-	args.device = get_device(None, cpu_allowed=True)[0]
+	args.device = get_device(args.device, cpu_allowed=True)
 	(model, init_model_state_dict, prev_cascades_list) = load_model(args)
 
 	# View reconstruction
