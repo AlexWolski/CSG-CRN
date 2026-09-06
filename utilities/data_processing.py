@@ -1,6 +1,7 @@
 import os
 import yaml
 from utilities.constants import INIT_RECON, SEPARATE_PARAMS, SHARED_PARAMS
+from utilities.data_augmentation import RotationAxis
 
 # Subdirectory names
 UNIFORM_FOLDER = 'uniform'
@@ -81,6 +82,24 @@ def read_dataset_settings(data_dir):
 		raise FileNotFoundError(f'Unable to find dataset settings file: {settings_path}')
 
 
+# Read training settings from an output directory.
+def read_train_output_settings(output_dir):
+	settings_path = os.path.join(output_dir, SETTINGS_FILE)
+
+	if os.path.isfile(settings_path):
+		# Add support for the RotationAxis object.
+		loader = type('TrainSettingsLoader', (yaml.SafeLoader,), {})
+		loader.add_constructor(
+			f'tag:yaml.org,2002:python/object/apply:{RotationAxis.__module__}.{RotationAxis.__name__}',
+			lambda loader, node: RotationAxis(loader.construct_sequence(node)[0])
+		)
+
+		with open(settings_path, 'r') as f:
+			return yaml.load(f.read(), Loader=loader)
+	else:
+		raise FileNotFoundError(f'Unable to find training settings file: {settings_path}')
+
+
 # Save settings to file
 def save_dataset_settings(output_dir, data_dict):
 	settings_path = os.path.join(output_dir, SETTINGS_FILE)
@@ -88,6 +107,30 @@ def save_dataset_settings(output_dir, data_dict):
 	with open(settings_path, 'w') as out_path:
 		yaml.dump(data_dict, out_path, sort_keys=False)
 
+
+# Read test set from file names
+def get_test_set(data_dir):
+	sample_list_path = os.path.join(data_dir, TEST_SET_FILE)
+
+	if os.path.isfile(sample_list_path):
+		return load_list(sample_list_path)
+	else:
+		raise FileNotFoundError(f'Unable to find dataset file list: {sample_list_path}')
+
+
+# Read paths to test set samples from a training output directory.
+def get_test_set_absolute_paths(output_dir):
+	# Read list of relative paths to test samples.
+	test_set_files = get_test_set(output_dir)
+
+	# Read path to data directory.
+	dataset_settings = read_train_output_settings(output_dir)
+	data_dir = dataset_settings['data_dir']
+	sub_dir = dataset_settings['sub_dir']
+	parent_dir = os.path.join(data_dir, sub_dir) if sub_dir is not None else data_dir
+
+	# Return absolute paths to test samples.
+	return list(map(lambda x: os.path.join(parent_dir, x), test_set_files))
 
 # Save list of test set file names to file
 def save_test_set(output_dir, test_split):
