@@ -40,19 +40,19 @@ def options():
 	args = parser.parse_args()
 	return args
 
-
-def load_model(args):
+# Initialize model from parameters file.
+def load_model(model_params, device, num_cascades=None):
 	# Load model parameters and arguments
 	torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis, timedelta])
-	save_data = torch.load(args.model_params, weights_only=True)
+	save_data = torch.load(model_params, weights_only=True)
 	state_dict = save_data['model']
 	saved_args = save_data['args']
 	init_model_state_dict = save_data['init_model']
 	prev_cascades_list = save_data['prev_cascades_list']
 
 	# Overwrite num_cascades when provided
-	if args.num_cascades is not None:
-		saved_args.num_cascades = args.num_cascades
+	if num_cascades is not None:
+		saved_args.num_cascades = num_cascades
 
 	# Fallback for new arguments
 	saved_args.excess_loss_weight = getattr(saved_args, 'excess_loss_weight', None)
@@ -70,7 +70,7 @@ def load_model(args):
 		saved_args.sample_dist,
 		saved_args.input_sampling_method,
 		saved_args.surface_uniform_ratio,
-		args.device,
+		device,
 		saved_args.encoder_layers,
 		saved_args.encoder_trans_conv_layers,
 		saved_args.encoder_trans_fc_layers,
@@ -92,7 +92,7 @@ def load_model(args):
 
 
 # Load sample points from file
-def load_mesh_and_samples(input_file, args, saved_args):
+def load_mesh_and_samples(input_file, saved_args, num_acc_points, device):
 	mesh = trimesh.load(input_file)
 	mesh = scale_to_unit_sphere(mesh)
 
@@ -104,12 +104,12 @@ def load_mesh_and_samples(input_file, args, saved_args):
 		uniform_points, uniform_distances,
 		near_surface_points, near_surface_distances,
 		surface_points
-	) = sample_from_mesh(mesh, num_uniform_samples, args.num_acc_points, num_surface_samples, saved_args.sample_dist)
+	) = sample_from_mesh(mesh, num_uniform_samples, num_acc_points, num_surface_samples, saved_args.sample_dist)
 
 	# Combine samples
-	uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1).unsqueeze(0).to(args.device)
-	near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1).unsqueeze(0).to(args.device)
-	surface_points = surface_points.unsqueeze(0).to(args.device)
+	uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1).unsqueeze(0).to(device)
+	near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1).unsqueeze(0).to(device)
+	surface_points = surface_points.unsqueeze(0).to(device)
 
 	return (mesh, uniform_samples, near_surface_samples, surface_points)
 
@@ -174,8 +174,7 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 	print('')
 
 
-def construct_csg_model(model, input_file, args, saved_args, init_model_state_dict=None, prev_cascades_list=None):
-	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args, saved_args)
+def model_inference(model, saved_args, init_model_state_dict, prev_cascades_list, near_surface_samples, uniform_samples):
 	csg_model = None
 
 	if saved_args.cascade_training_mode == INIT_RECON:
@@ -187,10 +186,14 @@ def construct_csg_model(model, input_file, args, saved_args, init_model_state_di
 		model.load_state_dict(current_state_dict)
 
 	if saved_args.cascade_training_mode == SEPARATE_PARAMS:
-		csg_model = model.forward_separate_cascades(near_surface_samples, uniform_samples, prev_cascades_list)
+		return model.forward_separate_cascades(near_surface_samples, uniform_samples, prev_cascades_list)
 	else:
-		csg_model = model.forward_cascade(near_surface_samples, uniform_samples, saved_args.num_cascades, csg_model)
+		return model.forward_cascade(near_surface_samples, uniform_samples, saved_args.num_cascades, csg_model)
 
+
+def construct_csg_model(model, input_file, args, saved_args, device, init_model_state_dict=None, prev_cascades_list=None):
+	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, saved_args, args.num_acc_points, device)
+	csg_model = model_inference(model, saved_args, init_model_state_dict, prev_cascades_list, near_surface_samples, uniform_samples)
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
 	# Pretty print csg commands
@@ -198,30 +201,34 @@ def construct_csg_model(model, input_file, args, saved_args, init_model_state_di
 	# Print reconstruction loss
 	print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, saved_args.loss_metric, saved_args.excess_loss_weight)
 	# Print reconstruction accuracy
-	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, args.device)
+	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, device)
 
 	return (target_mesh, recon_mesh, csg_model)
+
+
+def get_inference_device(device):
+	# Assert a single inference device.
+	if len(device) > 1:
+		print('Reconstruction only supports one device for inference. Select one device or select "None" to automatically select one.')
+		exit()
+
+	if len(device) > 0:
+		device = device[0]
+
+	return get_device(device, cpu_allowed=True)
 
 
 def main():
 	args = options()
 	print('')
 
-	# Assert a single inference device.
-	if len(args.device) > 1:
-		print('Reconstruction only supports one device for inference. Select one device or select "None" to automatically select one.')
-		exit()
-
-	if len(args.device) > 0:
-		args.device = args.device[0]
-
-	args.device = get_device(args.device, cpu_allowed=True)
+	device = get_inference_device(args.device)
 
 	# Run model
-	(model, saved_args, init_model_state_dict, prev_cascades_list) = load_model(args)
+	(model, saved_args, init_model_state_dict, prev_cascades_list) = load_model(args.model_params, device, args.num_cascades)
 
 	# View reconstruction
-	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args, saved_args, init_model_state_dict, prev_cascades_list)
+	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args, saved_args, device, init_model_state_dict, prev_cascades_list)
 	_window_title = "Reconstruct: " + os.path.basename(args.input_file)
 
 	try:
