@@ -50,20 +50,13 @@ def load_model(args):
 	init_model_state_dict = save_data['init_model']
 	prev_cascades_list = save_data['prev_cascades_list']
 
-	# Load training args
-	args.num_input_points = saved_args.num_input_points
-	args.sample_dist = saved_args.sample_dist
-	args.surface_uniform_ratio = saved_args.surface_uniform_ratio
-	args.loss_metric = saved_args.loss_metric
-	args.excess_loss_weight = saved_args.excess_loss_weight if 'excess_loss_weight' in saved_args else None
-	args.input_sampling_method = saved_args.input_sampling_method
-	args.clamp_dist = saved_args.clamp_dist
-	args.sub_weight = saved_args.sub_weight
-	args.cascade_training_mode = saved_args.cascade_training_mode
-	args.residual_only_training = saved_args.residual_only_training if 'residual_only_training' in saved_args else False
+	# Overwrite num_cascades when provided
+	if args.num_cascades is not None:
+		saved_args.num_cascades = args.num_cascades
 
-	if args.num_cascades is None:
-		args.num_cascades = saved_args.num_cascades
+	# Fallback for new arguments
+	saved_args.excess_loss_weight = getattr(saved_args, 'excess_loss_weight', None)
+	saved_args.residual_only_training = getattr(saved_args, 'residual_only_training', False)
 
 	predict_blending = not saved_args.no_blending
 	predict_roundness = not saved_args.no_roundness
@@ -73,9 +66,9 @@ def load_model(args):
 		saved_args.num_prims,
 		CSGModel.num_shapes,
 		CSGModel.num_operations,
-		args.num_input_points,
-		args.sample_dist,
-		args.input_sampling_method,
+		saved_args.num_input_points,
+		saved_args.sample_dist,
+		saved_args.input_sampling_method,
 		saved_args.surface_uniform_ratio,
 		args.device,
 		saved_args.encoder_layers,
@@ -88,30 +81,30 @@ def load_model(args):
 		predict_roundness,
 		not saved_args.no_extended_pooling,
 		saved_args.no_batch_norm,
-		residual_only_training=args.residual_only_training
+		residual_only_training=saved_args.residual_only_training
 	)
 
 	model.load_state_dict(state_dict, strict=False)
-	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
+	model.set_operation_weight(subtract_sdf, add_sdf, saved_args.sub_weight)
 	model.eval()
 
-	return (model, init_model_state_dict, prev_cascades_list)
+	return (model, saved_args, init_model_state_dict, prev_cascades_list)
 
 
 # Load sample points from file
-def load_mesh_and_samples(input_file, args):
+def load_mesh_and_samples(input_file, args, saved_args):
 	mesh = trimesh.load(input_file)
 	mesh = scale_to_unit_sphere(mesh)
 
-	num_uniform_samples = math.ceil(args.num_input_points * args.surface_uniform_ratio)
-	num_surface_samples = math.floor(args.num_input_points * (1 - args.surface_uniform_ratio))
+	num_uniform_samples = math.ceil(saved_args.num_input_points * saved_args.surface_uniform_ratio)
+	num_surface_samples = math.floor(saved_args.num_input_points * (1 - saved_args.surface_uniform_ratio))
 
 	# Compute samples
 	(
 		uniform_points, uniform_distances,
 		near_surface_points, near_surface_distances,
 		surface_points
-	) = sample_from_mesh(mesh, num_uniform_samples, args.num_acc_points, num_surface_samples, args.sample_dist)
+	) = sample_from_mesh(mesh, num_uniform_samples, args.num_acc_points, num_surface_samples, saved_args.sample_dist)
 
 	# Combine samples
 	uniform_samples = torch.cat((uniform_points, uniform_distances.unsqueeze(-1)), dim=-1).unsqueeze(0).to(args.device)
@@ -181,11 +174,11 @@ def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
 	print('')
 
 
-def construct_csg_model(model, input_file, args, init_model_state_dict=None, prev_cascades_list=None):
-	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args)
+def construct_csg_model(model, input_file, args, saved_args, init_model_state_dict=None, prev_cascades_list=None):
+	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, args, saved_args)
 	csg_model = None
 
-	if args.cascade_training_mode == INIT_RECON:
+	if saved_args.cascade_training_mode == INIT_RECON:
 		# Run a forward pass on the inital reconstruciton model.
 		current_state_dict = copy.deepcopy(model.state_dict())
 		model.load_state_dict(init_model_state_dict, strict=False)
@@ -193,17 +186,17 @@ def construct_csg_model(model, input_file, args, init_model_state_dict=None, pre
 		# Revert the CSGCRN model to the reconstruction weights.
 		model.load_state_dict(current_state_dict)
 
-	if args.cascade_training_mode == SEPARATE_PARAMS:
+	if saved_args.cascade_training_mode == SEPARATE_PARAMS:
 		csg_model = model.forward_separate_cascades(near_surface_samples, uniform_samples, prev_cascades_list)
 	else:
-		csg_model = model.forward_cascade(near_surface_samples, uniform_samples, args.num_cascades, csg_model)
+		csg_model = model.forward_cascade(near_surface_samples, uniform_samples, saved_args.num_cascades, csg_model)
 
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
 	# Pretty print csg commands
 	print_csg_commands(csg_model)
 	# Print reconstruction loss
-	print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, args.loss_metric, args.excess_loss_weight)
+	print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, saved_args.loss_metric, saved_args.excess_loss_weight)
 	# Print reconstruction accuracy
 	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, args.device)
 
@@ -222,16 +215,17 @@ def main():
 	if len(args.device) > 0:
 		args.device = args.device[0]
 
-	# Run model
 	args.device = get_device(args.device, cpu_allowed=True)
-	(model, init_model_state_dict, prev_cascades_list) = load_model(args)
+
+	# Run model
+	(model, saved_args, init_model_state_dict, prev_cascades_list) = load_model(args)
 
 	# View reconstruction
-	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args, init_model_state_dict, prev_cascades_list)
+	get_mesh_and_csg_model = lambda input_file: construct_csg_model(model, input_file, args, saved_args, init_model_state_dict, prev_cascades_list)
 	_window_title = "Reconstruct: " + os.path.basename(args.input_file)
 
 	try:
-		viewer = SdfModelViewer("Reconstructed SDF", args.point_size, args.num_view_points, args.input_file, args.sample_dist, get_mesh_and_csg_model)
+		viewer = SdfModelViewer("Reconstructed SDF", args.point_size, args.num_view_points, args.input_file, saved_args.sample_dist, get_mesh_and_csg_model)
 		await_viewer(viewer)
 	except FileNotFoundError as fileError:
 		print(fileError)
