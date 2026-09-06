@@ -10,6 +10,7 @@ NEAR_SURFACE_FOLDER = 'near-surface'
 # Dataset metadata filenames
 SETTINGS_FILE = 'settings.yml'
 SAMPLE_LIST_FILE = 'files.txt'
+TEST_SET_FILE = 'test_set.txt'
 
 # Model parameter names
 BEST_MODEL_FILE = 'best_model.pt'
@@ -86,6 +87,12 @@ def save_dataset_settings(output_dir, data_dict):
 
 	with open(settings_path, 'w') as out_path:
 		yaml.dump(data_dict, out_path, sort_keys=False)
+
+
+# Save list of test set file names to file
+def save_test_set(output_dir, test_split):
+	test_set_path = os.path.join(output_dir, TEST_SET_FILE)
+	save_list(test_set_path, test_split)
 
 
 # Write each item of a list to a new line in a file

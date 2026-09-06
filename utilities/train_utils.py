@@ -16,7 +16,7 @@ from networks.csg_crn import CSG_CRN
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
 from utilities.constants import SHARED_PARAMS, SEPARATE_PARAMS, INIT_RECON
 from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
-from utilities.data_processing import get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE
+from utilities.data_processing import get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE, save_test_set
 from utilities.data_augmentation import RotationAxis
 from utilities.datasets import PointDataset
 from utilities.early_stopping import EarlyStopping
@@ -472,13 +472,16 @@ def init_training_params(training_logger, data_splits, args, devices, model_para
 		TrainStep.apply_parallel(devices)
 
 	# Load training set.
-	(train_split, val_split, _test_split) = data_splits
+	(train_split, val_split, test_split) = data_splits
 
 	if not (train_dataset := PointDataset(train_split, device, args, augment_data=args.augment_data, loss_sampling_method=args.loss_sampling_method, input_sampling_method=args.input_sampling_method, dataset_name="Training Set")):
 		return
 
 	if not (val_dataset := PointDataset(val_split, device, args, augment_data=False, loss_sampling_method=args.loss_sampling_method, input_sampling_method=args.input_sampling_method, dataset_name="Validation Set")):
 		return
+
+	# Save test set to disk.
+	save_test_set(args.output_dir, test_split)
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
 	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
