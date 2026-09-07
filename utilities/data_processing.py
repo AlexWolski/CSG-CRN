@@ -109,8 +109,8 @@ def save_dataset_settings(output_dir, data_dict):
 
 
 # Read test set from file names
-def get_test_set(data_dir):
-	sample_list_path = os.path.join(data_dir, TEST_SET_FILE)
+def get_test_set(output_dir):
+	sample_list_path = os.path.join(output_dir, TEST_SET_FILE)
 
 	if os.path.isfile(sample_list_path):
 		return load_list(sample_list_path)
@@ -118,24 +118,12 @@ def get_test_set(data_dir):
 		raise FileNotFoundError(f'Unable to find dataset file list: {sample_list_path}')
 
 
-# Read paths to test set samples from a training output directory.
-def get_test_set_absolute_paths(output_dir):
-	# Read list of relative paths to test samples.
-	test_set_files = get_test_set(output_dir)
-
-	# Read path to data directory.
-	dataset_settings = read_train_output_settings(output_dir)
-	data_dir = dataset_settings['data_dir']
-	sub_dir = dataset_settings['sub_dir']
-	parent_dir = os.path.join(data_dir, sub_dir) if sub_dir is not None else data_dir
-
-	# Return absolute paths to test samples.
-	return list(map(lambda x: os.path.join(parent_dir, x), test_set_files))
-
 # Save list of test set file names to file
 def save_test_set(output_dir, test_split):
 	test_set_path = os.path.join(output_dir, TEST_SET_FILE)
-	save_list(test_set_path, test_split)
+	# Strip dataset subdirectory paths and file extension
+	file_names = [os.path.splitext(os.path.basename(path))[0] for path in test_split]
+	save_list(test_set_path, file_names)
 
 
 # Write each item of a list to a new line in a file
@@ -166,3 +154,21 @@ def load_list(file_path, sub_dir=None):
 		raise FileNotFoundError(f'Unable to find any dataset files in the subdirectory: {sub_dir}')
 
 	return list_data
+
+
+# Search for all file names in a given directory and return absolute paths to the found files.
+def find_file_paths(root_dir, file_names):
+	root_dir = os.path.abspath(root_dir)
+
+	if not os.path.isdir(root_dir):
+		raise NotADirectoryError(f'Unable to find directory: {root_dir}')
+
+
+	file_paths = []
+
+	for (dir_path, _, dir_file_names) in os.walk(root_dir):
+		for dir_file_name in dir_file_names:
+			if os.path.splitext(dir_file_name)[0] in file_names:
+				file_paths.append(os.path.join(dir_path, dir_file_name))
+
+	return file_paths
