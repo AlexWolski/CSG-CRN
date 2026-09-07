@@ -158,20 +158,15 @@ def print_csg_commands(csg_model):
 		count += 1
 
 
-def print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, loss_metric, excess_loss_weight):
+def compute_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, loss_metric, excess_loss_weight):
 	recon_loss = ReconstructionLoss(loss_metric, excess_loss_weight)
-	print(f'Reconstruction {loss_metric} Loss:')
-	print(recon_loss.forward(near_surface_samples, uniform_samples, surface_points, csg_model))
-	print('')
+	return recon_loss.forward(near_surface_samples, uniform_samples, surface_points, csg_model)
 
 
-def print_chamfer_dist(target_mesh, recon_mesh, num_acc_points, device):
+def compute_chamfer_distance_mesh(target_mesh, recon_mesh, num_acc_points, device):
 	target_points = sample_points_mesh_surface(target_mesh, num_acc_points).unsqueeze(0).to(device)
 	recon_points = sample_points_mesh_surface(recon_mesh, num_acc_points).unsqueeze(0).to(device)
-	accuracy = compute_chamfer_distance(target_points, recon_points, no_grad=True)
-	print('Chamfer Distance:')
-	print(accuracy)
-	print('')
+	return compute_chamfer_distance(target_points, recon_points, no_grad=True)
 
 
 def model_inference(model, saved_args, init_model_state_dict, prev_cascades_list, near_surface_samples, uniform_samples):
@@ -198,10 +193,16 @@ def construct_csg_model(model, input_file, args, saved_args, device, init_model_
 
 	# Pretty print csg commands
 	print_csg_commands(csg_model)
+
 	# Print reconstruction loss
-	print_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, saved_args.loss_metric, saved_args.excess_loss_weight)
+	print(f'Reconstruction {saved_args.loss_metric} Loss:')
+	print(compute_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, saved_args.loss_metric, saved_args.excess_loss_weight))
+	print('')
+
 	# Print reconstruction accuracy
-	print_chamfer_dist(target_mesh, recon_mesh, args.num_acc_points, device)
+	print('Chamfer Distance:')
+	print(compute_chamfer_distance_mesh(target_mesh, recon_mesh, args.num_acc_points, device))
+	print('')
 
 	return (target_mesh, recon_mesh, csg_model)
 
