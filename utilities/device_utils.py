@@ -12,7 +12,7 @@ def get_device(device=None, cpu_allowed=False):
 	# When a device is not specified, automatically select one
 	if not device:
 		if torch.cuda.is_available():
-			return torch.device('cuda')
+			return torch.device('cuda:0')
 		elif cpu_allowed:
 			return torch.device('cpu')
 

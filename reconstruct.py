@@ -44,7 +44,7 @@ def options():
 def load_model(model_params, device, num_cascades=None):
 	# Load model parameters and arguments
 	torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis, timedelta])
-	save_data = torch.load(model_params, weights_only=True)
+	save_data = torch.load(model_params, weights_only=True, map_location=device)
 	state_dict = save_data['model']
 	saved_args = save_data['args']
 	init_model_state_dict = save_data['init_model']

@@ -1,5 +1,6 @@
 
 import argparse
+import math
 import os
 from pathlib import Path
 import signal
@@ -7,12 +8,13 @@ import sys
 import traceback
 
 import torch
+import torch.multiprocessing as mp
 from tqdm import tqdm
 from wakepy import keep
 from reconstruct import compute_chamfer_distance_mesh, compute_recon_loss, load_mesh_and_samples, load_model, model_inference
 from utilities.csg_to_mesh import csg_to_mesh
 from utilities.data_processing import BEST_MODEL_FILE, find_file_paths, get_test_set
-from utilities.device_utils import get_device
+from utilities.device_utils import get_devices
 
 
 # Parse commandline arguments
@@ -26,7 +28,7 @@ def options():
 	parser.add_argument('--num_cascades', type=int, help='Number of cascades to output before running tests. Defaults to the maximum number of cascades used during training.')
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=512, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
-	parser.add_argument('--device', type=str, default=[], nargs='*', help='Select preferred inference device. Evaluation only supports a single device')
+	parser.add_argument('--device', type=str.lower, default=[], nargs='*', help='Select one or more devices. CPU and GPU devices cannot be mixed. Select "all" to use all available cuda devices.')
 
 	args = parser.parse_args()
 
@@ -50,25 +52,61 @@ def options():
 	return args
 
 
-def test(model_params, num_acc_points, num_cascades, recon_resolution, device, test_samples):
-	# Load model from file.
+def test_worker(worker_index, devices, model_params, num_acc_points, num_cascades, recon_resolution, sample_splits, result_queue=None):
+	device = devices[worker_index]
+	test_samples = sample_splits[worker_index]
+
+	# Set worker device.
+	torch.cuda.set_device(device)
+
+	# Each worker loads a separate copy of the model.
 	(model, saved_args, init_model_state_dict, prev_cascades_list) = load_model(model_params, device, num_cascades)
 
-	recon_loss = 0
-	chamfer_dist = 0
+	summed_recon_loss = 0.0
+	summed_chamfer_dist = 0.0
 
-	for sample_file in tqdm(test_samples):
-		# For model inference.
+	for sample_file in tqdm(test_samples, desc=str(device), position=worker_index):
+		# Reconstruct sample and generate a mesh.
 		target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(sample_file, saved_args, num_acc_points, device)
 		csg_model = model_inference(model, saved_args, init_model_state_dict, prev_cascades_list, near_surface_samples, uniform_samples)
 		recon_mesh = csg_to_mesh(csg_model, recon_resolution)[0]
 
-		# Compute accuracy metrics.
-		recon_loss += compute_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, saved_args.loss_metric, saved_args.excess_loss_weight)
-		chamfer_dist += compute_chamfer_distance_mesh(target_mesh, recon_mesh, num_acc_points, device)
+		# Compute and accumulate the test metrics.
+		summed_recon_loss += compute_recon_loss(near_surface_samples, uniform_samples, surface_points, csg_model, saved_args.loss_metric, saved_args.excess_loss_weight).item()
+		summed_chamfer_dist += compute_chamfer_distance_mesh(target_mesh, recon_mesh, num_acc_points, device)
 
-	mean_recon_loss = recon_loss / len(test_samples)
-	mean_chamfer_dist = chamfer_dist / len(test_samples)
+	result_queue.put((summed_recon_loss, summed_chamfer_dist))
+
+
+def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_samples):
+	num_samples = len(test_samples)
+	samples_per_gpu = math.ceil(len(test_samples) / len(devices))
+
+	# Compute number of samples to process on each GPU.
+	sample_splits = []
+
+	for curr_sample in range(0, len(test_samples), samples_per_gpu):
+		sample_splits.append(test_samples[curr_sample:curr_sample+samples_per_gpu])
+
+	# Drop unused devices.
+	num_workers = len(sample_splits)
+	devices = devices[:num_workers]
+
+	# Spawn one worker process per device.
+	result_queue = mp.get_context('spawn').SimpleQueue()
+	mp.spawn(test_worker, args=(devices, model_params, num_acc_points, num_cascades, recon_resolution, sample_splits, result_queue), nprocs=num_workers, join=True)
+
+	# Compute average results.
+	total_recon_loss = 0
+	total_chamfer_dist = 0
+
+	for _ in range(num_workers):
+		recon_loss, chamfer_dist = result_queue.get()
+		total_recon_loss += recon_loss
+		total_chamfer_dist += chamfer_dist
+
+	mean_recon_loss = total_recon_loss / num_samples
+	mean_chamfer_dist = total_chamfer_dist / num_samples
 
 	return (mean_recon_loss, mean_chamfer_dist)
 
@@ -77,15 +115,8 @@ def main():
 	args = options()
 	print('')
 
-	# Assert a single inference device.
-	if len(args.device) > 1:
-		print('Evaluation only supports one device for inference. Select one device or select "None" to automatically select one.')
-		exit()
-
-	if len(args.device) > 0:
-		args.device = args.device[0]
-
-	device = get_device(args.device, cpu_allowed=True)
+	# Parse devices.
+	devices = get_devices(args.device, cpu_allowed=True)
 
 	# Load test files specified in the model output settings.
 	if args.train_output_path:
@@ -98,7 +129,7 @@ def main():
 		test_set_paths = [str(path.resolve()) for path in target_dir.rglob('*') if path.is_file()]
 
 	# Test model.
-	mean_recon_loss, mean_chamfer_dist = test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, device, test_set_paths)
+	mean_recon_loss, mean_chamfer_dist = test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths)
 
 	print(f'Reconstruction Loss: {mean_recon_loss}')
 	print(f'Chamfer Distance: {mean_chamfer_dist}')
