@@ -1,6 +1,5 @@
 import os
 import torch
-import torch.nn as nn
 import shutil
 
 from argparse import Namespace
@@ -16,7 +15,7 @@ from networks.csg_crn import CSG_CRN
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
 from utilities.constants import SHARED_PARAMS, SEPARATE_PARAMS, INIT_RECON
 from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
-from utilities.data_processing import get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE, save_test_set
+from utilities.data_processing import TEST_SET_FILE, get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE, load_list, save_test_set
 from utilities.data_augmentation import RotationAxis
 from utilities.datasets import PointDataset
 from utilities.early_stopping import EarlyStopping
@@ -24,16 +23,39 @@ from utilities.train_step import TrainStep, forward_train_step
 
 
 # Prepare data files and load training dataset
-def load_data_splits(args, data_split):
+def load_data_splits(args, data_split_pct, test_set_path=None):
 	# Load sample files
 	file_rel_paths = get_data_files(args.data_dir, args.sub_dir)
 	print(f'Found {len(file_rel_paths)} data files')
 
-	# Split dataset
-	(train_split, val_split, test_split) = torch.utils.data.random_split(file_rel_paths, data_split)
+	# Process test split if provided and copy to output directory.
+	if test_set_path:
+		# Normalize the test and validation set percentages after the test set is removed.
+		new_total_pct = 1.0 - data_split_pct[2]
+		data_split_pct[0] /= new_total_pct
+		data_split_pct[1] /= new_total_pct
+		data_split_pct[2] = 0.0
 
-	# Ensure each dataset has enough samples
-	for dataset in [('Train', train_split), ('Validation', val_split), ('Test', test_split)]:
+		# Omit test set files from training sets.
+		loaded_test_set_list = set(load_list(test_set_path))
+		is_train_file = lambda path: os.path.splitext(os.path.basename(path))[0] not in loaded_test_set_list
+		file_rel_paths = list(filter(is_train_file, file_rel_paths))
+		num_test_samples = len(loaded_test_set_list)
+
+	# Split dataset.
+	(train_split, val_split, test_split) = torch.utils.data.random_split(file_rel_paths, data_split_pct)
+
+	# Save test set to output directory.
+	if test_set_path:
+		shutil.copy(test_set_path, os.path.join(args.output_dir, TEST_SET_FILE))
+		# 'None' value for test_split signifies that an external test split was provided.
+		test_split = None
+	else:
+		save_test_set(args.output_dir, test_split)
+		num_test_samples = len(test_split.indices)
+
+	# Ensure that the train and test datasets have enough samples.
+	for dataset in [('Train', train_split), ('Validation', val_split)]:
 		# Check if any dataset is empty
 		if len(dataset[1].indices) == 0:
 			err_msg = f'{dataset[0]} dataset is empty! Add more data samples'
@@ -49,7 +71,7 @@ def load_data_splits(args, data_split):
 
 	print(f'Training set:\t{len(train_split.indices)} samples')
 	print(f'Validation set:\t{len(val_split.indices)} samples')
-	print(f'Testing set:\t{len(test_split.indices)} samples\n')
+	print(f'Testing set:\t{num_test_samples} samples\n')
 
 	return (train_split, val_split, test_split)
 
@@ -479,9 +501,6 @@ def init_training_params(training_logger, data_splits, args, devices, model_para
 
 	if not (val_dataset := PointDataset(val_split, device, args, augment_data=False, loss_sampling_method=args.loss_sampling_method, input_sampling_method=args.input_sampling_method, dataset_name="Validation Set")):
 		return
-
-	# Save test set to disk.
-	save_test_set(args.output_dir, test_split)
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
 	val_sampler = BatchSampler(RandomSampler(val_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
