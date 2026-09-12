@@ -18,10 +18,6 @@ from utilities.train_utils import load_data_splits, load_saved_settings, train, 
 from utilities.training_logger import TrainingLogger
 
 
-# Percentage of data to use for training, validation, and testing
-DATA_SPLIT_PCT = [0.8, 0.1, 0.1]
-
-
 # Parse commandline arguments
 def options():
 	# Parse and handle Help argument
@@ -88,6 +84,15 @@ def options():
 	args.supervisor_model_path = os.path.abspath(args.supervisor_model_path) if args.supervisor_model_path else None
 	args.test_set_path = os.path.abspath(args.test_set_path) if args.test_set_path else None
 	args.output_dir = os.path.abspath(args.output_dir)
+
+	# Validate data split.
+	if not any(args.data_split):
+		print('All data split percentages are 0.0. Provide positive float values that add to 1.')
+		exit()
+
+	# Normalize data splits to remove negative values and ensure they sum to 1.
+	total = sum(abs(x) for x in args.data_split)
+	args.data_split = [abs(x) / total for x in args.data_split]
 
 	# Retrieve loss metric
 	args.loss_metric = parse_arg_choice(args.loss_metric)
@@ -157,6 +162,7 @@ def get_data_parser():
 
 	data_group.add_argument('--data_dir', type=str, help='Parent directory of the SDF Dataset (data in subdirectories is included). Required unless the --model_path and --resume_training options are provided')
 	data_group.add_argument('--sub_dir', type=str, help='A subdirectory of of the parent SDF dataset to train on. The subdirectory must be present in the nea-surface, surface, and uniform directories.')
+	data_group.add_argument('--data_split', nargs=3, type=float, default=[0.8, 0.1, 0.1], help='Percentage of data to use for training, validation, and testing respectively. Inputs should be positive floats that add to 1.0.')
 	data_group.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
 	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Provided arguments overwrite all the saved arguments except for network model settings')
 	data_group.add_argument('--resume_training', default=False, action='store_true', help='If a model path is supplied, resume training of the model with the original training data')
@@ -272,7 +278,7 @@ def init_output(args, saved_settings_dict=None):
 		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric, training_results)
 	else:
 		(args.output_dir, args.checkpoint_dir, args.cascade_models_dir) = create_out_dir(args)
-		data_splits = load_data_splits(args, DATA_SPLIT_PCT, args.test_set_path)
+		data_splits = load_data_splits(args, args.data_split, args.test_set_path)
 		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric)
 
 	return (data_splits, training_logger)
