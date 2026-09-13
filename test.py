@@ -1,6 +1,7 @@
 
 import argparse
-from datetime import timedelta
+from datetime import datetime, timedelta
+import io
 import math
 import os
 from pathlib import Path
@@ -18,7 +19,7 @@ from reconstruct import load_mesh_and_samples, load_model, model_inference
 from utilities.accuracy_metrics import EMD, compute_chamfer_distance
 from utilities.csg_to_mesh import csg_to_mesh
 from utilities.data_augmentation import RotationAxis
-from utilities.data_processing import BEST_MODEL_FILE, find_file_paths, get_test_set
+from utilities.data_processing import BEST_MODEL_FILE, TEST_RESULTS_FILE, find_file_paths, get_test_set
 from utilities.device_utils import get_devices
 from utilities.sampler_utils import sample_points_mesh_surface
 
@@ -27,16 +28,25 @@ from utilities.sampler_utils import sample_points_mesh_surface
 def options():
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--train_output_path', type=str, help='Path to training output directory. The best model and saved test set are automatically used.')
+	parser.add_argument('--train_output_path', type=str, help='Path to training output directory. The best model and test set in the directory are used. Test results are stored in dirctory.')
 	parser.add_argument('--mesh_data_dir', type=str, help='Path to the root directory containing the mesh files referenced by the saved test set file.')
 	parser.add_argument('--model_params', type=str, help='Path to a trained model pytorch file. Only needed when train_output_path is not provided.')
 	parser.add_argument('--test_set_path', type=str, help='Path to a directory containing mesh files to test on. Overwrites the saved test set when train_output_path is also provided.')
+	parser.add_argument('--result_file_path', type=str, help='Optional file path to store the test results in. When provided, results will not be stored in train_output_path.')
+
 	parser.add_argument('--num_cascades', type=int, help='Number of cascades to output before running tests. Defaults to the maximum number of cascades used during training.')
 	parser.add_argument('--num_acc_points', type=int, default=10000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=512, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--device', type=str.lower, default=[], nargs='*', help='Select one or more devices. CPU and GPU devices cannot be mixed. Select "all" to use all available cuda devices.')
 
 	args = parser.parse_args()
+
+	# Expand paths
+	args.train_output_path = os.path.abspath(args.train_output_path) if args.train_output_path else None
+	args.mesh_data_dir = os.path.abspath(args.mesh_data_dir) if args.mesh_data_dir else None
+	args.model_params = os.path.abspath(args.model_params) if args.model_params else None
+	args.test_set_path = os.path.abspath(args.test_set_path) if args.test_set_path else None
+	args.result_file_path = os.path.abspath(args.result_file_path) if args.result_file_path else None
 
 	if not args.train_output_path and not args.model_params:
 		print('Either train_output_path or model_params must be set.')
@@ -178,10 +188,30 @@ def main():
 	# Test model.
 	mean_recon_loss, mean_chamfer_dist, mean_earth_dist = test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths)
 
-	print(f'Number of Test Samples: {len(test_set_paths)}')
-	print(f'Reconstruction Loss: {mean_recon_loss}')
-	print(f'Chamfer Distance: {mean_chamfer_dist}')
-	print(f'Earth Movers Distance: {mean_earth_dist}')
+	# Format result string.
+	with io.StringIO() as str_out:
+		print('', file=str_out)
+		print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), file=str_out)
+		print(f'Number of Test Samples: {len(test_set_paths)}', file=str_out)
+		print(f'Mean Reconstruction Loss:   {mean_recon_loss}', file=str_out)
+		print(f'Mean Chamfer Distance:      {mean_chamfer_dist}', file=str_out)
+		print(f'Mean Earth Movers Distance: {mean_earth_dist}', file=str_out)
+
+		result_string = str_out.getvalue()
+
+	# Print results to console.
+	print(result_string)
+
+	# Save result to file.
+	if args.result_file_path:
+		result_path = os.path.join(args.result_file_path, TEST_RESULTS_FILE)
+	elif args.train_output_path:
+		result_path = os.path.join(args.train_output_path, TEST_RESULTS_FILE)
+	else:
+		return
+
+	with open(result_path, 'a+') as f:
+		f.write(result_string)
 
 
 if __name__ == '__main__':

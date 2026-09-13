@@ -12,6 +12,7 @@ NEAR_SURFACE_FOLDER = 'near-surface'
 SETTINGS_FILE = 'settings.yml'
 SAMPLE_LIST_FILE = 'files.txt'
 TEST_SET_FILE = 'test_set.txt'
+TEST_RESULTS_FILE = 'test_results.txt'
 
 # Model parameter names
 BEST_MODEL_FILE = 'best_model.pt'
