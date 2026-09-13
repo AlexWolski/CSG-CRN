@@ -58,29 +58,32 @@ def test_worker(worker_index, devices, model_params, num_acc_points, num_cascade
 
 	# Each worker loads a separate copy of the model.
 	(model, saved_args, init_model_state_dict, prev_cascades_list) = load_model(model_params, device, num_cascades)
+	model.eval()
 
 	summed_recon_loss = 0.0
 	summed_chamfer_dist = 0.0
 	summed_earth_dist = 0.0
 
-	for sample_file in tqdm(test_samples, desc=str(device), position=worker_index):
-		# Reconstruct sample and generate a mesh.
-		target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(sample_file, saved_args, num_acc_points, device)
-		csg_model = model_inference(model, saved_args, init_model_state_dict, prev_cascades_list, near_surface_samples, uniform_samples)
-		recon_mesh = csg_to_mesh(csg_model, recon_resolution)[0]
+	with torch.no_grad():
+		for sample_file in tqdm(test_samples, desc=str(device), position=worker_index):
+			# Reconstruct sample and generate a mesh.
+			target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(sample_file, saved_args, num_acc_points, device)
+			csg_model = model_inference(model, saved_args, init_model_state_dict, prev_cascades_list, near_surface_samples, uniform_samples)
+			recon_mesh = csg_to_mesh(csg_model, recon_resolution)[0]
 
-		# Compute reconstruction loss with original training settings.
-		recon_loss = ReconstructionLoss(saved_args.loss_metric, saved_args.excess_loss_weight)
-		summed_recon_loss += recon_loss.forward(near_surface_samples, uniform_samples, surface_points, csg_model)
+			# Compute reconstruction loss with original training settings.
+			recon_loss = ReconstructionLoss(saved_args.loss_metric, saved_args.excess_loss_weight)
+			summed_recon_loss += recon_loss.forward(near_surface_samples, uniform_samples, surface_points, csg_model).item()
 
-		# Sample points from output mesh.
-		target_points = sample_points_mesh_surface(target_mesh, num_acc_points).unsqueeze(0).to(device)
-		recon_points = sample_points_mesh_surface(recon_mesh, num_acc_points).unsqueeze(0).to(device)
+			# Sample points from output mesh.
+			target_points = sample_points_mesh_surface(target_mesh, num_acc_points).unsqueeze(0).to(device)
+			recon_points = sample_points_mesh_surface(recon_mesh, num_acc_points).unsqueeze(0).to(device)
 
-		# Compute accuracy metrics.
-		summed_chamfer_dist += compute_chamfer_distance(target_points, recon_points, no_grad=True)
-		summed_earth_dist += EMD(target_points[0], recon_points[0]).item()
+			# Compute accuracy metrics.
+			summed_chamfer_dist += compute_chamfer_distance(target_points, recon_points, no_grad=True)
+			summed_earth_dist += EMD(target_points[0], recon_points[0]).item()
 
+	# All summed values are Python floats (moved off the GPU) so they can be returned to the parent process.
 	result_queue.put((summed_recon_loss, summed_chamfer_dist, summed_earth_dist))
 
 
@@ -175,6 +178,7 @@ def main():
 	# Test model.
 	mean_recon_loss, mean_chamfer_dist, mean_earth_dist = test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths)
 
+	print(f'Number of Test Samples: {len(test_set_paths)}')
 	print(f'Reconstruction Loss: {mean_recon_loss}')
 	print(f'Chamfer Distance: {mean_chamfer_dist}')
 	print(f'Earth Movers Distance: {mean_earth_dist}')
