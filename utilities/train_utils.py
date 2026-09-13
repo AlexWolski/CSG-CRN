@@ -15,11 +15,36 @@ from networks.csg_crn import CSG_CRN
 from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
 from utilities.constants import SHARED_PARAMS, SEPARATE_PARAMS, INIT_RECON
 from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
-from utilities.data_processing import TEST_SET_FILE, get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE, load_list, save_test_set
+from utilities.data_processing import TEST_SET_FILE, UNIFORM_FOLDER, get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE, load_list, save_test_set
 from utilities.data_augmentation import RotationAxis
 from utilities.datasets import PointDataset
 from utilities.early_stopping import EarlyStopping
 from utilities.train_step import TrainStep, forward_train_step
+
+
+# Split a given dataset into train, validation, and test sets.
+# If subdirectories are present, split each subdirectory independently.
+def split_by_sub_dir(data_dir, file_rel_paths, data_split_pct):
+	sample_dir = os.path.join(data_dir, UNIFORM_FOLDER)
+	sub_dirs = sorted(entry.name for entry in os.scandir(sample_dir) if entry.is_dir())
+
+	# Treat the dataset root as an additional subdirectory.
+	root_dir = ''
+	groups = {group_dir: [] for group_dir in sub_dirs + [root_dir]}
+
+	# Assign each file to the subdirectory that contains it.
+	for i, path in enumerate(file_rel_paths):
+		group_dir = next((sub_dir for sub_dir in sub_dirs if path.startswith(sub_dir + '/')), root_dir)
+		groups[group_dir].append(i)
+
+	# Split each subdirectory and merge the results.
+	split_indices = ([], [], [])
+
+	for indices in filter(None, groups.values()):
+		for merged, part in zip(split_indices, torch.utils.data.random_split(indices, data_split_pct)):
+			merged.extend(list(part))
+
+	return tuple(Subset(file_rel_paths, indices) for indices in split_indices)
 
 
 # Prepare data files and load training dataset
@@ -42,8 +67,11 @@ def load_data_splits(args, data_split_pct, test_set_path=None):
 		file_rel_paths = list(filter(is_train_file, file_rel_paths))
 		num_test_samples = len(loaded_test_set_list)
 
-	# Split dataset.
-	(train_split, val_split, test_split) = torch.utils.data.random_split(file_rel_paths, data_split_pct)
+	# Split dataset. When training on a single subdirectory, split its files directly.
+	if args.sub_dir:
+		(train_split, val_split, test_split) = torch.utils.data.random_split(file_rel_paths, data_split_pct)
+	else:
+		(train_split, val_split, test_split) = split_by_sub_dir(args.data_dir, file_rel_paths, data_split_pct)
 
 	# Save test set to output directory.
 	if test_set_path:
