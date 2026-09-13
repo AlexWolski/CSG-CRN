@@ -1,5 +1,6 @@
 
 import argparse
+from datetime import timedelta
 import math
 import os
 from pathlib import Path
@@ -9,12 +10,14 @@ import traceback
 
 import torch
 import torch.multiprocessing as mp
+from torch.utils.data import Subset
 from tqdm import tqdm
 from wakepy import keep
 from losses.reconstruction_loss import ReconstructionLoss
 from reconstruct import load_mesh_and_samples, load_model, model_inference
 from utilities.accuracy_metrics import EMD, compute_chamfer_distance
 from utilities.csg_to_mesh import csg_to_mesh
+from utilities.data_augmentation import RotationAxis
 from utilities.data_processing import BEST_MODEL_FILE, find_file_paths, get_test_set
 from utilities.device_utils import get_devices
 from utilities.sampler_utils import sample_points_mesh_surface
@@ -25,7 +28,7 @@ def options():
 	parser = argparse.ArgumentParser()
 
 	parser.add_argument('--train_output_path', type=str, help='Path to training output directory. The best model and saved test set are automatically used.')
-	parser.add_argument('--mesh_data_dir', type=str, help='Path to the root directory containing the mesh files referenced by the saved test set file. Only needed when train_output_path is provided.')
+	parser.add_argument('--mesh_data_dir', type=str, help='Path to the root directory containing the mesh files referenced by the saved test set file.')
 	parser.add_argument('--model_params', type=str, help='Path to a trained model pytorch file. Only needed when train_output_path is not provided.')
 	parser.add_argument('--test_set_path', type=str, help='Path to a directory containing mesh files to test on. Overwrites the saved test set when train_output_path is also provided.')
 	parser.add_argument('--num_cascades', type=int, help='Number of cascades to output before running tests. Defaults to the maximum number of cascades used during training.')
@@ -35,22 +38,13 @@ def options():
 
 	args = parser.parse_args()
 
-	if not args.train_output_path:
-		if not args.model_params:
-			print('When train_output_path is not set, model_params must be set to a valid trained model file.')
-			exit()
+	if not args.train_output_path and not args.model_params:
+		print('Either train_output_path or model_params must be set.')
+		exit()
 
-		if not args.test_set_path:
-			print('When train_output_path is not set, test_set_path must be set to a directory containing test mesh files.')
-			exit()
-
-		if args.mesh_data_dir:
-			print('mesh_data_dir should only be set when train_output_path is also set.')
-			exit()
-	else:
-		if not args.mesh_data_dir and not args.test_set_path:
-			print('When train_output_path is used, either mesh_data_dir or test_set_path must be set.')
-			exit()
+	if not args.mesh_data_dir and not args.test_set_path:
+		print('Either mesh_data_dir or test_set_path must be set.')
+		exit()
 
 	return args
 
@@ -111,6 +105,7 @@ def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, 
 	# Compute average results.
 	total_recon_loss = 0
 	total_chamfer_dist = 0
+	total_earth_dist = 0
 
 	for _ in range(num_workers):
 		recon_loss, chamfer_dist, earth_dist = result_queue.get()
@@ -125,6 +120,37 @@ def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, 
 	return (mean_recon_loss, mean_chamfer_dist, mean_earth_dist)
 
 
+def get_test_paths(args):
+	# Load all mesh files in test set directory and save to a list.
+	if args.test_set_path:
+		return [str(path.resolve()) for path in Path(args.test_set_path).rglob('*') if path.is_file()]
+	# Load test files specified in the model output settings.
+	elif args.train_output_path:
+		test_set_names = get_test_set(args.train_output_path)
+		return find_file_paths(args.mesh_data_dir, test_set_names)
+	# Load files from mesh_data_dir.
+	elif args.mesh_data_dir:
+		# Load test set file names from the trained model parameters.
+		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis, timedelta])
+		save_data = torch.load(args.model_params, weights_only=True)
+		data_splits = save_data['data_splits']
+		test_split = data_splits[2] if data_splits is not None else None
+
+		# Check that the provided model had a test set saved.
+		if not test_split:
+			print('The specified model file has no test set saved. Either provide the train_output_path or test_set_path arguments.')
+			exit()
+
+		# Load files from specified mesh directory.
+		test_set_paths = [str(path.resolve()) for path in Path(args.mesh_data_dir).rglob('*') if path.is_file()]
+		# Filter for files in the test set. Split entries are relative paths, so strip them to stems before comparing.
+		test_split_names = set(os.path.splitext(os.path.basename(path))[0] for path in test_split)
+		is_test_file = lambda path: os.path.splitext(os.path.basename(path))[0] in test_split_names
+		return list(filter(is_test_file, test_set_paths))
+	else:
+		return None
+
+
 def main():
 	args = options()
 	print('')
@@ -132,15 +158,19 @@ def main():
 	# Parse devices.
 	devices = get_devices(args.device, cpu_allowed=True)
 
-	# Load test files specified in the model output settings.
 	if args.train_output_path:
-		test_set_names = get_test_set(args.train_output_path)
-		test_set_paths = find_file_paths(args.mesh_data_dir, test_set_names)
 		args.model_params = os.path.join(args.train_output_path, BEST_MODEL_FILE)
-	# Load all mesh files in test set directory and save to a list.
-	else:
-		target_dir = Path(args.test_set_path)
-		test_set_paths = [str(path.resolve()) for path in target_dir.rglob('*') if path.is_file()]
+
+	# Find test set mesh sample paths.
+	test_set_paths = get_test_paths(args)
+
+	# Validate test set samples.
+	if not test_set_paths:
+		print('Failed to load test set files. Double check the provided arguments and try again.')
+		exit()
+	elif len(test_set_paths) == 0:
+		print('A test set was found but contains no valid samples. Double check the provided arguments and try again.')
+		exit()
 
 	# Test model.
 	mean_recon_loss, mean_chamfer_dist, mean_earth_dist = test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths)
