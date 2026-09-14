@@ -204,16 +204,22 @@ def main():
 	# Test model.
 	mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples = test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths)
 
+	print('\n')
+
 	# Format result string.
 	with io.StringIO() as str_out:
-		print('', file=str_out)
 		print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), file=str_out)
+		print(f'Number of Cascades:     {args.num_cascades}', file=str_out)
+		print(f'Accuracy Point Samples: {args.num_acc_points}', file=str_out)
+		print(f'Recon Mesh Resolution:  {args.recon_resolution}', file=str_out)
+		print('----------------------', file=str_out)
 		print(f'Number of Test Samples: {len(test_set_paths)}', file=str_out)
 		print(f'Bad Samples Skipped:    {total_skipped_samples}', file=str_out)
 		print('----------------------', file=str_out)
 		print(f'Mean Reconstruction Loss:   {mean_recon_loss}', file=str_out)
 		print(f'Mean Chamfer Distance:      {mean_chamfer_dist}', file=str_out)
 		print(f'Mean Earth Movers Distance: {mean_earth_dist}', file=str_out)
+		print('\n', file=str_out)
 
 		result_string = str_out.getvalue()
 
