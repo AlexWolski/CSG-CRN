@@ -87,10 +87,10 @@ class PointDataset(Dataset):
 		excpetion_message = ""
 
 		if total_near_surface_samples > self.args.dataset_num_sdf_samples:
-			excpetion_message += f'Insufficient number of near-surface samples. Configuration set to {total_near_surface_samples} samples but the dataset only contains {args.dataset_num_sdf_samples} samples.\n'
+			excpetion_message += f'Insufficient number of near-surface samples. Configuration set to {total_near_surface_samples} samples but the dataset only contains {self.args.dataset_num_sdf_samples} samples.\n'
 
 		if total_uniform_loss_samples > self.args.dataset_num_sdf_samples:
-			excpetion_message += f'Insufficient number of uniform samples. Configuration set to {total_uniform_loss_samples} samples but the dataset only contains {args.dataset_num_sdf_samples} samples.\n'
+			excpetion_message += f'Insufficient number of uniform samples. Configuration set to {total_uniform_loss_samples} samples but the dataset only contains {self.args.dataset_num_sdf_samples} samples.\n'
 
 		if excpetion_message != "":
 			raise Exception(excpetion_message)
