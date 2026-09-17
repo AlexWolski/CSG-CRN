@@ -9,9 +9,10 @@ from datetime import timedelta
 from torch.utils.data import Subset
 
 from losses.reconstruction_loss import ReconstructionLoss
+from test import run_test
 from wakepy import keep
 from utilities.constants import INIT_RECON, SEPARATE_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
-from utilities.data_processing import create_out_dir, read_dataset_settings, save_dataset_settings, LATEST_MODEL_FILE
+from utilities.data_processing import create_out_dir, find_file_paths, get_test_set, read_dataset_settings, save_dataset_settings, BEST_MODEL_FILE, LATEST_MODEL_FILE, TEST_RESULTS_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.device_utils import get_devices
 from utilities.train_utils import load_data_splits, load_saved_settings, train, init_training_params
@@ -64,17 +65,21 @@ def options():
 
 		# Apply training settings
 		training_parser = get_training_parser(suppress_default=True)
+		testing_parser = get_testing_parser()
 		augment_parser = get_online_augment_parser(suppress_default=True)
 		args, remaining_args = training_parser.parse_known_args(args=remaining_args, namespace=args)
+		args, remaining_args = testing_parser.parse_known_args(args=remaining_args, namespace=args)
 		args, _unused_args = augment_parser.parse_known_args(args=remaining_args, namespace=args)
 
 	# Parse remaining arguments
 	else:
 		model_parser = get_model_parser()
 		training_parser = get_training_parser()
+		testing_parser = get_testing_parser()
 		augment_parser = get_online_augment_parser()
 		args, remaining_args = model_parser.parse_known_args(args=remaining_args, namespace=args)
 		args, remaining_args = training_parser.parse_known_args(args=remaining_args, namespace=args)
+		args, remaining_args = testing_parser.parse_known_args(args=remaining_args, namespace=args)
 		augment_parser.parse_args(args=remaining_args, namespace=args)
 
 
@@ -83,7 +88,13 @@ def options():
 	args.model_path = os.path.abspath(args.model_path) if args.model_path else None
 	args.supervisor_model_path = os.path.abspath(args.supervisor_model_path) if args.supervisor_model_path else None
 	args.test_set_path = os.path.abspath(args.test_set_path) if args.test_set_path else None
+	args.mesh_data_dir = os.path.abspath(args.mesh_data_dir) if args.mesh_data_dir else None
 	args.output_dir = os.path.abspath(args.output_dir)
+
+	# Enforce testing prerequisites
+	if args.test and not args.mesh_data_dir:
+		print('Cannot use the --test option without providing the --mesh_data_dir option')
+		exit()
 
 	# Validate data split.
 	if not any(args.data_split):
@@ -142,7 +153,7 @@ def parse_arg_choice(arg):
 	return arg[0] if len(arg) > 0 else None
 
 def print_help():
-	parsers = [get_data_parser(), get_model_parser(), get_training_parser(), get_online_augment_parser()]
+	parsers = [get_data_parser(), get_model_parser(), get_training_parser(), get_testing_parser(), get_online_augment_parser()]
 
 	for parser in parsers:
 		print('\n')
@@ -157,7 +168,7 @@ def get_help_parser():
 
 
 def get_data_parser():
-	data_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
+	data_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, allow_abbrev=False)
 	data_group = data_parser.add_argument_group('DATA SETTINGS')
 
 	data_group.add_argument('--data_dir', type=str, help='Parent directory of the SDF Dataset (data in subdirectories is included). Required unless the --model_path and --resume_training options are provided')
@@ -175,7 +186,7 @@ def get_data_parser():
 
 
 def get_model_parser():
-	model_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS)
+	model_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, allow_abbrev=False)
 	model_group = model_parser.add_argument_group('MODEL SETTINGS')
 
 	# Model settings
@@ -204,7 +215,7 @@ def get_model_parser():
 
 def get_training_parser(suppress_default=False):
 	argument_default = argparse.SUPPRESS if suppress_default else None
-	training_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, argument_default=argument_default)
+	training_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, argument_default=argument_default, allow_abbrev=False)
 	training_group = training_parser.add_argument_group('TRAINING SETTINGS')
 
 	# Training settings
@@ -239,6 +250,19 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--enable_amp', default=False, action='store_true', help='Enable Automatic Mixed Precision')
 
 	return training_parser
+
+
+def get_testing_parser():
+	testing_parser = argparse.ArgumentParser(add_help=False, usage=argparse.SUPPRESS, allow_abbrev=False)
+	testing_group = testing_parser.add_argument_group('TESTING SETTINGS')
+
+	# Testing settings
+	testing_group.add_argument('--test', default=False, action='store_true', help='Once training completes, test the best model using the test set. Requires the --mesh_data_dir option.')
+	testing_group.add_argument('--mesh_data_dir', type=str, help='Path to the root directory containing the mesh files referenced by the saved test set file.')
+	testing_group.add_argument('--num_test_acc_points', type=int, default=10000, help='Number of points to use when computing accuracy.')
+	testing_group.add_argument('--test_recon_resolution', type=int, default=512, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
+
+	return testing_parser
 
 
 def get_online_augment_parser(suppress_default=False):
@@ -314,6 +338,17 @@ def main():
 	# Train model
 	training_params = init_training_params(training_logger, data_splits, args, devices, model_params)
 	train(*training_params, training_logger, data_splits, args, device)
+
+	# Test model
+	if args.test:
+		print('')
+		print('Testing Model...')
+		torch.cuda.empty_cache()
+
+		model_params_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
+		result_file_path = os.path.join(args.output_dir, TEST_RESULTS_FILE)
+		test_set_paths = find_file_paths(args.mesh_data_dir, get_test_set(args.output_dir))
+		run_test(model_params_path, args.num_test_acc_points, args.num_cascades, args.test_recon_resolution, devices, test_set_paths, result_file_path)
 
 
 if __name__ == '__main__':
