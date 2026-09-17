@@ -71,7 +71,7 @@ class CSG_CRN(nn.Module):
 		self.to(self.device)
 
 
-	def forward(self, target_near_surface_samples, target_uniform_samples, csg_model=None):
+	def _forward(self, target_near_surface_samples, target_uniform_samples, csg_model=None):
 		batch_size = target_near_surface_samples.size(dim=0)
 
 		if csg_model is None:
@@ -156,10 +156,10 @@ class CSG_CRN(nn.Module):
 
 
 	# Reconstruct the residual volume after the initial reconstruction is subtracted from the target volume.
-	def forward_residual(self, target_near_surface_samples, target_uniform_samples, csg_model=None):
+	def _forward_residual(self, target_near_surface_samples, target_uniform_samples, csg_model=None):
 		# On the first cascade, the entire target shape is the residual.
 		if csg_model is None or csg_model.num_commands == 0:
-			return self.forward(target_near_surface_samples, target_uniform_samples, None)
+			return self._forward(target_near_surface_samples, target_uniform_samples, None)
 
 		# Subtract the reconstruction from the target to compute the residual volume.
 		residual_near_surface_distances = subtract_sdf(target_near_surface_samples[..., 3], csg_model.sample_csg(target_near_surface_samples[..., :3]), blending=0.2)
@@ -174,15 +174,24 @@ class CSG_CRN(nn.Module):
 			residual_near_surface_samples = torch.cat((near_surface_points, near_surface_distances.unsqueeze(-1)), dim=-1)
 
 		# Reconstruct the residual volume.
-		return self.forward(residual_near_surface_samples, residual_uniform_samples, csg_model)
+		return self._forward(residual_near_surface_samples, residual_uniform_samples, csg_model)
+
+
+	# Runs the forward step for a single cascade. Automatically calls `_forward` or `_forward_residual` based on `residual_only_training` setting.
+	# `residual_only_training` defaults to the model setting when not provided.
+	def forward_step(self, target_near_surface_samples, target_uniform_samples, csg_model=None, residual_only_training=None):
+		if residual_only_training is None:
+			residual_only_training = self.residual_only_training
+
+		if residual_only_training:
+			return self._forward_residual(target_near_surface_samples, target_uniform_samples, csg_model)
+		else:
+			return self._forward(target_near_surface_samples, target_uniform_samples, csg_model)
 
 
 	def forward_cascade(self, target_near_surface_samples, target_uniform_samples, num_cascades, csg_model=None):
 		for i in range(num_cascades+1):
-			if self.residual_only_training:
-				csg_model = self.forward_residual(target_near_surface_samples, target_uniform_samples, csg_model)
-			else:
-				csg_model = self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
+			csg_model = self.forward_step(target_near_surface_samples, target_uniform_samples, csg_model)
 
 		return csg_model
 
@@ -202,7 +211,7 @@ class CSG_CRN(nn.Module):
 			with torch.no_grad():
 				self.eval()
 				self.load_state_dict(model_params)
-				csg_model = self.forward(target_near_surface_samples, target_uniform_samples, csg_model).detach()
+				csg_model = self.forward_step(target_near_surface_samples, target_uniform_samples, csg_model).detach()
 
 		# Restore model parameters
 		if current_params != None:
@@ -217,7 +226,7 @@ class CSG_CRN(nn.Module):
 	# Run inference on all each previous cascade model parameter in `prev_cascades_list`, then run a forward pass for the current cascade.
 	def forward_separate_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model=None):
 		csg_model = self.forward_prev_cascades(target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model)
-		return self.forward(target_near_surface_samples, target_uniform_samples, csg_model)
+		return self.forward_step(target_near_surface_samples, target_uniform_samples, csg_model)
 
 
 	# Set which operations to scale and by how much

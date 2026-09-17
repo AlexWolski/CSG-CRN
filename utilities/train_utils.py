@@ -176,7 +176,7 @@ def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, 
 				input_csg_model = model.forward_prev_cascades(near_surface_input_samples.detach(), uniform_input_samples.detach(), prev_cascades_list)
 
 			# Run the forward pass and and compute the loss for the current cascade.
-			cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_model, TrainStep.FORWARD)
+			cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, TrainStep.FORWARD_STEP, input_csg_model)
 			_backpropagate(scaler, optimizer, cascade_loss)
 		elif args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
 			# Update model parameters after each refinement step
@@ -187,7 +187,7 @@ def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, 
 				# If a trained initial model is available, use it to generate the first reconstruction.
 				if init_model != None:
 					with torch.no_grad():
-						curernt_model = init_model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), None).detach()
+						curernt_model = init_model.forward_step(near_surface_input_samples.detach(), uniform_input_samples.detach(), None).detach()
 
 				# Use the supervisor to generate initial reconstructions when provided, otherwise use the model being trained.
 				generator_model = trained_supervisor if trained_supervisor != None else model
@@ -198,10 +198,7 @@ def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, 
 
 				with torch.no_grad():
 					for i in range(num_train_loops - 1):
-						if generator_model.residual_only_training:
-							curernt_model = generator_model.forward_residual(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
-						else:
-							curernt_model = generator_model.forward(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
+						curernt_model = generator_model.forward_step(near_surface_input_samples.detach(), uniform_input_samples.detach(), curernt_model).detach()
 						input_csg_list.append(None if curernt_model == None else curernt_model.clone())
 
 						if args.prim_dropout_percent:
@@ -209,11 +206,10 @@ def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, 
 
 				# Use the initial reconstructions as input data for training.
 				model.train()
-				forward_mode = TrainStep.FORWARD_RESIDUAL if args.residual_only_training else TrainStep.FORWARD
 
 				for i in range(num_train_loops):
 					# Run the forward pass for this cascade and compute the loss.
-					cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_list[i], forward_mode)
+					cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, TrainStep.FORWARD_STEP, input_csg_list[i])
 					# Backpropagate through each cascade separately but do not optimize weights yet.
 					scaler.scale(cascade_loss).backward()
 
@@ -224,7 +220,7 @@ def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, 
 
 			# Update model parameters after all cascade iterations
 			else:
-				cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, None, TrainStep.FORWARD_CASCADE, num_cascades)
+				cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, TrainStep.FORWARD_CASCADE, None, num_cascades)
 				_backpropagate(scaler, optimizer, cascade_loss)
 
 		# Only record the loss for the completed reconstruction
@@ -265,7 +261,7 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 
 			# If an initial CSGCRN model exists, use that to initialize the CSG model
 			if init_model != None:
-				csg_model = init_model.forward(near_surface_input_samples, uniform_input_samples)
+				csg_model = init_model.forward_step(near_surface_input_samples, uniform_input_samples)
 			else:
 				csg_model = None
 
@@ -515,7 +511,7 @@ def init_training_params(training_logger, data_splits, args, devices, model_para
 	scaler = torch.amp.GradScaler(enabled=args.enable_amp)
 
 	# Initialize the trianing step singleton.
-	TrainStep.initialize(model, loss_func, args.enable_amp)
+	TrainStep.initialize(model, loss_func, args.enable_amp, args.residual_only_training)
 
 	# Enable multi-GPU training.
 	if len(devices) > 1:

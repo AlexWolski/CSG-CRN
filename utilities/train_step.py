@@ -7,24 +7,24 @@ from utilities.csg_model import CSGModel
 # Class used to split batches of training data between multiple GPUs during the training forward step.
 class TrainStep(nn.Module):
 	# Forward methods
-	FORWARD = 'forward'
+	FORWARD_STEP = 'forward_step'
 	FORWARD_CASCADE = 'forward_cascade'
-	FORWARD_RESIDUAL = 'forward_residual'
 
 	# Singleton instance
 	_train_step_instance = None
 
 	# Constructor should not be invoked outside of this class.
-	def __init__(self, model, loss_func, enable_amp):
+	def __init__(self, model, loss_func, enable_amp, residual_only_training):
 		super(TrainStep, self).__init__()
 		self.model = model
 		self.loss_func = loss_func
 		self.enable_amp = enable_amp
+		self.residual_only_training = residual_only_training
 
 
 	# Factory method that creates the singleton instance.
-	def initialize(model, loss_func, enable_amp):
-		TrainStep._train_step_instance = TrainStep(model, loss_func, enable_amp)
+	def initialize(model, loss_func, enable_amp, residual_only_training):
+		TrainStep._train_step_instance = TrainStep(model, loss_func, enable_amp, residual_only_training)
 
 
 	# Return singleton instance.
@@ -38,7 +38,7 @@ class TrainStep(nn.Module):
 			TrainStep._train_step_instance = nn.DataParallel(TrainStep._train_step_instance, device_ids=devices)
 
 
-	def forward(self, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_class_data=None, forward_mode=FORWARD, num_cascades=None):
+	def forward(self, near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, forward_mode, csg_class_data=None, num_cascades=None):
 		# Each tensor of training data is split by DataParallel. Reconstruct a CSGModel instance using the split tensors.
 		csg_model = CSGModel.from_class_data(csg_class_data, near_surface_input_samples.size(0), near_surface_input_samples.device)
 
@@ -46,16 +46,16 @@ class TrainStep(nn.Module):
 		with autocast(device_type=near_surface_input_samples.device.type, dtype=torch.float16, enabled=self.enable_amp):
 			if forward_mode == self.FORWARD_CASCADE:
 				csg_model = self.model.forward_cascade(near_surface_input_samples, uniform_input_samples, num_cascades, csg_model)
-			elif forward_mode == self.FORWARD_RESIDUAL:
-				csg_model = self.model.forward_residual(near_surface_input_samples, uniform_input_samples, csg_model)
+			elif forward_mode == self.FORWARD_STEP:
+				csg_model = self.model.forward_step(near_surface_input_samples, uniform_input_samples, csg_model, self.residual_only_training)
 			else:
-				csg_model = self.model.forward(near_surface_input_samples, uniform_input_samples, csg_model)
+				raise Exception(f'Invalid forward mode: {forward_mode}')
 
 		return self.loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model).unsqueeze(0)
 
 
 # Helper method that calls TrainStep forward method.
-def forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, input_csg_model=None, forward_mode=TrainStep.FORWARD, num_cascades=None):
+def forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, forward_mode, input_csg_model=None, num_cascades=None):
 	csg_class_data = input_csg_model.get_class_data() if input_csg_model is not None else None
 	train_step = TrainStep.get_instance()
 
@@ -68,8 +68,8 @@ def forward_train_step(near_surface_input_samples, uniform_input_samples, near_s
 		near_surface_loss_samples.detach(),
 		uniform_loss_samples.detach(),
 		surface_samples.detach(),
-		csg_class_data,
 		forward_mode,
+		csg_class_data,
 		num_cascades
 	)
 

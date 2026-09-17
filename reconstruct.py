@@ -176,7 +176,7 @@ def model_inference(model, saved_args, init_model_state_dict, prev_cascades_list
 		# Run a forward pass on the inital reconstruciton model.
 		current_state_dict = copy.deepcopy(model.state_dict())
 		model.load_state_dict(init_model_state_dict, strict=False)
-		csg_model = model.forward(near_surface_samples, uniform_samples)
+		csg_model = model.forward_step(near_surface_samples, uniform_samples)
 		# Revert the CSGCRN model to the reconstruction weights.
 		model.load_state_dict(current_state_dict)
 
