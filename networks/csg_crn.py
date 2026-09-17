@@ -190,6 +190,8 @@ class CSG_CRN(nn.Module):
 	# Run inference on the previous cascades using the model parameters provided in `prev_cascades_list`.
 	def forward_prev_cascades(self, target_near_surface_samples, target_uniform_samples, prev_cascades_list, csg_model=None):
 		current_params = None
+		# Store the training mode so it can be restored after running inference on the previous cascades.
+		model_forward_mode = self.training
 
 		if len(prev_cascades_list) > 0:
 			self.eval()
@@ -206,7 +208,8 @@ class CSG_CRN(nn.Module):
 		if current_params != None:
 			self.load_state_dict(current_params)
 
-		self.train() if self.training else self.eval()
+		# Restore the training mode
+		self.train() if model_forward_mode else self.eval()
 
 		return csg_model
 
