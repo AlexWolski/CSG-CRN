@@ -164,6 +164,7 @@ def get_data_parser():
 	data_group.add_argument('--sub_dir', type=str, help='A subdirectory of of the parent SDF dataset to train on. The subdirectory must be present in the nea-surface, surface, and uniform directories.')
 	data_group.add_argument('--data_split', nargs=3, type=float, default=[0.8, 0.1, 0.1], help='Percentage of data to use for training, validation, and testing respectively. Inputs should be positive floats that add to 1.0.')
 	data_group.add_argument('--output_dir', type=str, default='./output', help='Output directory for checkpoints, trained model, and augmented dataset')
+	data_group.add_argument('--experiment_folder', type=str, help='Optional folder name for the training output. When not specified, an experiment name is auto-generated from arguments.')
 	data_group.add_argument('--model_path', type=str, default='', help='Load parameters and settings from saved model file. Provided arguments overwrite all the saved arguments except for network model settings')
 	data_group.add_argument('--resume_training', default=False, action='store_true', help='If a model path is supplied, resume training of the model with the original training data')
 	data_group.add_argument('--test_set_path', type=str, help='Text file containing names of samples reserved for the test set. The remaining samples in the dataset are split between the training and validation sets.')

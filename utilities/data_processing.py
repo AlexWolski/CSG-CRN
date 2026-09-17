@@ -20,6 +20,9 @@ LATEST_MODEL_FILE = 'latest_model.pt'
 
 
 def get_out_dir(args):
+	if args.experiment_folder:
+		return os.path.join(args.output_dir, args.experiment_folder)
+
 	dataset_name =  os.path.basename(os.path.normpath(args.data_dir)).replace(' ', '_')
 
 	# Create output folder name from settings
