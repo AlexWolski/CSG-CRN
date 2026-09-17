@@ -131,6 +131,11 @@ class PointNetfeat(nn.Module):
 	def global_pooling(self, X):
 		# Max Pooling
 		max_feat = torch.max(X, dim=2)[0]
+
+		# When extended pooling is disabled, only retunr the max pool.
+		if not self.extended_pooling:
+			return max_feat
+
 		# Mean Pooling
 		mean_feat = torch.mean(X, dim=2)
 		# TopK-Mean Pooling
