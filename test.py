@@ -180,38 +180,15 @@ def get_test_paths(args):
 		return None
 
 
-def main():
-	args = options()
-	print('')
-
-	# Parse devices.
-	devices = get_devices(args.device, cpu_allowed=False)
-
-	if args.train_output_path:
-		args.model_params = os.path.join(args.train_output_path, BEST_MODEL_FILE)
-
-	# Find test set mesh sample paths.
-	test_set_paths = get_test_paths(args)
-
-	# Validate test set samples.
-	if test_set_paths is None:
-		print('Failed to load test set files. Double check the provided arguments and try again.')
-		exit()
-	elif not test_set_paths:
-		print('A test set was found but contains no valid samples. Double check the provided arguments and try again.')
-		exit()
-
-	# Test model.
-	mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples = test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths)
-
+def output_results(num_acc_points, num_cascades, recon_resolution, test_set_paths, mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples, result_file_path=None):
 	print('\n')
 
 	# Format result string.
 	with io.StringIO() as str_out:
 		print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), file=str_out)
-		print(f'Number of Cascades:     {args.num_cascades}', file=str_out)
-		print(f'Accuracy Point Samples: {args.num_acc_points}', file=str_out)
-		print(f'Recon Mesh Resolution:  {args.recon_resolution}', file=str_out)
+		print(f'Number of Cascades:     {num_cascades}', file=str_out)
+		print(f'Accuracy Point Samples: {num_acc_points}', file=str_out)
+		print(f'Recon Mesh Resolution:  {recon_resolution}', file=str_out)
 		print('----------------------', file=str_out)
 		print(f'Number of Test Samples: {len(test_set_paths)}', file=str_out)
 		print(f'Bad Samples Skipped:    {total_skipped_samples}', file=str_out)
@@ -227,12 +204,44 @@ def main():
 	print(result_string)
 
 	# Save result to file.
+	if result_file_path:
+		with open(result_file_path, 'a+') as f:
+			f.write(result_string)
+
+
+# Test the model and output the results.
+def run_test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths, result_file_path=None):
+	mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples = test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths)
+	output_results(num_acc_points, num_cascades, recon_resolution, test_set_paths, mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples, result_file_path)
+
+
+def main():
+	args = options()
+	print('')
+
+	# Parse devices.
+	devices = get_devices(args.device, cpu_allowed=False)
+
+	if args.train_output_path:
+		args.model_params = os.path.join(args.train_output_path, BEST_MODEL_FILE)
+
+	# Save results to the training output directory when no result file is specified.
 	if not args.result_file_path and args.train_output_path:
 		args.result_file_path = os.path.join(args.train_output_path, TEST_RESULTS_FILE)
 
-	if args.result_file_path:
-		with open(args.result_file_path, 'a+') as f:
-			f.write(result_string)
+	# Find test set mesh sample paths.
+	test_set_paths = get_test_paths(args)
+
+	# Validate test set samples.
+	if test_set_paths is None:
+		print('Failed to load test set files. Double check the provided arguments and try again.')
+		exit()
+	elif not test_set_paths:
+		print('A test set was found but contains no valid samples. Double check the provided arguments and try again.')
+		exit()
+
+	# Test model.
+	run_test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths, args.result_file_path)
 
 
 if __name__ == '__main__':
