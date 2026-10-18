@@ -365,11 +365,12 @@ class CSGModel():
 	# Replace empty shapes in the CSGModel batch with a small placeholder sphere of radius EMPTY_SHAPE_RADIUS.
 	# When a boolean tensor of shape B is provided for empty_shapes where B is the batchsize of the CSGModel, replace the specified batch indices.
 	# Otherwise, find and replace the empty shapes the the CSGModel object.
+	# Returns the boolean tensor of shape B marking which shapes were empty.
 	def replace_empty_shapes(self, empty_shapes=None):
 		empty_shapes = self.get_empty_shapes() if empty_shapes is None else empty_shapes
 
 		if self.num_commands == 0 or not empty_shapes.any():
-			return
+			return empty_shapes
 
 		# Reshape the mask to (B, 1) so it can select the values of a whole command.
 		select_empty = empty_shapes.unsqueeze(-1)
@@ -396,6 +397,8 @@ class CSGModel():
 
 			if command['roundness'] is not None:
 				command['roundness'] = torch.where(select_empty, torch.zeros_like(command['roundness']), command['roundness'])
+
+		return empty_shapes
 
 
 # Test SDFs

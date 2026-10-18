@@ -59,7 +59,7 @@ def compute_chamfer_distance_csg(target_surface_samples, csg_model, num_acc_poin
 	return compute_chamfer_distance(target_surface_samples, recon_points_batch, no_grad=True)
 
 
-def compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, num_acc_points, sample_dist):
+def compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, num_acc_points, sample_dist, out_empty_shapes=None):
 	"""
 	Compute the approximate Chamfer Distance metric between a target point cloud and a CSG reconstruction.
 	Uses a heuristic method to efficiently generate surface samples of a CSG model within a threshold distance `sample_dist`.
@@ -74,6 +74,8 @@ def compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, num_acc
 		Number of points to use when computing Chamfer distance.
 	sample_dist : float
 		Maximum distance between generated points and the corresponding CSG model isosurface.
+	out_empty_shapes : []
+		Optional List parameter that gets populated with the boolean tensor marking which shapes were empty.
 
 	Returns
 	-------
@@ -82,7 +84,12 @@ def compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, num_acc
 
 	"""
 	# Replace empty CSG models with dummy placeholders.
-	csg_model.replace_empty_shapes()
+	empty_shapes = csg_model.replace_empty_shapes()
+
+	# Populate out parameter
+	if out_empty_shapes is not None and empty_shapes is not None:
+		out_empty_shapes.append(empty_shapes)
+
 	# Sample CSG surface
 	(recon_points_batch, _) = sample_sdf_near_csg_surface(csg_model, num_acc_points, sample_dist)
 	# Compute average Chamfer distance

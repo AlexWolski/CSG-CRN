@@ -241,6 +241,7 @@ def _backpropagate(scaler, optimizer, batch_loss):
 def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list=None, init_model=None):
 	total_val_loss = 0
 	total_chamfer_dist = 0
+	total_empty_percent = 0
 
 	# Set the model to Eval mode as to not modify the BatchNorm layer
 	was_training = model.training
@@ -272,14 +273,20 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 
 			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
-			total_chamfer_dist += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist).item()
+			empty_shapes_list = []
+			total_chamfer_dist += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist, empty_shapes_list).item()
+
+			# Record the percentage of reconstructions that were empty before they were replaced
+			if empty_shapes_list:
+				total_empty_percent += empty_shapes_list[0].float().mean().item() * 100
 
 	# Return model to its previous mode
 	model.train() if was_training else model.eval()
 
 	total_val_loss /= val_loader.__len__()
 	total_chamfer_dist /= val_loader.__len__()
-	return (total_val_loss, total_chamfer_dist)
+	total_empty_percent /= val_loader.__len__()
+	return (total_val_loss, total_chamfer_dist, total_empty_percent)
 
 
 # Save the checkpoint of a model with shared parameters for all cascades
@@ -397,7 +404,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model, trained_supervisor)
-		(val_loss, chamfer_dist) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list, init_model)
+		(val_loss, chamfer_dist, empty_percent) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list, init_model)
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results
@@ -409,7 +416,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		recon_training_in_progress = args.cascade_training_mode == INIT_RECON and init_model != None
 		recorded_num_cascades = num_cascades + 1 if recon_training_in_progress else num_cascades
 		recorded_total_cascades = args.num_cascades + 1 if recon_training_in_progress else args.num_cascades
-		training_logger.add_result(epoch, recorded_num_cascades, train_loss, val_loss, chamfer_dist, learning_rate, time_ellapsed)
+		training_logger.add_result(epoch, recorded_num_cascades, train_loss, val_loss, chamfer_dist, empty_percent, learning_rate, time_ellapsed)
 
 		weight_scheduling_in_progress = args.schedule_sub_weight and args.sub_weight < 1
 		cascade_scheduling_in_progress = not args.no_schedule_cascades and not initial_training_in_progress and num_cascades < args.num_cascades
@@ -424,6 +431,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		print(f"Training Loss:      {train_loss}")
 		print(f"Validation Loss:    {val_loss}")
 		print(f"Chamfer Dist:       {chamfer_dist}")
+		print(f"Empty Outputs:      {empty_percent:.2f}%")
 
 		# Subtract weight scheduler runs first
 		if weight_scheduling_in_progress:

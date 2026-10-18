@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 
 
-HEADERS = ['Epoch', 'Cascades', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Learning Rate', 'Time Ellapsed']
+HEADERS = ['Epoch', 'Cascades', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Empty %', 'Learning Rate', 'Time Ellapsed']
 
 
 class TrainingLogger():
@@ -14,14 +14,26 @@ class TrainingLogger():
 		self.loss_metric = loss_metric
 
 		# Initialize results structure
-		if not self.training_results:
-			for key in HEADERS:
-				self.training_results[key] = []
+		self._init_missing_results()
 
 		# Initialize output csv file
 		self.create_csv_file()
 		self.write_results()
 		self.plot_results()
+
+
+	# Account for any missing columns when loading results.
+	def _init_missing_results(self):
+		num_epochs = len(self.training_results['Epoch']) if 'Epoch' in self.training_results else 0
+
+		for key in HEADERS:
+			if key not in self.training_results:
+				self.training_results[key] = []
+
+			missing_results = num_epochs - len(self.training_results[key])
+
+			if missing_results > 0:
+				self.training_results[key] = [None] * missing_results + self.training_results[key]
 
 
 	# Create new csv file and print header
@@ -68,9 +80,10 @@ class TrainingLogger():
 				train_loss = self.training_results['Training Loss'][index]
 				val_loss = self.training_results['Validation Loss'][index]
 				val_acc = self.training_results['Chamfer Distance'][index]
+				empty_percent = self.training_results['Empty %'][index]
 				learning_rate = self.training_results['Learning Rate'][index]
 				time_ellapsed = self.training_results['Time Ellapsed'][index]
-				csv_writer.writerow([epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed])
+				csv_writer.writerow([epoch, num_cascades, train_loss, val_loss, val_acc, empty_percent, learning_rate, time_ellapsed])
 
 
 	# Generate plot image of results
@@ -113,22 +126,23 @@ class TrainingLogger():
 
 
 	# Append epoch result data to training_results dictionary
-	def _append_training_results(self, epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed):
+	def _append_training_results(self, epoch, num_cascades, train_loss, val_loss, val_acc, empty_percent, learning_rate, time_ellapsed):
 		self.training_results['Epoch'].append(epoch)
 		self.training_results['Cascades'].append(num_cascades)
 		self.training_results['Training Loss'].append(train_loss)
 		self.training_results['Validation Loss'].append(val_loss)
 		self.training_results['Chamfer Distance'].append(val_acc)
+		self.training_results['Empty %'].append(empty_percent)
 		self.training_results['Learning Rate'].append(learning_rate)
 		self.training_results['Time Ellapsed'].append(time_ellapsed)
 
 
 	# Log epoch training results
-	def add_result(self, epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed):
-		self._append_training_results(epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed)
+	def add_result(self, epoch, num_cascades, train_loss, val_loss, val_acc, empty_percent, learning_rate, time_ellapsed):
+		self._append_training_results(epoch, num_cascades, train_loss, val_loss, val_acc, empty_percent, learning_rate, time_ellapsed)
 
 		with open(self.csv_output_file, 'a') as fd:
 			csv_writer = csv.writer(fd)
-			csv_writer.writerow([epoch, num_cascades, train_loss, val_loss, val_acc, learning_rate, time_ellapsed])
+			csv_writer.writerow([epoch, num_cascades, train_loss, val_loss, val_acc, empty_percent, learning_rate, time_ellapsed])
 
 		self.plot_results()
