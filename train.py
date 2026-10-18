@@ -337,7 +337,7 @@ def main():
 
 	# Train model
 	training_params = init_training_params(training_logger, data_splits, args, devices, model_params)
-	train(*training_params, training_logger, data_splits, args, device)
+	train(*training_params, training_logger, data_splits, args, device, saved_settings_dict)
 
 	# Test model
 	if args.test:

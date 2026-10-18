@@ -3,6 +3,7 @@ import torch
 import shutil
 
 from argparse import Namespace
+from bisect import bisect_right
 from datetime import datetime as dt, timedelta
 from losses.loss import Loss
 from torch import autocast
@@ -338,8 +339,28 @@ def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch)
 	return sub_weight
 
 
+# Restore the trained initial recon model from a pickled model file.
+def restore_init_model(saved_settings_dict, args, device):
+	init_model_params = saved_settings_dict.get('init_model') if saved_settings_dict else None
+
+	# The initial model has not finished training
+	if not init_model_params:
+		return None
+
+	return load_model_from_args(args, device, init_model_params).eval()
+
+
+# Find the epoch where the reconstruction model began training from a training log.
+def get_recon_training_start_epoch(training_logger):
+	training_results = training_logger.get_results()
+	# Find the index of the last epoch of Cascade 0.
+	last_init_index = bisect_right(training_results['Cascades'], 0) - 1
+	# Return the epoch at that index.
+	return training_results['Epoch'][last_init_index]
+
+
 # Train model for max_epochs or until stopped early
-def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device):
+def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device, saved_settings_dict=None):
 	model.train(True)
 	model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
 
@@ -370,8 +391,15 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	# Initialize current number of cascades from train logger
 	num_cascades = training_logger.get_last_cascade() if training_logger.get_last_cascade() else 0
 
-	# Number of cascades spent training the initial model in INIT_RECON mode
+	# Number of epochs spent training the initial model in INIT_RECON mode
 	recon_training_start_epochs = 0
+
+	# Restore the trained initial model when resuming INIT_RECON training
+	if args.resume_training and args.cascade_training_mode == INIT_RECON:
+		init_model = restore_init_model(saved_settings_dict, args, device)
+
+		if init_model != None:
+			recon_training_start_epochs = get_recon_training_start_epoch(training_logger)
 
 	for epoch in range(init_epoch, args.max_epochs+1):
 
