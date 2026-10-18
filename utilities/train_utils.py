@@ -401,6 +401,11 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		if init_model != None:
 			recon_training_start_epochs = get_recon_training_start_epoch(training_logger)
 
+	# Restore the models for all previous cascades when resuming training in SEPARATE mode. 
+	if args.resume_training and args.cascade_training_mode == SEPARATE_PARAMS:
+		prev_cascades_list = saved_settings_dict.get('prev_cascades_list') or []
+		num_cascades = len(prev_cascades_list)
+
 	for epoch in range(init_epoch, args.max_epochs+1):
 
 		# Set operation weight
