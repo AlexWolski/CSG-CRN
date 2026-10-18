@@ -58,6 +58,10 @@ def options():
 		torch.serialization.add_safe_globals([argparse.Namespace, Subset, RotationAxis, timedelta])
 		args = torch.load(args.model_path, weights_only=True)['args']
 
+		# Restore the original num_cascades for INIT_RECON models before the decrease is applied.
+		if args.cascade_training_mode == INIT_RECON:
+			args.num_cascades += 1
+
 		# Apply data settings
 		for data_arg_name in vars(data_args):
 			arg_value = getattr(data_args, data_arg_name)
@@ -150,6 +154,10 @@ def options():
 
 # Parse an nargs type argument. Return None if no choise was selected, otherwise unwrap the argument.
 def parse_arg_choice(arg):
+	# Arguments loaded from a saved model file are already unwrapped.
+	if not isinstance(arg, list):
+		return arg
+
 	return arg[0] if len(arg) > 0 else None
 
 def print_help():
