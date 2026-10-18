@@ -304,7 +304,10 @@ class CSGModel():
 		# Compute weighted average result
 		for operation in range(command['operation weights'].size(dim=-1)):
 			weight = command['operation weights'][:,operation].unsqueeze(-1)
-			final_distance += weight * CSGModel.operation_functions[operation](distances, new_distances, command['blending'])
+			operation_function = CSGModel.operation_functions[operation]
+			# Blending is limited to the add operation since it produces inaccurate loss values for other operations.
+			blending = command['blending'] if operation_function is add_sdf else None
+			final_distance += weight * operation_function(distances, new_distances, blending)
 
 		return final_distance
 

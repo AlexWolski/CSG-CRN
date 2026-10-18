@@ -205,7 +205,7 @@ def get_model_parser():
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before backpropagating (Memory requirement scales with num_prims)')
 	model_group.add_argument('--num_cascades', type=int, default=1, help='Number of refinement passes before back-propagating (Total generated primitives = num_prims * num_cascades)')
 	model_group.add_argument('--no_extended_input', default=False, action='store_true', help='Exclude the additional volume parameters from the model input.')
-	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending')
+	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending. Blending only applies to the add operation.')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_extended_pooling', default=False, action='store_true', help='Disable the Mean Pool and TopK-Mean Pool operations in the POintNet encoder. Only Max Pool will be applied.')
 	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
