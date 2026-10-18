@@ -133,6 +133,16 @@ def csg_to_mesh(csg_model, resolution, iso_level=0.0):
 
 	with torch.no_grad():
 		distances = sample_csg_grid(csg_model, resolution)
+		# An empty shape will have all grid points return a positive SDF value.
+		empty_shapes = distances.flatten(1).min(dim=1).values > 0
+
+		# Replace empty shapes with the dummy placeholder.
+		if empty_shapes.any():
+			# Clone the model to avoid mutating the object passed into the method.
+			csg_model = csg_model.clone()
+			csg_model.replace_empty_shapes(empty_shapes)
+			distances = sample_csg_grid(csg_model, resolution)
+
 		csg_batch_size = csg_model.batch_size
 		mesh_list = []
 

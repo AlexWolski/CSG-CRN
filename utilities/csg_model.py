@@ -8,8 +8,13 @@ MIN_BOUND = -1
 MAX_BOUND = 1
 # Maximum SDF value is twice the radius
 MAX_SDF_VALUE = MAX_BOUND * 2
-
+# A minimum blending value is required since smooth min and smooth max need a non-zero blending number.
 DEFAULT_MIN_BLENDING = 0.001
+
+# Radius of the dummy shape used to replace empty CSG outputs. Must be large enough for marching cubes resolution used.
+EMPTY_SHAPE_RADIUS = 0.05
+# Number of point samples used to determine if a CSG output is empty or not.
+NUM_EMPTY_SAMPLE_POINTS = 50000
 
 
 # Smooth minimum and maximum borrowed from iquilezles.org
@@ -343,6 +348,54 @@ class CSGModel():
 	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
 	def sample_csg(self, query_points, initial_distances=None, out_primitive_samples=None):
 		return CSGModel.sample_csg_commands(query_points, self.csg_commands, initial_distances=initial_distances, out_primitive_samples=out_primitive_samples, primitive_dropout_mask=self.primitive_dropout_mask)
+
+
+	# Return a boolean tensor of shape B denoting which CSG models are empty, where B is the number of batches in this CSGModel object.
+	# num_test_points is an optional parameter that defaults to NUM_EMPTY_SAMPLE_POINTS.
+	def get_empty_shapes(self, num_test_points=NUM_EMPTY_SAMPLE_POINTS):
+		if self.num_commands == 0:
+			return None
+
+		# Randomly generate sample points in the building area.
+		test_points = Uniform(MIN_BOUND, MAX_BOUND).sample((self.batch_size, num_test_points, 3)).to(self.device)
+		# For each batch in the CSGModel obejct, check for when all the sample points are outside of the volume.
+		return self.sample_csg(test_points).min(dim=1).values > 0
+
+
+	# Replace empty shapes in the CSGModel batch with a small placeholder sphere of radius EMPTY_SHAPE_RADIUS.
+	# When a boolean tensor of shape B is provided for empty_shapes where B is the batchsize of the CSGModel, replace the specified batch indices.
+	# Otherwise, find and replace the empty shapes the the CSGModel object.
+	def replace_empty_shapes(self, empty_shapes=None):
+		empty_shapes = self.get_empty_shapes() if empty_shapes is None else empty_shapes
+
+		if self.num_commands == 0 or not empty_shapes.any():
+			return
+
+		# Reshape the mask to (B, 1) so it can select the values of a whole command.
+		select_empty = empty_shapes.unsqueeze(-1)
+
+		# Command values for replacement dummy sphere.
+		sphere_shape_weights = torch.zeros_like(self.csg_commands[0]['shape weights'])
+		sphere_shape_weights[:,0] = 1
+		sphere_operation_weights = torch.zeros_like(self.csg_commands[0]['operation weights'])
+		sphere_operation_weights[:,0] = 1
+		sphere_rotations = torch.zeros_like(self.csg_commands[0]['rotations'])
+		sphere_rotations[:,0] = 1
+
+
+		# Replace empty shapes with the dummy sphere.
+		for command in self.csg_commands:
+			command['shape weights'] = torch.where(select_empty, sphere_shape_weights, command['shape weights'])
+			command['operation weights'] = torch.where(select_empty, sphere_operation_weights, command['operation weights'])
+			command['translations'] = torch.where(select_empty, torch.zeros_like(command['translations']), command['translations'])
+			command['rotations'] = torch.where(select_empty, sphere_rotations, command['rotations'])
+			command['scales'] = torch.where(select_empty, torch.full_like(command['scales'], EMPTY_SHAPE_RADIUS), command['scales'])
+
+			if command['blending'] is not None:
+				command['blending'] = torch.where(select_empty, torch.full_like(command['blending'], DEFAULT_MIN_BLENDING), command['blending'])
+
+			if command['roundness'] is not None:
+				command['roundness'] = torch.where(select_empty, torch.zeros_like(command['roundness']), command['roundness'])
 
 
 # Test SDFs

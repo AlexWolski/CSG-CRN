@@ -81,6 +81,8 @@ def compute_chamfer_distance_csg_fast(target_surface_samples, csg_model, num_acc
 		The average bidirectional Chamfer Distance accuracy metric between all batches of target and reconstruction shapes.
 
 	"""
+	# Replace empty CSG models with dummy placeholders.
+	csg_model.replace_empty_shapes()
 	# Sample CSG surface
 	(recon_points_batch, _) = sample_sdf_near_csg_surface(csg_model, num_acc_points, sample_dist)
 	# Compute average Chamfer distance
