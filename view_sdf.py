@@ -210,6 +210,7 @@ class PrimitiveSlider():
 		left_handle_dist = abs(self.handles[0] - mouse_position)
 		right_handle_dist = abs(self.handles[1] - mouse_position)
 		self.dragged_handle = 0 if left_handle_dist <= right_handle_dist else 1
+		self.pressed_range = sorted(self.handles)
 
 		return self.on_mouse_drag(mouse_x, mouse_y)
 
@@ -234,14 +235,15 @@ class PrimitiveSlider():
 			else:
 				new_handle_position = unselected_handle - 1
 
-		if new_handle_position != dragged_handle:
-			self.handles[self.dragged_handle] = new_handle_position
-			self.callback(*sorted(self.handles))
-
+		self.handles[self.dragged_handle] = new_handle_position
 		return True
 
 
+	# Recompute the displayed model if the selected range changed while the handle was dragged.
 	def on_mouse_release(self, mouse_x, mouse_y):
+		if self.dragged_handle is not None and sorted(self.handles) != self.pressed_range:
+			self.callback(*sorted(self.handles))
+
 		self.dragged_handle = None
 
 
