@@ -525,7 +525,13 @@ class SdfModelViewer(_SdfViewer):
 			self.csg_model.add_command_dict(dict(self.full_csg_model.csg_commands[0]))
 			self.csg_model.replace_empty_shapes(torch.ones(self.csg_model.batch_size, dtype=torch.bool, device=self.csg_model.device))
 
-		self.recon_mesh = csg_to_mesh(self.csg_model, self.recon_resolution)[0]
+		# When all primitives are shown, use the pre-computed mesh.
+		if self.operation_mode is self.ALL_OP_MODE and start == 0 and end == self.full_csg_model.num_commands:
+			self.recon_mesh = self.full_recon_mesh
+		# Otherwise, recompute the mesh with the selected primitives.
+		else:
+			self.recon_mesh = csg_to_mesh(self.csg_model, self.recon_resolution)[0]
+
 		self.recon_surface_points = sample_points_mesh_surface(self.recon_mesh, self.num_view_points)
 		self.update_mesh_node()
 		self.loading = False
@@ -634,8 +640,9 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def load_file(self, samples_file):
-		self.target_mesh, self.recon_mesh, self.full_csg_model = self.get_mesh_and_csg_model(samples_file)
+		self.target_mesh, self.full_recon_mesh, self.full_csg_model = self.get_mesh_and_csg_model(samples_file)
 		self.csg_model = self.full_csg_model
+		self.recon_mesh = self.full_recon_mesh
 		self.target_surface_points = sample_points_mesh_surface(self.target_mesh, self.num_view_points)
 		self.recon_surface_points = sample_points_mesh_surface(self.recon_mesh, self.num_view_points)
 
