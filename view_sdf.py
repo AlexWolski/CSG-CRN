@@ -133,9 +133,8 @@ class ToggleButtons():
 		for button in self.buttons:
 			button.enable()
 
-		# Trigger clicked button
-		pressed_button.callback()
 		pressed_button.disable()
+		pressed_button.callback()
 
 
 class PrimitiveSlider():
@@ -251,6 +250,8 @@ class _SdfViewer(pyrender.Viewer):
 	LEFT_KEY = 65361
 	RIGHT_KEY = 65363
 	buttons = []
+	# When loading, display "Loading..." text on the screen.
+	loading = False
 
 	def __init__(self, mesh_nodes, window_title, point_size, num_view_points, view_width=1000, view_height=1000):
 		self.num_view_points = num_view_points
@@ -336,6 +337,18 @@ class _SdfViewer(pyrender.Viewer):
 
 		for button in self.buttons:
 			button.draw()
+
+		if self.loading:
+			center_x = self.viewport_size[0] // 2
+			center_y = self.viewport_size[1] // 2
+			pyglet.text.Label('Loading...', x=center_x, y=center_y, anchor_x='center', anchor_y='center', font_size=32, bold=True, color=(0,0,0)).draw()
+
+
+	# Draw loading text to the screen.
+	def show_loading(self):
+		self.loading = True
+		self.on_draw()
+		self.flip()
 
 
 	def view_prev(self):
@@ -491,6 +504,7 @@ class SdfModelViewer(_SdfViewer):
 
 	# Display only selected primitives. When Subtract Only Mode is enabled, only display subtracted primitives.
 	def set_primitive_range(self):
+		self.show_loading()
 		start = min(self.slider.handles)
 		end = max(self.slider.handles)
 
@@ -514,6 +528,7 @@ class SdfModelViewer(_SdfViewer):
 		self.recon_mesh = csg_to_mesh(self.csg_model, self.recon_resolution)[0]
 		self.recon_surface_points = sample_points_mesh_surface(self.recon_mesh, self.num_view_points)
 		self.update_mesh_node()
+		self.loading = False
 
 
 	def set_operation_mode(self, mode):
@@ -629,6 +644,7 @@ class SdfModelViewer(_SdfViewer):
 		if self.get_mesh_and_csg_model == None:
 			return
 
+		self.show_loading()
 		samples_file = self.file_loader.prev_file()
 		self.load_file(samples_file)
 		self.slider.reset(self.full_csg_model)
@@ -639,6 +655,7 @@ class SdfModelViewer(_SdfViewer):
 		if self.get_mesh_and_csg_model == None:
 			return
 
+		self.show_loading()
 		samples_file = self.file_loader.next_file()
 		self.load_file(samples_file)
 		self.slider.reset(self.full_csg_model)
