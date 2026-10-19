@@ -4,8 +4,9 @@ import pyglet
 import torch
 
 from pyglet.gl import *
+from utilities.csg_model import CSGModel, get_operation_name
 from utilities.csg_to_magica import prompt_and_export_to_magica
-from utilities.csg_to_mesh import prompt_and_export_to_mesh
+from utilities.csg_to_mesh import csg_to_mesh, prompt_and_export_to_mesh
 from utilities.file_loader import FileLoader
 from utilities.file_utils import MESH_FILE_TYPES
 from utilities.sampler_utils import sample_points_mesh_surface, distance_to_mesh_surface
@@ -137,6 +138,104 @@ class ToggleButtons():
 		pressed_button.disable()
 
 
+class PrimitiveSlider():
+	ADD_COLOR = (0, 180, 0)
+	SUBTRACT_COLOR = (220, 0, 0)
+	UNSELECTED_ALPHA = 70
+	HANDLE_COLOR = (40, 40, 40)
+	HANDLE_WIDTH = 6
+	HANDLE_HEIGHT_OVERHANG = 5
+
+
+	def __init__(self, x, y, width, height, csg_model, callback):
+		self.x = x
+		self.y = y
+		self.width = width
+		self.height = height
+		self.callback = callback
+		self.reset(csg_model)
+
+
+	# Create one segment per primitive and move the handles to both ends of the slider.
+	def reset(self, csg_model):
+		self.operations = [get_operation_name(command['operation weights']) for command in csg_model.csg_commands]
+		self.segment_width = self.width / len(self.operations)
+		self.handles = [0, len(self.operations)]
+		self.dragged_handle = None
+
+
+	def draw(self):
+		(start, end) = sorted(self.handles)
+		title_y = self.y + self.height + self.HANDLE_HEIGHT_OVERHANG + 4
+		shapes = [pyglet.text.Label('Primitives', x=self.x - self.HANDLE_WIDTH / 2, y=title_y, anchor_y='bottom', color=(0,0,0), bold=True)]
+
+		for index, operation in enumerate(self.operations):
+			color = self.SUBTRACT_COLOR if operation == 'sub' else self.ADD_COLOR
+			segment_selected = start <= index < end
+			alpha = 255 if segment_selected else self.UNSELECTED_ALPHA
+			segment_x = self.x + index * self.segment_width + 1
+			shapes.append(pyglet.shapes.Rectangle(segment_x, self.y, self.segment_width - 2, self.height, (*color, alpha)))
+
+		for handle in self.handles:
+			handle_x = self.x + handle * self.segment_width
+			handle_y = self.y - self.HANDLE_HEIGHT_OVERHANG
+			shapes.append(pyglet.shapes.Rectangle(handle_x - self.HANDLE_WIDTH / 2, handle_y, self.HANDLE_WIDTH, self.height + self.HANDLE_HEIGHT_OVERHANG * 2, self.HANDLE_COLOR))
+			shapes.append(pyglet.text.Label(str(handle), x=handle_x, y=handle_y - 2, anchor_x='center', anchor_y='top', color=(0,0,0)))
+
+		glDisable(GL_DEPTH_TEST)
+
+		for shape in shapes:
+			shape.draw()
+
+
+	# Grab the handle closest to the mouse and move it under the mouse. Returns True if the slider was clicked.
+	def on_mouse_press(self, mouse_x, mouse_y):
+		in_slider_width = self.x - self.HANDLE_WIDTH < mouse_x < self.x + self.width + self.HANDLE_WIDTH
+		in_slider_height = self.y - self.HANDLE_HEIGHT_OVERHANG < mouse_y < self.y + self.height + self.HANDLE_HEIGHT_OVERHANG
+
+		if not (in_slider_width and in_slider_height):
+			return False
+
+		# Grab whichever handle is closer to the mouse
+		mouse_position = (mouse_x - self.x) / self.segment_width
+		left_handle_dist = abs(self.handles[0] - mouse_position)
+		right_handle_dist = abs(self.handles[1] - mouse_position)
+		self.dragged_handle = 0 if left_handle_dist <= right_handle_dist else 1
+
+		return self.on_mouse_drag(mouse_x, mouse_y)
+
+
+	# Move the dragged handle to the boundary closest to the mouse. Returns True while a handle is being dragged.
+	def on_mouse_drag(self, mouse_x, mouse_y):
+		if self.dragged_handle is None:
+			return False
+
+		dragged_handle = self.handles[self.dragged_handle]
+		unselected_handle = self.handles[1 - self.dragged_handle]
+
+		# Move the selected handle to the mouse position.
+		new_handle_position = round((mouse_x - self.x) / self.segment_width)
+		# Keep the handle within the slider.
+		new_handle_position = max(0, min(new_handle_position, len(self.operations)))
+
+		# Handles must be at least one segment apart, so stop next to the other handle until the mouse passes it
+		if new_handle_position == unselected_handle:
+			if dragged_handle > unselected_handle:
+				unselected_handle += 1
+			else:
+				unselected_handle -= 1
+
+		if new_handle_position != dragged_handle:
+			self.handles[self.dragged_handle] = new_handle_position
+			self.callback(*sorted(self.handles))
+
+		return True
+
+
+	def on_mouse_release(self, mouse_x, mouse_y):
+		self.dragged_handle = None
+
+
 class _SdfViewer(pyrender.Viewer):
 	LEFT_KEY = 65361
 	RIGHT_KEY = 65363
@@ -200,22 +299,23 @@ class _SdfViewer(pyrender.Viewer):
 
 
 	def on_mouse_press(self, x, y, button, modifiers):
-		for button in self.buttons:
-			button.on_mouse_press(x, y)
+		captured = [widget.on_mouse_press(x, y) for widget in self.buttons]
 
-		super(_SdfViewer, self).on_mouse_press(x, y, button, modifiers)
+		# Skip camera controls when a widget captures the mouse
+		if not any(captured):
+			super(_SdfViewer, self).on_mouse_press(x, y, button, modifiers)
 
 
 	def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-		for button in self.buttons:
-			button.on_mouse_drag(x, y)
+		captured = [widget.on_mouse_drag(x, y) for widget in self.buttons]
 
-		super(_SdfViewer, self).on_mouse_drag(x, y, dx, dy, buttons, modifiers)
+		if not any(captured):
+			super(_SdfViewer, self).on_mouse_drag(x, y, dx, dy, buttons, modifiers)
 
 
 	def on_mouse_release(self, x, y, button, modifiers):
-		for button in self.buttons:
-			button.on_mouse_release(x, y)
+		for widget in self.buttons:
+			widget.on_mouse_release(x, y)
 
 		super(_SdfViewer, self).on_mouse_release(x, y, button, modifiers)
 
@@ -287,10 +387,11 @@ class SdfModelViewer(_SdfViewer):
 	MESH_MODEL = "Mesh Model"
 
 
-	def __init__(self, window_title, point_size, num_view_points, input_file, sample_dist, get_mesh_and_csg_model=None):
+	def __init__(self, window_title, point_size, num_view_points, input_file, sample_dist, get_mesh_and_csg_model=None, recon_resolution=256):
 		self.view_mode = self.COMBINED_VIEW
 		self.model_mode = self.POINT_MODEL
 		self.num_view_points = num_view_points
+		self.recon_resolution = recon_resolution
 		self.get_mesh_and_csg_model = get_mesh_and_csg_model
 		self.file_loader = FileLoader(input_file, MESH_FILE_TYPES)
 		self.sample_dist = sample_dist
@@ -355,6 +456,25 @@ class SdfModelViewer(_SdfViewer):
 		export_mesh_y = export_magica_y + height + padding
 		self.add_button(Button(export_x, export_mesh_y, width, height, 'Export to Mesh', callback=lambda: prompt_and_export_to_mesh(self.csg_model)))
 		self.add_button(Button(export_x, export_magica_y, width, height, 'Export to MagicaCSG', callback=lambda: prompt_and_export_to_magica(self.csg_model)))
+
+		# Create primitive range slider in the top left corner, leaving room for its title
+		slider_height = 20
+		title_height = 20
+		slider_y = self.viewport_size[1] - slider_height - padding - title_height - PrimitiveSlider.HANDLE_HEIGHT_OVERHANG
+		self.slider = PrimitiveSlider(padding * 2, slider_y, 400, slider_height, self.full_csg_model, self.set_primitive_range)
+		self.add_button(self.slider)
+
+
+	# Display only the primitives in the range [start, end) and recompute the reconstruction mesh
+	def set_primitive_range(self, start, end):
+		self.csg_model = CSGModel(self.full_csg_model.batch_size, self.full_csg_model.device)
+
+		for command in self.full_csg_model.csg_commands[start:end]:
+			self.csg_model.add_command_dict(command)
+
+		self.recon_mesh = csg_to_mesh(self.csg_model, self.recon_resolution)[0]
+		self.recon_surface_points = sample_points_mesh_surface(self.recon_mesh, self.num_view_points)
+		self.update_mesh_node()
 
 
 	def set_view_mode(self, mode):
@@ -454,7 +574,8 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def load_file(self, samples_file):
-		self.target_mesh, self.recon_mesh, self.csg_model = self.get_mesh_and_csg_model(samples_file)
+		self.target_mesh, self.recon_mesh, self.full_csg_model = self.get_mesh_and_csg_model(samples_file)
+		self.csg_model = self.full_csg_model
 		self.target_surface_points = sample_points_mesh_surface(self.target_mesh, self.num_view_points)
 		self.recon_surface_points = sample_points_mesh_surface(self.recon_mesh, self.num_view_points)
 
@@ -465,6 +586,7 @@ class SdfModelViewer(_SdfViewer):
 
 		samples_file = self.file_loader.prev_file()
 		self.load_file(samples_file)
+		self.slider.reset(self.full_csg_model)
 		self.update_mesh_node()
 
 
@@ -474,6 +596,7 @@ class SdfModelViewer(_SdfViewer):
 
 		samples_file = self.file_loader.next_file()
 		self.load_file(samples_file)
+		self.slider.reset(self.full_csg_model)
 		self.update_mesh_node()
 
 

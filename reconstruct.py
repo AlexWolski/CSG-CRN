@@ -233,7 +233,7 @@ def main():
 	_window_title = "Reconstruct: " + os.path.basename(args.input_file)
 
 	try:
-		viewer = SdfModelViewer("Reconstructed SDF", args.point_size, args.num_view_points, args.input_file, saved_args.sample_dist, get_mesh_and_csg_model)
+		viewer = SdfModelViewer("Reconstructed SDF", args.point_size, args.num_view_points, args.input_file, saved_args.sample_dist, get_mesh_and_csg_model, args.recon_resolution)
 		await_viewer(viewer)
 	except FileNotFoundError as fileError:
 		print(fileError)
