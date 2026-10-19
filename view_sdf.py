@@ -148,12 +148,12 @@ class PrimitiveSlider():
 	HANDLE_HEIGHT_OVERHANG = 5
 
 
-	def __init__(self, x, y, width, height, csg_model, callback):
+	def __init__(self, x, y, width, height, csg_model, select_callback):
 		self.x = x
 		self.y = y
 		self.width = width
 		self.height = height
-		self.callback = callback
+		self.select_callback = select_callback
 		# Display subtract primitives and ignore add primitives.
 		self.subtract_only_mode = False
 		self.reset(csg_model)
@@ -242,7 +242,7 @@ class PrimitiveSlider():
 	# Recompute the displayed model if the selected range changed while the handle was dragged.
 	def on_mouse_release(self, mouse_x, mouse_y):
 		if self.dragged_handle is not None and sorted(self.handles) != self.pressed_range:
-			self.callback(*sorted(self.handles))
+			self.select_callback()
 
 		self.dragged_handle = None
 
@@ -490,7 +490,10 @@ class SdfModelViewer(_SdfViewer):
 
 
 	# Display only selected primitives. When Subtract Only Mode is enabled, only display subtracted primitives.
-	def set_primitive_range(self, start, end):
+	def set_primitive_range(self):
+		start = min(self.slider.handles)
+		end = max(self.slider.handles)
+
 		self.csg_model = CSGModel(self.full_csg_model.batch_size, self.full_csg_model.device)
 
 		for command in self.full_csg_model.csg_commands[start:end]:
@@ -516,7 +519,7 @@ class SdfModelViewer(_SdfViewer):
 	def set_operation_mode(self, mode):
 		self.operation_mode = mode
 		self.slider.subtract_only_mode = mode is self.SUBTRACT_ONLY_MODE
-		self.set_primitive_range(*sorted(self.slider.handles))
+		self.set_primitive_range()
 
 
 	def set_view_mode(self, mode):
@@ -629,7 +632,7 @@ class SdfModelViewer(_SdfViewer):
 		samples_file = self.file_loader.prev_file()
 		self.load_file(samples_file)
 		self.slider.reset(self.full_csg_model)
-		self.set_primitive_range(*sorted(self.slider.handles))
+		self.set_primitive_range()
 
 
 	def view_next(self):
@@ -639,7 +642,7 @@ class SdfModelViewer(_SdfViewer):
 		samples_file = self.file_loader.next_file()
 		self.load_file(samples_file)
 		self.slider.reset(self.full_csg_model)
-		self.set_primitive_range(*sorted(self.slider.handles))
+		self.set_primitive_range()
 
 
 # Parse commandline arguments
