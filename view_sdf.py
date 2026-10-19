@@ -4,7 +4,7 @@ import pyglet
 import torch
 
 from pyglet.gl import *
-from utilities.csg_model import CSGModel, get_operation_name
+from utilities.csg_model import CSGModel, add_sdf, get_operation_name
 from utilities.csg_to_magica import prompt_and_export_to_magica
 from utilities.csg_to_mesh import csg_to_mesh, prompt_and_export_to_mesh
 from utilities.file_loader import FileLoader
@@ -141,6 +141,7 @@ class ToggleButtons():
 class PrimitiveSlider():
 	ADD_COLOR = (0, 180, 0)
 	SUBTRACT_COLOR = (220, 0, 0)
+	HIDDEN_ADD_COLOR = (150, 150, 150)
 	UNSELECTED_ALPHA = 70
 	HANDLE_COLOR = (40, 40, 40)
 	HANDLE_WIDTH = 6
@@ -153,6 +154,8 @@ class PrimitiveSlider():
 		self.width = width
 		self.height = height
 		self.callback = callback
+		# Display subtract primitives and ignore add primitives.
+		self.subtract_only_mode = False
 		self.reset(csg_model)
 
 
@@ -170,7 +173,13 @@ class PrimitiveSlider():
 		shapes = [pyglet.text.Label('Primitives', x=self.x - self.HANDLE_WIDTH / 2, y=title_y, anchor_y='bottom', color=(0,0,0), bold=True)]
 
 		for index, operation in enumerate(self.operations):
-			color = self.SUBTRACT_COLOR if operation == 'sub' else self.ADD_COLOR
+			if operation == 'sub':
+				color = self.SUBTRACT_COLOR
+			elif self.subtract_only_mode:
+				color = self.HIDDEN_ADD_COLOR
+			else:
+				color = self.ADD_COLOR
+
 			segment_selected = start <= index < end
 			alpha = 255 if segment_selected else self.UNSELECTED_ALPHA
 			segment_x = self.x + index * self.segment_width + 1
@@ -221,9 +230,9 @@ class PrimitiveSlider():
 		# Handles must be at least one segment apart, so stop next to the other handle until the mouse passes it
 		if new_handle_position == unselected_handle:
 			if dragged_handle > unselected_handle:
-				unselected_handle += 1
+				new_handle_position = unselected_handle + 1
 			else:
-				unselected_handle -= 1
+				new_handle_position = unselected_handle - 1
 
 		if new_handle_position != dragged_handle:
 			self.handles[self.dragged_handle] = new_handle_position
@@ -386,10 +395,14 @@ class SdfModelViewer(_SdfViewer):
 	POINT_MODEL = "Point Cloud Model"
 	MESH_MODEL = "Mesh Model"
 
+	ALL_OP_MODE = "All OP Mode"
+	SUBTRACT_ONLY_MODE = "Subtract Only Mode"
+
 
 	def __init__(self, window_title, point_size, num_view_points, input_file, sample_dist, get_mesh_and_csg_model=None, recon_resolution=256):
 		self.view_mode = self.COMBINED_VIEW
 		self.model_mode = self.POINT_MODEL
+		self.operation_mode = self.ALL_OP_MODE
 		self.num_view_points = num_view_points
 		self.recon_resolution = recon_resolution
 		self.get_mesh_and_csg_model = get_mesh_and_csg_model
@@ -464,17 +477,44 @@ class SdfModelViewer(_SdfViewer):
 		self.slider = PrimitiveSlider(padding * 2, slider_y, 400, slider_height, self.full_csg_model, self.set_primitive_range)
 		self.add_button(self.slider)
 
+		# Operation Viewing Mode buttons below primitive slider.
+		handle_label_height = 20
+		op_buttons_width = (self.slider.width - padding) // 2
+		op_buttons_y = slider_y - PrimitiveSlider.HANDLE_HEIGHT_OVERHANG - handle_label_height - padding - height
+		all_op_button = Button(self.slider.x, op_buttons_y, op_buttons_width, height, 'View All Operations', callback=lambda: self.set_operation_mode(self.ALL_OP_MODE))
+		sub_only_button = Button(self.slider.x + op_buttons_width + padding, op_buttons_y, op_buttons_width, height, 'View Subtract Only', callback=lambda: self.set_operation_mode(self.SUBTRACT_ONLY_MODE))
+		default_op_button = all_op_button if self.operation_mode is self.ALL_OP_MODE else sub_only_button
+		self.add_button(ToggleButtons([all_op_button, sub_only_button], default_op_button))
 
-	# Display only the primitives in the range [start, end) and recompute the reconstruction mesh
+
+	# Display only selected primitives. When Subtract Only Mode is enabled, only display subtracted primitives.
 	def set_primitive_range(self, start, end):
 		self.csg_model = CSGModel(self.full_csg_model.batch_size, self.full_csg_model.device)
 
 		for command in self.full_csg_model.csg_commands[start:end]:
-			self.csg_model.add_command_dict(command)
+			# Copy over model outputs to CSG object normally.
+			if self.operation_mode is self.ALL_OP_MODE:
+				self.csg_model.add_command_dict(command)
+			# When in Subtract Only mode, only display subtract operations.
+			elif get_operation_name(command['operation weights']) == 'sub':
+				# Flip add and subtract operations.
+				add_weights = command['operation weights'].flip(-1)
+				self.csg_model.add_command_dict({**command, 'operation weights': add_weights, 'blending': None})
+
+		# Display a placeholder sphere when there are no primitives to display
+		if self.csg_model.num_commands == 0:
+			self.csg_model.add_command_dict(dict(self.full_csg_model.csg_commands[0]))
+			self.csg_model.replace_empty_shapes(torch.ones(self.csg_model.batch_size, dtype=torch.bool, device=self.csg_model.device))
 
 		self.recon_mesh = csg_to_mesh(self.csg_model, self.recon_resolution)[0]
 		self.recon_surface_points = sample_points_mesh_surface(self.recon_mesh, self.num_view_points)
 		self.update_mesh_node()
+
+
+	def set_operation_mode(self, mode):
+		self.operation_mode = mode
+		self.slider.subtract_only_mode = mode is self.SUBTRACT_ONLY_MODE
+		self.set_primitive_range(*sorted(self.slider.handles))
 
 
 	def set_view_mode(self, mode):
@@ -587,7 +627,7 @@ class SdfModelViewer(_SdfViewer):
 		samples_file = self.file_loader.prev_file()
 		self.load_file(samples_file)
 		self.slider.reset(self.full_csg_model)
-		self.update_mesh_node()
+		self.set_primitive_range(*sorted(self.slider.handles))
 
 
 	def view_next(self):
@@ -597,7 +637,7 @@ class SdfModelViewer(_SdfViewer):
 		samples_file = self.file_loader.next_file()
 		self.load_file(samples_file)
 		self.slider.reset(self.full_csg_model)
-		self.update_mesh_node()
+		self.set_primitive_range(*sorted(self.slider.handles))
 
 
 # Parse commandline arguments
