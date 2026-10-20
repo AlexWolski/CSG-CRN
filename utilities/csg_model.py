@@ -137,50 +137,6 @@ class CSGModel():
 		return csg_model
 
 
-	# Convert a batched CSG Model instance to an exportable format.
-	def serialize_csg_models(self):
-		serialized_csg_model_list = []
-
-		# Copy all CSG Models in the batch.
-		for batch_index in range(self.batch_size):
-			serialized_command_list = []
-
-			# Copy each command in the CSG Model at the batch index.
-			for command in self.csg_commands:
-				serialized_command = {}
-
-				# Copy each command key/value pair at the batch index.
-				for (key, value) in command.items():
-					serialized_command[key] = value[batch_index].tolist() if value is not None else None
-
-				serialized_command_list.append(serialized_command)
-
-			serialized_csg_model_list.append(serialized_command_list)
-
-		return serialized_csg_model_list
-
-
-	# Construct a new CSGModel object from serialized CSG Model data.
-	def import_csg_models(serialized_csg_model_list, device=torch.device('cpu')):
-		batch_size = len(serialized_csg_model_list)
-		num_commands = len(serialized_csg_model_list[0])
-		csg_model = CSGModel(batch_size, device)
-
-		for batch_index in range(num_commands):
-			# Find all shape commands at a batch index.
-			serialized_command_list = [sample_commands[batch_index] for sample_commands in serialized_csg_model_list]
-			command = {}
-
-			# Convert the command values from a dict back to a tensor.
-			for key in serialized_command_list[0]:
-				serialized_command_values = [serialized_command[key] for serialized_command in serialized_command_list]
-				command[key] = torch.tensor(serialized_command_values, device=device) if serialized_command_values[0] is not None else None
-
-			csg_model.add_command_dict(command)
-
-		return csg_model
-
-
 	# Instantiate a new CSGModel object containing the given batch indices of this model on the given device.
 	def copy_batches(self, batch_indices, device=None):
 		device = device if device is not None else self.device
