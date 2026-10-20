@@ -157,15 +157,17 @@ def augment_sample(points, distances, args):
 	return (augmented_points, augmented_distances)
 
 
-# Augment a batch of SDF samples
-def augment_sample_batch(batch_points, batch_distances, args):
-	augmented_points = augment_sample_batch_points(batch_points, args)
+# Augment a batch of SDF samples.
+# A Bx4 quaternion tensor can be provided for `rotations` to override the random rotations.
+def augment_sample_batch(batch_points, batch_distances, args, rotations=None):
+	augmented_points = augment_sample_batch_points(batch_points, args, rotations)
 	augmented_distances = augment_sample_batch_distances(batch_distances, args)
 	return (augmented_points, augmented_distances)
 
 
-# Augment a batch of point samples
-def augment_sample_batch_points(batch_points, args):
+# Augment a batch of point samples.
+# A Bx4 quaternion tensor can be provided for `rotations` to override the random rotations.
+def augment_sample_batch_points(batch_points, args, rotations=None):
 	batch_size = batch_points.size()[0]
 	augmented_points = batch_points
 
@@ -175,8 +177,10 @@ def augment_sample_batch_points(batch_points, args):
 
 	# Rotate
 	if not args.no_rotation:
-		rotation_quat = random_rotation_batch(args.rotate_axis, batch_size).to(augmented_points.device)
-		augmented_points = rotate_point_cloud_batch(augmented_points, rotation_quat)
+		if rotations is None:
+			rotations = random_rotation_batch(args.rotate_axis, batch_size).to(augmented_points.device)
+
+		augmented_points = rotate_point_cloud_batch(augmented_points, rotations)
 
 	return augmented_points
 

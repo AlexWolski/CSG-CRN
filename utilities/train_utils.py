@@ -379,6 +379,10 @@ def get_recon_training_start_epoch(training_logger):
 def update_cascade_cache(new_cascade_model, dataset, cascade_params_list, batch_size):
 	new_cache = None
 
+	# Generate the cache from unaugmented samples so the cached reconstructions keep the default orientation.
+	was_augmenting = dataset.augment_data
+	dataset.augment_data = False
+
 	# Process CSG Models in batches since processing all at once requires too much memory.
 	for batch_start in range(0, dataset.raw_copies, batch_size):
 		batch_idx = list(range(batch_start, min(batch_start + batch_size, dataset.raw_copies)))
@@ -393,6 +397,7 @@ def update_cascade_cache(new_cascade_model, dataset, cascade_params_list, batch_
 		else:
 			new_cache.add_batches_from_csg_model(batch_cache)
 
+	dataset.augment_data = was_augmenting
 	dataset.cascade_cache = new_cache
 
 
@@ -445,16 +450,12 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		prev_cascades_list = saved_settings_dict.get('prev_cascades_list') or []
 		num_cascades = len(prev_cascades_list)
 
-	# Cascades after the initial cascade are trained on the unaugmented output of the previous cascades.
-	if prev_cascades_list:
-		train_loader.dataset.augment_data = False
-
-		# Regenerate the cascade cache from the previous cascade models, using the operation weight of the resumed epoch.
-		if use_cascade_cache:
-			print(f'Regenerating the cascade cache from {len(prev_cascades_list)} previous cascades.')
-			apply_sub_weight_schedule(model, args, init_epoch)
-			update_cascade_cache(model, train_loader.dataset, prev_cascades_list, args.batch_size)
-			update_cascade_cache(model, val_loader.dataset, prev_cascades_list, args.batch_size)
+	# Regenerate the cascade cache from the previous cascade models when resuming, using the operation weight of the resumed epoch.
+	if prev_cascades_list and use_cascade_cache:
+		print(f'Regenerating the cascade cache from {len(prev_cascades_list)} previous cascades.')
+		apply_sub_weight_schedule(model, args, init_epoch)
+		update_cascade_cache(model, train_loader.dataset, prev_cascades_list, args.batch_size)
+		update_cascade_cache(model, val_loader.dataset, prev_cascades_list, args.batch_size)
 
 	for epoch in range(init_epoch, args.max_epochs+1):
 
@@ -555,9 +556,6 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 				optimizer = init_optimizer(model, args.init_lr)
 				scheduler = init_scheduler(optimizer, args)
 				num_cascades += 1
-
-				# Cascades after the initial cascade are trained on the unaugmented output of the previous cascades.
-				train_loader.dataset.augment_data = False
 
 				# Run the best model of this cascade on the cached reconstructions to create the input of the next cascade.
 				if use_cascade_cache and not last_cascade:

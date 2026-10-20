@@ -13,6 +13,20 @@ def invert_quaternion(quaternions):
 	return inverted_quaternions
 
 
+# Combine the rotations of two Bx4 quaternion tensors of form [w, x, y, z]
+# The rotation of `quaternions2` is applied first, followed by the rotation of `quaternions1`
+def multiply_quaternion_batch(quaternions1, quaternions2):
+	(w1, x1, y1, z1) = torch.unbind(quaternions1, dim=-1)
+	(w2, x2, y2, z2) = torch.unbind(quaternions2, dim=-1)
+
+	return torch.stack((
+		w1*w2 - x1*x2 - y1*y2 - z1*z2,
+		w1*x2 + x1*w2 + y1*z2 - z1*y2,
+		w1*y2 - x1*z2 + y1*w2 + z1*x2,
+		w1*z2 + x1*y2 - y1*x2 + z1*w2
+	), dim=-1)
+
+
 # Converts a Bx4 quaternion tensor to a Bx4x4 rotation matrix tensor
 # Where B = Batch size
 # https://en.wikipedia.org/wiki/Rotation_matrix#Quaternion

@@ -1,5 +1,6 @@
 import torch
 from torch.distributions.uniform import Uniform
+from utilities.point_transform import multiply_quaternion_batch, rotate_point_cloud_batch
 from utilities.sdf_primitives import sdf_ellipsoid, sdf_cuboid, sdf_cylinder, world_to_local_points
 
 
@@ -135,6 +136,13 @@ class CSGModel():
 		csg_model.set_dropout(class_data['dropout_percent'])
 
 		return csg_model
+
+
+	# Rotate all primitives of in the batch by a Bx4 quaternion tensor, where B is the batch size and tensor has shape [w, x, y, z].
+	def rotate(self, rotations):
+		for command in self.csg_commands:
+			command['translations'] = rotate_point_cloud_batch(command['translations'].unsqueeze(1), rotations).squeeze(1)
+			command['rotations'] = multiply_quaternion_batch(rotations, command['rotations'])
 
 
 	# Instantiate a new CSGModel object containing the given batch indices of this model on the given device.

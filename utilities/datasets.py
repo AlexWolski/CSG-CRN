@@ -5,7 +5,7 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from utilities.constants import TARGET_SAMPLING, UNIFIED_SAMPLING, NEAR_SURFACE_SAMPLE_FACTOR
-from utilities.data_augmentation import augment_sample_batch, augment_sample_batch_points
+from utilities.data_augmentation import augment_sample_batch, augment_sample_batch_points, random_rotation_batch
 from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFACE_FOLDER
 
 
@@ -169,12 +169,12 @@ class PointDataset(Dataset):
 		return torch.from_numpy(samples)
 
 
-	def __augment_sdf_samples(self, sdf_samples):
+	def __augment_sdf_samples(self, sdf_samples, rotations):
 		sdf_points = sdf_samples[:,:,:3]
 		sdf_distances = sdf_samples[:,:,3]
 		sdf_distances = sdf_distances.unsqueeze(-1)
 
-		augmented_points, augmented_distances = augment_sample_batch(sdf_points, sdf_distances, self.args)
+		augmented_points, augmented_distances = augment_sample_batch(sdf_points, sdf_distances, self.args, rotations)
 		return torch.cat((augmented_points, augmented_distances), dim=-1)
 
 
@@ -195,13 +195,20 @@ class PointDataset(Dataset):
 
 		# Augment samples
 		if self.augment_data:
+			# Use one rotation per sample so the SDF samples, surface samples, and cached reconstruction stay aligned.
+			rotations = random_rotation_batch(self.args.rotate_axis, len(batch_idx)).to(self.device) if not self.args.no_rotation else None
+
 			combined_samples = torch.cat((batch_uniform_samples, batch_near_surface_samples), dim=1)
-			combined_samples = self.__augment_sdf_samples(combined_samples)
+			combined_samples = self.__augment_sdf_samples(combined_samples, rotations)
 			batch_uniform_samples = combined_samples[:, :self.num_uniform_samples]
 			batch_near_surface_samples = combined_samples[:, self.num_uniform_samples:]
 
 			if batch_surface_samples != None:
-				batch_surface_samples = augment_sample_batch_points(batch_surface_samples, self.args)
+				batch_surface_samples = augment_sample_batch_points(batch_surface_samples, self.args, rotations)
+
+			# Rotate the cached reconstruction to match the rotated samples.
+			if batch_cached_csg_model is not None and rotations is not None:
+				batch_cached_csg_model.rotate(rotations)
 
 		uniform_tensor_sizes = [self.num_uniform_input_samples, self.num_uniform_loss_samples]
 		near_surface_tensor_sizes = [self.num_near_surface_input_samples, self.num_near_surface_loss_samples]
