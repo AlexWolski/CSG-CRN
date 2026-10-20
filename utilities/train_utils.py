@@ -168,13 +168,18 @@ def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, 
 			uniform_loss_samples,
 			near_surface_input_samples,
 			near_surface_loss_samples,
-			surface_samples
+			surface_samples,
+			cached_csg_model
 		) = data_sample
 
 		if args.cascade_training_mode == SEPARATE_PARAMS:
-			# Create the initial reconstruction in inference mode.
-			with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
-				input_csg_model = model.forward_prev_cascades(near_surface_input_samples.detach(), uniform_input_samples.detach(), prev_cascades_list)
+			# Use the cached reconstruction of the previous cascades when available.
+			if cached_csg_model is not None:
+				input_csg_model = cached_csg_model
+			# Otherwise, create the initial reconstruction in inference mode.
+			else:
+				with autocast(device_type=device.type, dtype=torch.float16, enabled=args.enable_amp):
+					input_csg_model = model.forward_prev_cascades(near_surface_input_samples.detach(), uniform_input_samples.detach(), prev_cascades_list)
 
 			# Run the forward pass and and compute the loss for the current cascade.
 			cascade_loss = forward_train_step(near_surface_input_samples, uniform_input_samples, near_surface_loss_samples, uniform_loss_samples, surface_samples, TrainStep.FORWARD_STEP, input_csg_model)
@@ -258,7 +263,8 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 				uniform_loss_samples,
 				near_surface_input_samples,
 				near_surface_loss_samples,
-				surface_samples
+				surface_samples,
+				cached_csg_model
 			) = data_sample
 
 			# If an initial CSGCRN model exists, use that to initialize the CSG model
@@ -267,7 +273,10 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 			else:
 				csg_model = None
 
-			if args.cascade_training_mode == SEPARATE_PARAMS:
+			# Run the current cascade on the cached reconstruction of the previous cascades when available.
+			if args.cascade_training_mode == SEPARATE_PARAMS and cached_csg_model is not None:
+				csg_model = model.forward_step(near_surface_input_samples, uniform_input_samples, cached_csg_model)
+			elif args.cascade_training_mode == SEPARATE_PARAMS:
 				csg_model = model.forward_separate_cascades(near_surface_input_samples, uniform_input_samples, prev_cascades_list)
 			else:
 				csg_model = model.forward_cascade(near_surface_input_samples, uniform_input_samples, num_cascades, csg_model)
@@ -339,6 +348,13 @@ def schedule_sub_weight(sub_schedule_start_epoch, sub_schedule_end_epoch, epoch)
 	return sub_weight
 
 
+# Set the subtract operation weight of the model for the given epoch when the subtract weight scheduler is enabled.
+def apply_sub_weight_schedule(model, args, epoch):
+	if not args.disable_sub_operation and args.schedule_sub_weight:
+		args.sub_weight = schedule_sub_weight(args.sub_schedule_start_epoch, args.sub_schedule_end_epoch, epoch)
+		model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
+
+
 # Restore the trained initial recon model from a pickled model file.
 def restore_init_model(saved_settings_dict, args, device):
 	init_model_params = saved_settings_dict.get('init_model') if saved_settings_dict else None
@@ -359,6 +375,27 @@ def get_recon_training_start_epoch(training_logger):
 	return training_results['Epoch'][last_init_index]
 
 
+# Given the trained network model for a new cascade, generate new primitives and add it to the existing cascade cache.
+def update_cascade_cache(new_cascade_model, dataset, cascade_params_list, batch_size):
+	new_cache = None
+
+	# Process CSG Models in batches since processing all at once requires too much memory.
+	for batch_start in range(0, dataset.raw_copies, batch_size):
+		batch_idx = list(range(batch_start, min(batch_start + batch_size, dataset.raw_copies)))
+		(uniform_input_samples, _, near_surface_input_samples, _, _, cached_csg_model) = dataset[batch_idx]
+
+		# Run the cascade models on the cached reconstruction and copy the result to the CPU.
+		csg_model = new_cascade_model.forward_prev_cascades(near_surface_input_samples, uniform_input_samples, cascade_params_list, cached_csg_model)
+		batch_cache = csg_model.copy_batches(list(range(csg_model.batch_size)), torch.device('cpu'))
+
+		if new_cache is None:
+			new_cache = batch_cache
+		else:
+			new_cache.add_batches_from_csg_model(batch_cache)
+
+	dataset.cascade_cache = new_cache
+
+
 # Train model for max_epochs or until stopped early
 def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_loader, training_logger, data_splits, args, device, saved_settings_dict=None):
 	model.train(True)
@@ -370,6 +407,8 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	init_model = None
 	# Trained model for generating initial reconstruction inputs when using SHARED training mode.
 	trained_supervisor = None
+	# Cache the reconstruction of the previous cascades for each training and validation sample when using SEPARATE training mode.
+	use_cascade_cache = args.cascade_training_mode == SEPARATE_PARAMS and not args.disable_training_cache
 
 	if args.cascade_training_mode != SEPARATE_PARAMS and args.supervisor_model_path:
 		(supervisor_settings, supervisor_params) = load_saved_settings(args.supervisor_model_path)
@@ -406,12 +445,21 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		prev_cascades_list = saved_settings_dict.get('prev_cascades_list') or []
 		num_cascades = len(prev_cascades_list)
 
+	# Cascades after the initial cascade are trained on the unaugmented output of the previous cascades.
+	if prev_cascades_list:
+		train_loader.dataset.augment_data = False
+
+		# Regenerate the cascade cache from the previous cascade models, using the operation weight of the resumed epoch.
+		if use_cascade_cache:
+			print(f'Regenerating the cascade cache from {len(prev_cascades_list)} previous cascades.')
+			apply_sub_weight_schedule(model, args, init_epoch)
+			update_cascade_cache(model, train_loader.dataset, prev_cascades_list, args.batch_size)
+			update_cascade_cache(model, val_loader.dataset, prev_cascades_list, args.batch_size)
+
 	for epoch in range(init_epoch, args.max_epochs+1):
 
 		# Set operation weight
-		if not args.disable_sub_operation and args.schedule_sub_weight:
-			args.sub_weight = schedule_sub_weight(args.sub_schedule_start_epoch, args.sub_schedule_end_epoch, epoch)
-			model.set_operation_weight(subtract_sdf, add_sdf, args.sub_weight)
+		apply_sub_weight_schedule(model, args, epoch)
 
 		# When using the same model parameters for all cascades, use the schedule to control the number of cascades
 		if args.cascade_training_mode == SHARED_PARAMS or args.cascade_training_mode == INIT_RECON:
@@ -507,6 +555,14 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 				optimizer = init_optimizer(model, args.init_lr)
 				scheduler = init_scheduler(optimizer, args)
 				num_cascades += 1
+
+				# Cascades after the initial cascade are trained on the unaugmented output of the previous cascades.
+				train_loader.dataset.augment_data = False
+
+				# Run the best model of this cascade on the cached reconstructions to create the input of the next cascade.
+				if use_cascade_cache and not last_cascade:
+					update_cascade_cache(model, train_loader.dataset, [cascade_params], args.batch_size)
+					update_cascade_cache(model, val_loader.dataset, [cascade_params], args.batch_size)
 
 			# When using the INIT_RECON training mode, save the first trained cascade model and reset early stopping
 			if init_model_training:

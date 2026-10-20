@@ -21,6 +21,9 @@ class PointDataset(Dataset):
 		self.loss_sampling_method = loss_sampling_method
 		self.input_sampling_method = input_sampling_method
 
+		# Cached initial reconstruction CSG models. Used for SEPARATE training mode.
+		self.cascade_cache = None
+
 		# Compute number of uniform and near-surface SDF samples to load
 		self.num_uniform_input_samples = math.ceil(self.args.num_input_points * self.args.surface_uniform_ratio)
 		self.num_near_surface_input_samples = self.args.num_input_points - self.num_uniform_input_samples
@@ -101,14 +104,13 @@ class PointDataset(Dataset):
 		data_sample_list = []
 
 		for file_rel_path in tqdm(self.file_rel_paths, desc=f'Loading {self.dataset_name}'):
-			data_sample_list.append(self.__load_data_sample(file_rel_path))
+			data_sample = self.__load_data_sample(file_rel_path)
 
-		# Omit skipped samples
-		skipped_samples = data_sample_list.count(None)
-		self.raw_copies = len(self.file_rel_paths) - skipped_samples
+			# Omit samples that failed to load.
+			if data_sample != None:
+				data_sample_list.append(data_sample)
 
-		if skipped_samples > 0:
-			data_sample_list = [i for i in data_sample_list if i != None]
+		self.raw_copies = len(data_sample_list)
 
 		# Save sample lists as tensors
 		uniform_sample_list, near_surface_sample_list, surface_sample_list = list(zip(*data_sample_list))
@@ -189,6 +191,7 @@ class PointDataset(Dataset):
 		batch_uniform_samples = self.uniform_samples[batch_idx].to(self.device)
 		batch_near_surface_samples = self.near_surface_samples[batch_idx].to(self.device)
 		batch_surface_samples = self.surface_samples[batch_idx].to(self.device) if self.surface_samples != None else None
+		batch_cached_csg_model = self.cascade_cache.copy_batches(batch_idx, self.device) if self.cascade_cache is not None else None
 
 		# Augment samples
 		if self.augment_data:
@@ -232,7 +235,8 @@ class PointDataset(Dataset):
 			batch_uniform_loss_samples.detach(),
 			batch_near_surface_input_samples.detach(),
 			batch_near_surface_loss_samples.detach(),
-			batch_surface_samples.detach()
+			batch_surface_samples.detach(),
+			batch_cached_csg_model
 		)
 
 		return data_sample
