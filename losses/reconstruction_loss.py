@@ -62,7 +62,7 @@ class ReconstructionLoss(nn.Module):
 		csg_model : CSGModel
 			Current reconstruction CSG model.
 		out_point_loss : list of torch.Tensor
-			Optional list output for the per-sample loss values for each primitive.
+			Optional list output for the per-sample loss values of the reconstruction, computed before clamping and excess weighting.
 		out_primitive_samples : list of torch.Tensor
 			Optional list output for the SDF distances of each primitive.
 
@@ -80,11 +80,23 @@ class ReconstructionLoss(nn.Module):
 			return torch.mean(recon_loss)
 		# All other loss metrics require a mix of near-surface and uniform samples.
 		else:
-			(clamped_target_sdf, clamped_predicted_sdf) = self.cat_and_clamp_samples(target_near_surface_samples, target_uniform_samples, csg_model, out_primitive_samples)
-			point_loss = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
+			(unclamped_target_sdf, unclamped_predicted_sdf) = self.cat_samples(target_near_surface_samples, target_uniform_samples, csg_model, out_primitive_samples)
 
+			# Clamp the SDF values to have a maximum difference of clamp_dist*2.
+			if self.clamp_dist != None:
+				target_sdf = torch.clamp(unclamped_target_sdf, min=-self.clamp_dist, max=self.clamp_dist)
+				predicted_sdf = torch.clamp(unclamped_predicted_sdf, min=-self.clamp_dist, max=self.clamp_dist)
+			else:
+				target_sdf = unclamped_target_sdf
+				predicted_sdf = unclamped_predicted_sdf
+
+			# Compute reconstruction loss with clamp settings.
+			point_loss = self.loss_func(target_sdf, predicted_sdf)
+
+			# Return the unclamped loss. When clamping is disabled, the computed loss is already unclamped.
 			if out_point_loss is not None:
-				out_point_loss.append(point_loss)
+				unclamped_loss = point_loss if self.clamp_dist == None else self.loss_func(unclamped_target_sdf, unclamped_predicted_sdf)
+				out_point_loss.append(unclamped_loss)
 
 			if self.excess_loss_weight == None or self.excess_loss_weight == 1.0:
 				# Unweighted loss
@@ -92,29 +104,20 @@ class ReconstructionLoss(nn.Module):
 			else:
 				# Increase the loss for samples detecting excess volume.
 				# (The sample point is outside both the target and reconstruction volumes, but the reconstruction is closer.)
-				excess_samples_mask = (clamped_target_sdf > 0.0) & (clamped_predicted_sdf > 0.0) & (clamped_target_sdf - clamped_predicted_sdf > 0)
+				excess_samples_mask = (target_sdf > 0.0) & (predicted_sdf > 0.0) & (target_sdf - predicted_sdf > 0)
 				sample_weights = torch.where(excess_samples_mask, self.excess_loss_weight, 1.0)
 				recon_loss = torch.mean(point_loss * sample_weights)
 				return recon_loss
 
 
-	def cat_and_clamp_samples(self, target_near_surface_samples, target_uniform_samples, csg_model, out_primitive_samples=None):
+	def cat_samples(self, target_near_surface_samples, target_uniform_samples, csg_model, out_primitive_samples=None):
 		target_sdf_samples = torch.cat((target_near_surface_samples, target_uniform_samples), 1)
 		target_points = target_sdf_samples[..., :3]
 		target_sdf = target_sdf_samples[..., 3]
 
 		predicted_sdf = csg_model.sample_csg(target_points, out_primitive_samples=out_primitive_samples)
 
-		# Clamp the predicted SDF values to have a maximum difference of clamp_dist*2
-		if self.clamp_dist != None:
-			clamped_target_sdf = torch.clamp(target_sdf, min=-self.clamp_dist, max=self.clamp_dist)
-			clamped_predicted_sdf = torch.clamp(predicted_sdf, min=-self.clamp_dist, max=self.clamp_dist)
-		else:
-			clamped_target_sdf = target_sdf
-			clamped_predicted_sdf = predicted_sdf
-
-		# Compute the loss
-		return (clamped_target_sdf, clamped_predicted_sdf)
+		return (target_sdf, predicted_sdf)
 
 
 # Log loss function roughly intersecting (0,0)
