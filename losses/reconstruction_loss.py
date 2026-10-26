@@ -211,7 +211,7 @@ class OccLoss(_Loss):
 
 # Chamfer distance loss function
 class ChamferLoss(_Loss):
-	RESOLUTION = 64
+	RESOLUTION = 128
 
 
 	def __init__(self, reduction: str = 'mean'):
