@@ -185,9 +185,24 @@ def csg_to_mesh_differentiable(csg_model, resolution):
 	-------
 	[Tuple[torch.Tensor, torch.Tensor]]
 		List containing B tuples of vertex tensors and face tensors, where B is the batch size of `csg_model`.
+		Vertices are in world coordinates ([MIN_BOUND, MAX_BOUND]^3, axis order (x, y, z)).
+
+	Raises
+	------
+	RuntimeError
+		Throws an exception when any extracted isosurface is empty.
+		Unlike the non-differentiable `csg_to_mesh`, palceholder meshs cannot be substituted since it breaks the gradient.
 
 	"""
 	batch_sdf_distances = sample_csg_grid(csg_model, resolution)
+
+	# An extraction is empty when all grid points have a positive signed distance value.
+	empty_shapes = batch_sdf_distances.flatten(1).min(dim=1).values > 0
+
+	if empty_shapes.any():
+		raise RuntimeError(
+			f'Cannot extract isosurface: {empty_shapes.nonzero().flatten().size()[0]} extracted meshes are empty.')
+
 	batch_size = batch_sdf_distances.size(0)
 	diffdmc = DiffDMC(dtype=torch.float32).to(csg_model.device)
 	mesh_list = []
@@ -196,7 +211,13 @@ def csg_to_mesh_differentiable(csg_model, resolution):
 		sdf_distances = batch_sdf_distances[batch]
 		verts, faces = diffdmc(sdf_distances, deform=None, normalize=True)
 
-		# Convert the lists of vertices and faces to mesh objects
+		if verts.numel() == 0 or faces.numel() == 0:
+			raise RuntimeError(
+				f'Cannot extract isosurface: DiffDMC returned an empty mesh for batch element {batch} at resolution {resolution}.')
+
+		# DiffDMC returns vertices without bounds [0, 1] and axis order (z, y, x).
+		# Map them to the operating bounds of CSGCRN [MIN_BOUND, MAX_BOUND] and axis order (x, y, z).
+		verts = verts[..., [2, 1, 0]] * (MAX_BOUND - MIN_BOUND) + MIN_BOUND
 		mesh_list.append((verts, faces))
 
 	return mesh_list

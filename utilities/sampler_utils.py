@@ -275,7 +275,7 @@ def sample_points_csg_surface(csg_model, resolution, num_sdf_samples, out_mesh_l
 def sample_points_csg_surface_differentiable(csg_model, resolution, num_sdf_samples):
 	"""
 	Uniformly sample points on the surface of a batch of CSG models.
-	Uses the marching cubes algorithm to extract an isosurface mesh, then uniformly samples the mesh faces.
+	Uses a differentiable marching cubes algorithm to extract an isosurface mesh, then uniformly samples the mesh faces.
 
 	Parameters
 	----------
@@ -297,15 +297,20 @@ def sample_points_csg_surface_differentiable(csg_model, resolution, num_sdf_samp
 	mesh_list = csg_to_mesh_differentiable(csg_model, resolution)
 	triangles_list = []
 
-	prob_dist = torch.ones(num_sdf_samples) / num_sdf_samples
-
-	# Randomly select `num_sdf_samples` faces from each mesh. Faces can be selected multiple times.
-	# Note: The sampling is not weighted by face area. This can be done by populating `prob_dist` with the normalized face areas.
+	# Randomly select `num_sdf_samples` faces from each mesh, weighted by face area. Faces can be selected multiple times.
 	for (verts, faces) in mesh_list:
-		face_indices = prob_dist.multinomial(num_samples=num_sdf_samples, replacement=True)
-		select_faces = faces[face_indices]
-		select_vertices = verts[select_faces]
-		triangles_list.append(select_vertices)
+		mesh_triangles = verts[faces.long()]
+		# Gradients flow through the vertex positions, so face weights are detached.
+		side_AB = mesh_triangles[:,1] - mesh_triangles[:,0]
+		side_AC = mesh_triangles[:,2] - mesh_triangles[:,0]
+		face_areas = torch.linalg.cross(side_AB, side_AC).norm(dim=-1).detach()
+
+		# Check for invalid faces.
+		if face_areas.sum() <= 0 or face_areas.isnan().any():
+			face_areas = torch.ones_like(face_areas)
+
+		face_indices = face_areas.multinomial(num_samples=num_sdf_samples, replacement=True)
+		triangles_list.append(mesh_triangles[face_indices])
 
 	# The `triangles` tensor has shape BxNx3x3, where B=`csg_model`.batch_size and N=`num_sdf_samples`.
 	# The third dimension represents the vertices in each face and the fourth dimension represents the coordinates of each vertex.
