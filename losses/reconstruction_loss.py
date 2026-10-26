@@ -47,37 +47,63 @@ class ReconstructionLoss(nn.Module):
 				raise Exception(f"Invalid loss metric: {loss_metric}")
 
 
-	# Compute average loss of SDF samples of all batches
-	def forward(self, target_near_surface_samples, target_uniform_samples, target_surface_samples, csg_model):
+	def forward(self, target_near_surface_samples, target_uniform_samples, target_surface_samples, csg_model, out_point_loss=None, out_primitive_samples=None):
+		"""
+		Compute average loss of SDF samples of all batches
+
+		Parameters
+		----------
+		target_near_surface_samples : torch.Tensor
+			Target shape SDF point cloud tensor for configured loss metric.
+		target_uniform_samples : torch.Tensor
+			Reconstruction shape SDF point cloud tensor for configured loss metric.
+		target_surface_samples : torch.Tensor
+			Target shape surface samples.
+		csg_model : CSGModel
+			Current reconstruction CSG model.
+		out_point_loss : list of torch.Tensor
+			Optional list output for the per-sample loss values for each primitive.
+		out_primitive_samples : list of torch.Tensor
+			Optional list output for the SDF distances of each primitive.
+
+		Returns
+		-------
+		torch.Tensor
+			When batch_size is None, returns Float Tensor of size (N, 3) where N=`num_points`.
+			When batch_size (B) is provided, returns Float Tensor of size (B, N, 3) where N=`num_points`.
+			Points uniformly sampled from a cube with side length `side_length`.
+
+		"""
 		# The Chamfer distance metric does not require uniform samples, but does require near-surface samples and a CSG model.
 		if self.loss_metric == self.CHAMFER_LOSS_FUNC:
 			recon_loss = self.loss_func(target_surface_samples, csg_model)
 			return torch.mean(recon_loss)
 		# All other loss metrics require a mix of near-surface and uniform samples.
 		else:
-			(clamped_target_sdf, clamped_predicted_sdf) = self.cat_and_clamp_samples(target_near_surface_samples, target_uniform_samples, csg_model)
+			(clamped_target_sdf, clamped_predicted_sdf) = self.cat_and_clamp_samples(target_near_surface_samples, target_uniform_samples, csg_model, out_primitive_samples)
+			point_loss = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
 
-			# Unweighted loss
+			if out_point_loss is not None:
+				out_point_loss.append(point_loss)
+
 			if self.excess_loss_weight == None or self.excess_loss_weight == 1.0:
-				recon_loss = self.loss_func(clamped_target_sdf, clamped_predicted_sdf)
-				return torch.mean(recon_loss)
+				# Unweighted loss
+				return torch.mean(point_loss)
 			else:
-				# Whenever a positive distance to the predicted shape is shorter than the 
+				# Increase the loss for samples detecting excess volume.
+				# (The sample point is outside both the target and reconstruction volumes, but the reconstruction is closer.)
 				excess_samples_mask = (clamped_target_sdf > 0.0) & (clamped_predicted_sdf > 0.0) & (clamped_target_sdf - clamped_predicted_sdf > 0)
-				other_samples_mask = ~excess_samples_mask
-				excess_samples_loss = self.loss_func(clamped_target_sdf[excess_samples_mask], clamped_predicted_sdf[excess_samples_mask])
-				other_samples_loss = self.loss_func(clamped_target_sdf[other_samples_mask], clamped_predicted_sdf[other_samples_mask])
-				combined_samples_loss = torch.cat((excess_samples_loss * self.excess_loss_weight, other_samples_loss))
-				recon_loss = torch.mean(combined_samples_loss)
+				sample_weights = torch.where(excess_samples_mask, self.excess_loss_weight, 1.0)
+				recon_loss = torch.mean(point_loss * sample_weights)
 				return recon_loss
 
 
-	def cat_and_clamp_samples(self, target_near_surface_samples, target_uniform_samples, csg_model):
+	def cat_and_clamp_samples(self, target_near_surface_samples, target_uniform_samples, csg_model, out_primitive_samples=None):
 		target_sdf_samples = torch.cat((target_near_surface_samples, target_uniform_samples), 1)
 		target_points = target_sdf_samples[..., :3]
 		target_sdf = target_sdf_samples[..., 3]
 
-		predicted_sdf = csg_model.sample_csg(target_points)
+		predicted_sdf = csg_model.sample_csg(target_points, out_primitive_samples=out_primitive_samples)
 
 		# Clamp the predicted SDF values to have a maximum difference of clamp_dist*2
 		if self.clamp_dist != None:

@@ -2,6 +2,7 @@ import math
 
 import torch
 import torch.nn as nn
+from losses.local_loss import LocalLoss, DEFAULT_LOCAL_LOSS_DIST
 from losses.proximity_loss import ProximityLoss
 from losses.reconstruction_loss import ReconstructionLoss
 from losses.spread_loss import SpreadLoss
@@ -12,12 +13,14 @@ from utilities.sampler_utils import select_near_surface_samples
 
 
 class Loss(nn.Module):
-	def __init__(self, loss_metric, num_loss_samples, prims_per_cascade, spread_loss_weight=None, clamp_dist=None, excess_loss_weight=None, loss_sampling_method=TARGET_SAMPLING, surface_uniform_ratio=1.0, residual_only_training=False):
+	def __init__(self, loss_metric, num_loss_samples, prims_per_cascade, spread_loss_weight=None, clamp_dist=None, excess_loss_weight=None, loss_sampling_method=TARGET_SAMPLING, surface_uniform_ratio=1.0, residual_only_training=False, local_loss_weight=None, local_loss_dist=DEFAULT_LOCAL_LOSS_DIST):
 		super(Loss, self).__init__()
 		self.recon_loss = ReconstructionLoss(loss_metric, excess_loss_weight, clamp_dist)
 		self.proximity_loss = ProximityLoss()
 		self.spread_loss = SpreadLoss(prims_per_cascade)
 		self.spread_loss_weight = spread_loss_weight
+		self.local_loss_weight = local_loss_weight
+		self.local_loss = LocalLoss(prims_per_cascade, local_loss_dist)
 		self.prims_per_cascade = prims_per_cascade
 		self.surface_uniform_ratio = surface_uniform_ratio
 		self.residual_only_training = residual_only_training
@@ -59,8 +62,14 @@ class Loss(nn.Module):
 		if self.loss_sampling_method == UNIFIED_SAMPLING:
 			target_near_surface_samples = select_near_surface_samples(target_near_surface_samples, self.num_near_surface_input_points, recon_csg_model)
 
+		# The local loss cannot be used with residual_only_training since the original taret samples aren't preserved.
+		use_local_loss = self.local_loss_weight is not None and self.local_loss_weight > 0 and not self.residual_only_training
+		# Store the reconstruction loss computations for local loss.
+		point_loss_list = [] if use_local_loss else None
+		primitive_distances_list = [] if use_local_loss else None
+
 		# Compute reconstruction loss
-		recon_loss = self.recon_loss(target_near_surface_samples, target_uniform_samples, target_surface_samples, recon_csg_model)
+		recon_loss = self.recon_loss(target_near_surface_samples, target_uniform_samples, target_surface_samples, recon_csg_model, point_loss_list, primitive_distances_list)
 
 		# Compute primitive loss
 		primitive_distances = []
@@ -73,5 +82,11 @@ class Loss(nn.Module):
 		else:
 			spread_loss = 0
 
-		return recon_loss + proximity_loss + spread_loss
+		# Compute local loss. The out lists stay empty for the chamfer metric, which has no per-sample loss to window.
+		if use_local_loss and point_loss_list:
+			local_loss = self.local_loss_weight * self.local_loss(point_loss_list[0], primitive_distances_list, csg_model)
+		else:
+			local_loss = 0
+
+		return recon_loss + proximity_loss + spread_loss + local_loss
 

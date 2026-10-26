@@ -8,6 +8,7 @@ import traceback
 from datetime import timedelta
 from torch.utils.data import Subset
 
+from losses.local_loss import DEFAULT_LOCAL_LOSS_DIST
 from losses.reconstruction_loss import ReconstructionLoss
 from test import run_test
 from wakepy import keep
@@ -232,7 +233,9 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	training_group.add_argument('--loss_metric', type=str.upper, default=[ReconstructionLoss.L1_LOSS_FUNC], choices=ReconstructionLoss.loss_metrics, nargs=1, help='Reconstruction loss metric to use when training')
 	training_group.add_argument('--excess_loss_weight', type=float, default=1.0, help='Weight applied to the loss for samples in the excess region. Set to None or 1.0 for unweighted behavior. Does not apply to chamfer distance loss.')
-	training_group.add_argument('--spread_loss_weight', type=float, default=None, help='Weight applied for the spread loss pushing new primitives away from the initial reconstruction primitives. Set to None or 0.0 to disable.')
+	training_group.add_argument('--spread_loss_weight', type=float, default=None, help='Weight applied to the spread loss pushing new primitives away from the initial reconstruction primitives. Set to None or 0.0 to disable.')
+	training_group.add_argument('--local_loss_weight', type=float, default=None, help='Weight applied to the local loss measuring the reconstruction loss local to each predicted primitive. Does not apply to chamfer distance loss or when residual_only_training is set. Set to None or 0.0 to disable.')
+	training_group.add_argument('--local_loss_dist', type=float, default=DEFAULT_LOCAL_LOSS_DIST, help='Variable controlling how strongly loss samples further away from the generated primitives affect the local loss. Value should be between 0.02 and 0.1.')
 	training_group.add_argument('--clamp_dist', type=float, default=None, help='Restrict the loss computation to a maximum specified distance from the target shape. Default is None, disabling clamp.')
 	training_group.add_argument('--cascade_training_mode', type=str.upper, default=[SEPARATE_PARAMS], choices=CASCADE_MODEL_MODES, nargs=1, help='SHARED mode uses the same model parameters for all cascades while the SEPARATE mode retrains the model parameters on each cascades.')
 	training_group.add_argument('--backprop_all_cascades', default=False, action='store_true', help='When disabled, backpropagate through each cascade separately. When enabled, backpropagate through all cascades. Enabling the setting uses more GPU memory but gives the model more context. Not applicable when `cascade_training_mode` is set to SEPARATE.')
