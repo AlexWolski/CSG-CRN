@@ -176,7 +176,11 @@ class SigLoss(_Loss):
 				return torch.mean(sig_l1_loss)
 
 
+# Compute the binary cross entropy betwee the soft occupancy values: sigmoid(-sdf/epsilon).
+# Hard occupancy values kill the gradient. Same loss method used by CSG-Stump, CAPRI-Net, and D2CSG train with.
 class OccLoss(_Loss):
+	# Smaller epsilon values make the boundary between interior/exterior shareper but make the graident narrower.
+	EPSILON = 0.01
 
 	def __init__(self, reduction: str = 'mean'):
 		super(OccLoss, self).__init__(None, None, reduction)
@@ -186,26 +190,14 @@ class OccLoss(_Loss):
 		return OccLoss.occupancy_loss(input, target, self.reduction)
 
 
-	# Loss computed on number of sample points.
 	def occupancy_loss(target_sdf, predicted_sdf, reduction='mean'):
-		OFFSET = 0.000001
-
 		expanded_target, expanded_predicted = torch.broadcast_tensors(target_sdf, predicted_sdf)
 
-		# Prevent division by 0 by adding a small offset.
-		expanded_target = expanded_target + OFFSET
-		expanded_predicted = expanded_predicted + OFFSET
+		# Soft occupancy value.
+		target_occupancy = torch.sigmoid(-expanded_target / OccLoss.EPSILON)
+		predicted_logits = -expanded_predicted / OccLoss.EPSILON
 
-		# Get sign of values by dividing by its absolute value.
-		target_signs = expanded_target / torch.abs(expanded_target)
-		predicted_signs = expanded_predicted / torch.abs(expanded_predicted)
-
-		# Convert signs to binary occupancy values.
-		target_occupancy = (target_signs + 1) / 2.0
-		predicted_occupancy = (predicted_signs + 1) / 2.0
-
-		# Compute binary cross entropy of occupancy values.
-		return nn.functional.binary_cross_entropy(predicted_occupancy, target_occupancy, reduction=reduction)
+		return nn.functional.binary_cross_entropy_with_logits(predicted_logits, target_occupancy, reduction=reduction)
 
 
 
