@@ -43,10 +43,66 @@ def get_grid_points(min_bound, max_bound, resolution, device=None):
 	return (x, y, z)
 
 
+def sample_grid(csg_model, grid_points, resolution, layers_per_batch, grid_offset=0.0):
+	"""
+	Sample SDF values of a CSG model at the given grid points.
+	Computation performed on batches of grid layers due to memory limitations.
+
+	Parameters
+	----------
+	csg_model : CSGModel
+		CSG model object to sample.
+	grid_points : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+		X, Y, and Z axis value tensors of size (N, N, N) as produced by `get_grid_points`.
+	resolution : int
+		Voxel resolution to use for the marching cubes algorithm.
+	layers_per_batch : int
+		Number of grid layers to compute at a time.
+	grid_offset : float, optional
+		Offset added to each grid point before sampling. Default is 0.
+
+	Returns
+	-------
+	torch.Tensor
+		Tensor of size (B, N, N, N) where B is the number of batches in the CSG model and N is the resolution.
+
+	"""
+	(x, y, z) = grid_points
+	csg_batch_size = csg_model.batch_size
+	distances_list = []
+
+	# Sample SDF
+	for layer in range(0, resolution, layers_per_batch):
+		start_layer = layer
+		end_layer = layer + layers_per_batch if layer + layers_per_batch < resolution else resolution
+
+		# Slice query points in current batch
+		x_slice = x[start_layer:end_layer,...]
+		y_slice = y[start_layer:end_layer,...]
+		z_slice = z[start_layer:end_layer,...]
+		# Combine query points into single tensor
+		points_slice = torch.stack((x_slice, y_slice, z_slice), dim=-1)
+
+		# Apply offset if needed
+		if grid_offset != 0.0:
+			points_slice = points_slice + grid_offset
+
+		# Reshape query points to (1, N, 3) where N=num_points
+		points_slice = points_slice.reshape(1,-1,3)
+		# Expand for required number of batches
+		points_slice = points_slice.expand(csg_batch_size, -1, 3)
+		# Sample SDF
+		distances_list.append(csg_model.sample_csg(points_slice))
+
+	# Reshape into grid
+	distances = torch.cat(distances_list, dim=-1)
+	return distances.reshape(csg_batch_size, resolution, resolution, resolution)
+
+
 def sample_csg_grid(csg_model, resolution):
 	"""
 	Generates SDF samples of a CSG model where the points are aligned to a grid.
-	A grid of NxNxN point samples is generated where N=resolution. 
+	A grid of NxNxN point samples is generated where N=resolution.
 
 	Parameters
 	----------
@@ -83,29 +139,17 @@ def sample_csg_grid(csg_model, resolution):
 	# Quantize computation batch size to be divisible by grid layer size
 	layers_per_batch = resolution // num_comp_batches
 	layers_per_batch = max(layers_per_batch, 1)
-	distances_list = []
 
-	# Sample SDF
-	for layer in range(0, resolution, layers_per_batch):
-		start_layer = layer
-		end_layer = layer + layers_per_batch if layer + layers_per_batch < resolution else resolution
+	distances = sample_grid(csg_model, (x, y, z), resolution, layers_per_batch)
 
-		# Slice query points in current batch
-		x_slice = x[start_layer:end_layer,...]
-		y_slice = y[start_layer:end_layer,...]
-		z_slice = z[start_layer:end_layer,...]
-		# Combine query points into single tensor
-		points_slice = torch.stack((x_slice, y_slice, z_slice), dim=-1)
-		# Reshape query points to (1, N, 3) where N=num_points
-		points_slice = points_slice.reshape(1,-1,3)
-		# Expand for required number of batches
-		points_slice = points_slice.expand(csg_batch_size, -1, 3)
-		# Sample SDF
-		distances_list.append(csg_model.sample_csg(points_slice))
+	# NaN values appear when an ellipsoid or cylinder are positioned exactly centered ona grid point.
+	# Resample the grid piont with an offset to get a usable result.
+	if torch.isnan(distances).any():
+		distances = sample_grid(csg_model, (x, y, z), resolution, layers_per_batch, voxel_size * 1e-3)
 
-	# Reshape into grid
-	distances = torch.cat(distances_list, dim=-1)
-	distances = distances.reshape(csg_batch_size, resolution, resolution, resolution)
+		if torch.isnan(distances).any():
+			raise RuntimeError('Unrecoverable NaN value appeared in sample_csg_grid')
+
 	return distances
 
 
