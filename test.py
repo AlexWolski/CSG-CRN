@@ -15,13 +15,13 @@ from tqdm import tqdm
 from wakepy import keep
 from losses.reconstruction_loss import ReconstructionLoss
 from reconstruct import load_mesh_and_samples, load_model, model_inference
-from utilities.accuracy_metrics import EMD, compute_chamfer_distance
+from utilities.accuracy_metrics import EMD, compute_chamfer_distance, compute_iou
 from utilities.csg_to_mesh import csg_to_mesh
 from utilities.data_augmentation import RotationAxis
 from utilities.data_processing import BEST_MODEL_FILE, TEST_RESULTS_FILE, find_file_paths, get_test_set
 from utilities.device_utils import get_devices
 from utilities.file_utils import get_mesh_files
-from utilities.sampler_utils import sample_points_mesh_surface
+from utilities.sampler_utils import sample_points_mesh_surface, sample_sdf_from_mesh_unit_sphere
 
 
 # Parse commandline arguments
@@ -80,6 +80,7 @@ def test_worker(worker_index, devices, model_params, num_acc_points, num_cascade
 	summed_recon_loss = 0.0
 	summed_chamfer_dist = 0.0
 	summed_earth_dist = 0.0
+	summed_iou = 0.0
 	skipped_samples = 0
 
 	with torch.no_grad():
@@ -97,16 +98,20 @@ def test_worker(worker_index, devices, model_params, num_acc_points, num_cascade
 			# Compute reconstruction loss with original training settings.
 			summed_recon_loss += recon_loss.forward(near_surface_samples, uniform_samples, surface_points, csg_model).item()
 
-			# Sample points from output mesh.
-			target_points = sample_points_mesh_surface(target_mesh, num_acc_points).unsqueeze(0).to(device)
-			recon_points = sample_points_mesh_surface(recon_mesh_list[0], num_acc_points).unsqueeze(0).to(device)
+			# Sample points from target and reconstruction meshes.
+			target_surface_points = sample_points_mesh_surface(target_mesh, num_acc_points).unsqueeze(0).to(device)
+			recon_surface_points = sample_points_mesh_surface(recon_mesh_list[0], num_acc_points).unsqueeze(0).to(device)
+			(uniform_target_points, uniform_target_distances) = sample_sdf_from_mesh_unit_sphere(target_mesh, num_acc_points)
+			uniform_target_points = uniform_target_points.unsqueeze(0).to(device)
+			uniform_target_distances = uniform_target_distances.unsqueeze(0).to(device)
 
 			# Compute accuracy metrics.
-			summed_chamfer_dist += compute_chamfer_distance(target_points, recon_points, no_grad=True)
-			summed_earth_dist += EMD(target_points[0], recon_points[0]).item()
+			summed_chamfer_dist += compute_chamfer_distance(target_surface_points, recon_surface_points, no_grad=True)
+			summed_earth_dist += EMD(target_surface_points[0], recon_surface_points[0]).item()
+			summed_iou += compute_iou(uniform_target_points, uniform_target_distances, csg_model)
 
 	# All summed values are Python floats (moved off the GPU) so they can be returned to the parent process.
-	result_queue.put((summed_recon_loss, summed_chamfer_dist, summed_earth_dist, skipped_samples))
+	result_queue.put((summed_recon_loss, summed_chamfer_dist, summed_earth_dist, summed_iou, skipped_samples))
 
 
 def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_samples, seed=None):
@@ -131,13 +136,15 @@ def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, 
 	total_recon_loss = 0
 	total_chamfer_dist = 0
 	total_earth_dist = 0
+	total_volumetric_iou = 0
 	total_skipped_samples = 0
 
 	for _ in range(num_workers):
-		recon_loss, chamfer_dist, earth_dist, skipped_samples = result_queue.get()
+		recon_loss, chamfer_dist, earth_dist, volumetric_iou, skipped_samples = result_queue.get()
 		total_recon_loss += recon_loss
 		total_chamfer_dist += chamfer_dist
 		total_earth_dist += earth_dist
+		total_volumetric_iou += volumetric_iou
 		total_skipped_samples += skipped_samples
 
 	# Account for skipped samples.
@@ -145,13 +152,14 @@ def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, 
 
 	# Cover edge case where all mesh samples were bad.
 	if num_samples == 0:
-		return (None, None, None, total_skipped_samples)
+		return (None, None, None, None, total_skipped_samples)
 
 	mean_recon_loss = total_recon_loss / num_samples
 	mean_chamfer_dist = total_chamfer_dist / num_samples
 	mean_earth_dist = total_earth_dist / num_samples
+	mean_volumetric_iou = total_volumetric_iou / num_samples
 
-	return (mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples)
+	return (mean_recon_loss, mean_chamfer_dist, mean_earth_dist, mean_volumetric_iou, total_skipped_samples)
 
 
 def get_test_paths(args):
@@ -185,7 +193,7 @@ def get_test_paths(args):
 		return None
 
 
-def output_results(num_acc_points, num_cascades, recon_resolution, test_set_paths, mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples, result_file_path=None):
+def output_results(num_acc_points, num_cascades, recon_resolution, test_set_paths, mean_recon_loss, mean_chamfer_dist, mean_earth_dist, mean_volumetric_iou, total_skipped_samples, result_file_path=None):
 	print('\n')
 
 	# Format result string.
@@ -201,6 +209,7 @@ def output_results(num_acc_points, num_cascades, recon_resolution, test_set_path
 		print(f'Mean Reconstruction Loss:   {mean_recon_loss}', file=str_out)
 		print(f'Mean Chamfer Distance:      {mean_chamfer_dist}', file=str_out)
 		print(f'Mean Earth Movers Distance: {mean_earth_dist}', file=str_out)
+		print(f'Mean Intersection/Union:    {mean_volumetric_iou}', file=str_out)
 		print('\n', file=str_out)
 
 		result_string = str_out.getvalue()
@@ -216,8 +225,8 @@ def output_results(num_acc_points, num_cascades, recon_resolution, test_set_path
 
 # Test the model and output the results.
 def run_test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths, result_file_path=None, seed=None):
-	mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples = test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths, seed)
-	output_results(num_acc_points, num_cascades, recon_resolution, test_set_paths, mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples, result_file_path)
+	mean_recon_loss, mean_chamfer_dist, mean_earth_dist, mean_volumetric_iou, total_skipped_samples = test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths, seed)
+	output_results(num_acc_points, num_cascades, recon_resolution, test_set_paths, mean_recon_loss, mean_chamfer_dist, mean_earth_dist, mean_volumetric_iou, total_skipped_samples, result_file_path)
 
 
 def main():

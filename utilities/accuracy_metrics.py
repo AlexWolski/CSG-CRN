@@ -30,6 +30,38 @@ def compute_chamfer_distance(target_surface_samples, recon_surface_samples, no_g
 			return dist_bidirectional.cpu()
 
 
+def compute_iou(target_uniform_points, target_uniform_distances, csg_model):
+	"""
+	Compute the Intersection over Union metric given uniform target SDF samples and a CSG reconstruction.
+
+	Parameters
+	----------
+	target_uniform_points : torch.Tensor
+		Tensor of size (B, N, 3) containing B batches of N uniformly distributed points.
+	target_uniform_distances : torch.Tensor
+		Tensor of size (B, N) containing the distance value of the target shape at each sample point.
+	csg_model : utilities.csg_model.CSGModel
+		CSG reconstruction model of a target shape.
+
+	Returns
+	-------
+	float
+		The average Intersect over Union accuracy metric between all batches of target and reconstruction shapes.
+
+	"""
+	with torch.no_grad():
+		target_occupancy = target_uniform_distances <= 0
+		recon_occupancy = csg_model.sample_csg(target_uniform_points) <= 0
+
+		intersection = torch.logical_and(target_occupancy, recon_occupancy).sum(dim=-1)
+		union = torch.logical_or(target_occupancy, recon_occupancy).sum(dim=-1)
+
+		# Compute the intersection over union.
+		# `union` is zero when none of the sample points are in the interior of the target or reconstruction shapes. Return 0 in this case.
+		iou = torch.where(union > 0, intersection / union.clamp(min=1), torch.zeros_like(union, dtype=torch.float))
+		return iou.mean().cpu().item()
+
+
 def compute_chamfer_distance_csg(target_surface_samples, csg_model, num_acc_points, recon_resolution):
 	"""
 	Compute the Chamfer Distance metric between a target point cloud and a CSG reconstruction.
