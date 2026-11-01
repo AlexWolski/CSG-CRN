@@ -38,6 +38,7 @@ def options():
 	parser.add_argument('--num_acc_points', type=int, default=10000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=512, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--device', type=str.lower, default=[], nargs='*', help='Select one or more CUDA devices. Select "all" to use all available cuda devices.')
+	parser.add_argument('--seed', type=int, default=None, help='PRNG seed supplied to make testing results deterministic and comparable..')
 
 	args = parser.parse_args()
 
@@ -59,12 +60,16 @@ def options():
 	return args
 
 
-def test_worker(worker_index, devices, model_params, num_acc_points, num_cascades, recon_resolution, sample_splits, result_queue=None):
+def test_worker(worker_index, devices, model_params, num_acc_points, num_cascades, recon_resolution, sample_splits, seed, result_queue=None):
 	device = devices[worker_index]
 	test_samples = sample_splits[worker_index]
 
 	# Set worker device.
 	torch.cuda.set_device(device)
+
+	# Apply supplied seed when available.
+	if seed is not None:
+		torch.manual_seed(seed + worker_index)
 
 	# Each worker loads a separate copy of the model.
 	(model, saved_args, init_model_state_dict, prev_cascades_list) = load_model(model_params, device, num_cascades)
@@ -104,7 +109,7 @@ def test_worker(worker_index, devices, model_params, num_acc_points, num_cascade
 	result_queue.put((summed_recon_loss, summed_chamfer_dist, summed_earth_dist, skipped_samples))
 
 
-def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_samples):
+def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_samples, seed=None):
 	num_samples = len(test_samples)
 	samples_per_gpu = math.ceil(len(test_samples) / len(devices))
 
@@ -120,7 +125,7 @@ def test(model_params, num_acc_points, num_cascades, recon_resolution, devices, 
 
 	# Spawn one worker process per device.
 	result_queue = mp.get_context('spawn').SimpleQueue()
-	mp.spawn(test_worker, args=(devices, model_params, num_acc_points, num_cascades, recon_resolution, sample_splits, result_queue), nprocs=num_workers, join=True)
+	mp.spawn(test_worker, args=(devices, model_params, num_acc_points, num_cascades, recon_resolution, sample_splits, seed, result_queue), nprocs=num_workers, join=True)
 
 	# Compute average results.
 	total_recon_loss = 0
@@ -210,8 +215,8 @@ def output_results(num_acc_points, num_cascades, recon_resolution, test_set_path
 
 
 # Test the model and output the results.
-def run_test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths, result_file_path=None):
-	mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples = test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths)
+def run_test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths, result_file_path=None, seed=None):
+	mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples = test(model_params, num_acc_points, num_cascades, recon_resolution, devices, test_set_paths, seed)
 	output_results(num_acc_points, num_cascades, recon_resolution, test_set_paths, mean_recon_loss, mean_chamfer_dist, mean_earth_dist, total_skipped_samples, result_file_path)
 
 
@@ -241,7 +246,7 @@ def main():
 		exit()
 
 	# Test model.
-	run_test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths, args.result_file_path)
+	run_test(args.model_params, args.num_acc_points, args.num_cascades, args.recon_resolution, devices, test_set_paths, args.result_file_path, args.seed)
 
 
 if __name__ == '__main__':

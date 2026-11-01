@@ -326,7 +326,7 @@ def main():
 	args = options()
 	print('')
 
-	# Apply use supplied seed when available.
+	# Apply supplied seed when available.
 	if getattr(args, 'seed', None) is not None:
 		torch.manual_seed(args.seed)
 
