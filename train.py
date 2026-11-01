@@ -260,6 +260,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--checkpoint_freq', type=int, default=10, help='Number of epochs to train for before saving model parameters')
 	training_group.add_argument('--device', type=str.lower, default=[], nargs='*', help='Select one or more training devices. The first device is used for storing the network model. CPU and GPU devices cannot be mixed. Select "all" to use all available cuda devices.')
 	training_group.add_argument('--enable_amp', default=False, action='store_true', help='Enable Automatic Mixed Precision')
+	training_group.add_argument('--seed', type=int, default=None, help='PRNG seed supplied to make training results deterministic and comparable.')
 
 	return training_parser
 
@@ -324,6 +325,10 @@ def init_output(args, saved_settings_dict=None):
 def main():
 	args = options()
 	print('')
+
+	# Apply use supplied seed when available.
+	if getattr(args, 'seed', None) is not None:
+		torch.manual_seed(args.seed)
 
 	# Parse devices. The first device is used for for storing the network model.
 	devices = get_devices(args.device, cpu_allowed=True)
