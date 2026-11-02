@@ -1,6 +1,8 @@
 import argparse
+import os
 import numpy as np
 import pyglet
+import tkinter as tk
 import torch
 
 from pyglet.gl import *
@@ -252,6 +254,10 @@ class _SdfViewer(pyrender.Viewer):
 	buttons = []
 	# When loading, display "Loading..." text on the screen.
 	loading = False
+	# Name of the target file being viewed.
+	file_name = ''
+	# Hidden Tkinter window used for copying text.
+	clipboard_window = None
 
 	def __init__(self, mesh_nodes, window_title, point_size, num_view_points, view_width=1000, view_height=1000):
 		self.num_view_points = num_view_points
@@ -338,10 +344,18 @@ class _SdfViewer(pyrender.Viewer):
 		for button in self.buttons:
 			button.draw()
 
+		padding = 10
+		file_name_x = self.view_width - padding
+		file_name_y = self.view_height - padding
+		pyglet.text.Label(self.file_name, x=file_name_x, y=file_name_y, anchor_x='right', anchor_y='top', bold=True, color=(0,0,0)).draw()
+
 		if self.loading:
 			center_x = self.viewport_size[0] // 2
 			center_y = self.viewport_size[1] // 2
 			pyglet.text.Label('Loading...', x=center_x, y=center_y, anchor_x='center', anchor_y='center', font_size=32, bold=True, color=(0,0,0)).draw()
+
+		if self.clipboard_window is not None:
+			self.clipboard_window.update()
 
 
 	# Draw loading text to the screen.
@@ -477,6 +491,12 @@ class SdfModelViewer(_SdfViewer):
 
 		# Create model button toggle array
 		self.add_button(ToggleButtons([mesh_button, point_button], default_model_button))
+
+		# Create the Copy Filename button below the mesh filename text
+		file_name_height = 20
+		copy_button_x = self.viewport_size[0] - width - padding
+		copy_button_y = self.viewport_size[1] - padding - file_name_height - padding - height
+		self.add_button(Button(copy_button_x, copy_button_y, width, height, 'Copy Filename', callback=self.copy_file_name))
 
 		# Create export buttons
 		export_x = self.viewport_size[0] - width - padding
@@ -639,7 +659,19 @@ class SdfModelViewer(_SdfViewer):
 		self.recon_mesh_node.mesh = cloud
 
 
+	# Copy filename to clipboard.
+	def copy_file_name(self):
+		if self.clipboard_window is None:
+			self.clipboard_window = tk.Tk()
+			self.clipboard_window.withdraw()
+
+		self.clipboard_window.clipboard_clear()
+		self.clipboard_window.clipboard_append(self.file_name)
+		self.clipboard_window.update()
+
+
 	def load_file(self, samples_file):
+		self.file_name = os.path.basename(samples_file)
 		self.target_mesh, self.full_recon_mesh, self.full_csg_model = self.get_mesh_and_csg_model(samples_file)
 		self.csg_model = self.full_csg_model
 		self.recon_mesh = self.full_recon_mesh
