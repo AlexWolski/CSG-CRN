@@ -148,7 +148,8 @@ class LogLoss(_Loss):
 				return torch.mean(log_loss)
 
 
-# Compute loss on the number of samples that are within a narrow margin of the target sample
+# Average of the upper half of a sigmoid, rescaled to start at zero error, and the L1 loss.
+# The sigmoid is steepest at the surface and saturates at an error of about 5 / -SIGMOID_EXPONENT.
 class SigLoss(_Loss):
 	def __init__(self, reduction: str = 'mean'):
 		super(SigLoss, self).__init__(None, None, reduction)
@@ -159,12 +160,12 @@ class SigLoss(_Loss):
 	
 
 	def sigmoid_loss(target_sdf, predicted_sdf, reduction='mean'):
-		SIGMOID_EXPONENT = -500
-		X_OFFSET = 5
+		SIGMOID_EXPONENT = -50
 
 		expanded_target, expanded_predicted = torch.broadcast_tensors(target_sdf, predicted_sdf)
 		absolute_error = torch.abs(expanded_target - predicted_sdf)
-		sig_loss = 1 / (1 + torch.exp(SIGMOID_EXPONENT * absolute_error + X_OFFSET))
+		sigmoid = 1 / (1 + torch.exp(SIGMOID_EXPONENT * absolute_error))
+		sig_loss = 2 * sigmoid - 1
 		sig_l1_loss = (sig_loss + absolute_error) / 2
 
 		match reduction:
