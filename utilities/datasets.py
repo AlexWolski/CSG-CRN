@@ -10,7 +10,7 @@ from utilities.data_processing import UNIFORM_FOLDER, SURFACE_FOLDER, NEAR_SURFA
 
 
 class PointDataset(Dataset):
-	def __init__(self, file_rel_paths, device, args, augment_data=False, loss_sampling_method=UNIFIED_SAMPLING, input_sampling_method=TARGET_SAMPLING, dataset_name="Dataset"):
+	def __init__(self, file_rel_paths, device, args, augment_data=False, loss_sampling_method=UNIFIED_SAMPLING, input_sampling_method=TARGET_SAMPLING, dataset_name="Dataset", num_val_samples=0):
 		self.file_rel_paths = file_rel_paths
 		self.augmented_copies = len(file_rel_paths) * args.augment_copies
 		self.raw_copies = len(file_rel_paths)
@@ -20,6 +20,7 @@ class PointDataset(Dataset):
 		self.dataset_name = dataset_name
 		self.loss_sampling_method = loss_sampling_method
 		self.input_sampling_method = input_sampling_method
+		self.num_val_samples = num_val_samples
 
 		# Cached initial reconstruction CSG models. Used for SEPARATE training mode.
 		self.cascade_cache = None
@@ -40,7 +41,7 @@ class PointDataset(Dataset):
 
 	# Calculate the number of samples to load from the dataset based on the sampling methods
 	def __calculate_num_samples(self):
-		self.num_uniform_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples
+		self.num_uniform_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples + self.num_val_samples
 		self.num_near_surface_samples = self.num_near_surface_input_samples + self.num_near_surface_loss_samples
 
 		# Find the number of near-surface samples that will be generated from unified samples.
@@ -86,7 +87,7 @@ class PointDataset(Dataset):
 		# Ensure that the dataset is sufficiently large for both the near-surface and uniformsamples
 		# Note that the dataset should contain an equal amount of near-surface and uniform samples.
 		total_near_surface_samples = self.num_near_surface_input_samples + self.num_near_surface_loss_samples
-		total_uniform_loss_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples
+		total_uniform_loss_samples = self.num_uniform_input_samples + self.num_uniform_loss_samples + self.num_val_samples
 		excpetion_message = ""
 
 		if total_near_surface_samples > self.args.dataset_num_sdf_samples:
@@ -210,6 +211,10 @@ class PointDataset(Dataset):
 			if batch_cached_csg_model is not None and rotations is not None:
 				batch_cached_csg_model.rotate(rotations)
 
+		# Separate samples used for training (input and loss) from the samples used for validation.
+		num_uniform_input_loss_samples = batch_uniform_samples.size(1) - self.num_val_samples
+		(batch_uniform_samples, batch_uniform_val_samples) = torch.split(batch_uniform_samples, [num_uniform_input_loss_samples, self.num_val_samples], dim=1)
+
 		uniform_tensor_sizes = [self.num_uniform_input_samples, self.num_uniform_loss_samples]
 		near_surface_tensor_sizes = [self.num_near_surface_input_samples, self.num_near_surface_loss_samples]
 		all_tensor_sizes = uniform_tensor_sizes + near_surface_tensor_sizes
@@ -243,6 +248,7 @@ class PointDataset(Dataset):
 			batch_near_surface_input_samples.detach(),
 			batch_near_surface_loss_samples.detach(),
 			batch_surface_samples.detach(),
+			batch_uniform_val_samples.detach(),
 			batch_cached_csg_model
 		)
 
