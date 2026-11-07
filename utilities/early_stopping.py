@@ -1,8 +1,9 @@
 class EarlyStopping:
-	def __init__(self, patience=10, threshold=0, improvement_callback=None):
+	def __init__(self, patience=10, threshold=0, improvement_callback=None, mode='min'):
 		self.patience = patience
 		self.threshold = threshold
 		self.improvement_callback = improvement_callback
+		self.mode = mode
 		self.counter = 0
 		self.best_loss = None
 		self.early_stop = False
@@ -15,7 +16,7 @@ class EarlyStopping:
 			self._on_improvement(callback_args)
 
 		# No improvement
-		if val_loss > self.best_loss * (1 - self.threshold):
+		if not self._is_improvement(val_loss):
 			self.counter += 1
 
 		# Improvement
@@ -27,6 +28,13 @@ class EarlyStopping:
 		# Early stop reached
 		if self.counter >= self.patience:
 			self.early_stop = True
+
+
+	def _is_improvement(self, val_loss):
+		if self.mode == 'max':
+			return val_loss > self.best_loss * (1 + self.threshold)
+
+		return val_loss < self.best_loss * (1 - self.threshold)
 
 
 	def _on_improvement(self, callback_args=None):

@@ -13,7 +13,7 @@ from torch.utils.data.sampler import BatchSampler, RandomSampler
 from tqdm import tqdm
 
 from networks.csg_crn import CSG_CRN
-from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast
+from utilities.accuracy_metrics import compute_chamfer_distance_csg_fast, compute_iou, ValMetric
 from utilities.constants import SHARED_PARAMS, SEPARATE_PARAMS, INIT_RECON
 from utilities.csg_model import CSGModel, add_sdf, subtract_sdf
 from utilities.data_processing import TEST_SET_FILE, UNIFORM_FOLDER, get_data_files, BEST_MODEL_FILE, LATEST_MODEL_FILE, load_list, save_test_set
@@ -169,6 +169,7 @@ def train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, 
 			near_surface_input_samples,
 			near_surface_loss_samples,
 			surface_samples,
+			uniform_val_samples,
 			cached_csg_model
 		) = data_sample
 
@@ -246,7 +247,7 @@ def _backpropagate(scaler, optimizer, batch_loss):
 
 def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list=None, init_model=None):
 	total_val_loss = 0
-	total_chamfer_dist = 0
+	total_val_metric = 0
 	total_empty_percent = 0
 
 	# Set the model to Eval mode as to not modify the BatchNorm layer
@@ -264,6 +265,7 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 				near_surface_input_samples,
 				near_surface_loss_samples,
 				surface_samples,
+				uniform_val_samples,
 				cached_csg_model
 			) = data_sample
 
@@ -283,20 +285,26 @@ def validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_lis
 
 			batch_loss = loss_func(near_surface_loss_samples, uniform_loss_samples, surface_samples, csg_model)
 			total_val_loss += batch_loss.item()
-			empty_shapes_list = []
-			total_chamfer_dist += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist, empty_shapes_list).item()
+
+			if args.val_metric == ValMetric.IOU:
+				total_val_metric += compute_iou(uniform_val_samples[..., :3], uniform_val_samples[..., 3], csg_model)
+				empty_shapes = csg_model.get_empty_shapes()
+			else:
+				empty_shapes_list = []
+				total_val_metric += compute_chamfer_distance_csg_fast(surface_samples, csg_model, args.num_val_acc_points, args.val_sample_dist, empty_shapes_list).item()
+				empty_shapes = empty_shapes_list[0] if empty_shapes_list else None
 
 			# Record the percentage of reconstructions that were empty before they were replaced
-			if empty_shapes_list:
-				total_empty_percent += empty_shapes_list[0].float().mean().item() * 100
+			if empty_shapes is not None:
+				total_empty_percent += empty_shapes.float().mean().item() * 100
 
 	# Return model to its previous mode
 	model.train() if was_training else model.eval()
 
 	total_val_loss /= val_loader.__len__()
-	total_chamfer_dist /= val_loader.__len__()
+	total_val_metric /= val_loader.__len__()
 	total_empty_percent /= val_loader.__len__()
-	return (total_val_loss, total_chamfer_dist, total_empty_percent)
+	return (total_val_loss, total_val_metric, total_empty_percent)
 
 
 # Save the checkpoint of a model with shared parameters for all cascades
@@ -386,7 +394,7 @@ def update_cascade_cache(new_cascade_model, dataset, cascade_params_list, batch_
 	# Process CSG Models in batches since processing all at once requires too much memory.
 	for batch_start in range(0, dataset.raw_copies, batch_size):
 		batch_idx = list(range(batch_start, min(batch_start + batch_size, dataset.raw_copies)))
-		(uniform_input_samples, _, near_surface_input_samples, _, _, cached_csg_model) = dataset[batch_idx]
+		(uniform_input_samples, _, near_surface_input_samples, _, _, _, cached_csg_model) = dataset[batch_idx]
 
 		# Run the cascade models on the cached reconstruction and copy the result to the CPU.
 		csg_model = new_cascade_model.forward_prev_cascades(near_surface_input_samples, uniform_input_samples, cascade_params_list, cached_csg_model)
@@ -428,7 +436,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 	trained_model_path = os.path.join(args.output_dir, BEST_MODEL_FILE)
 	latest_model_path = os.path.join(args.output_dir, LATEST_MODEL_FILE)
 	save_best_model = lambda: save_model(model, args, data_splits, training_logger.get_results(), trained_model_path, prev_cascades_list, init_model)
-	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model)
+	early_stopping = EarlyStopping(args.early_stop_patience, args.early_stop_threshold, save_best_model, ValMetric.improvement_mode(args.val_metric))
 
 	# Train until model stops improving or a maximum number of epochs is reached
 	init_epoch = training_logger.get_last_epoch()+1 if training_logger.get_last_epoch() else 1
@@ -486,7 +494,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		# Train model
 		desc = f'Epoch {epoch}/{args.max_epochs}'
 		train_loss = train_one_epoch(model, optimizer, scaler, train_loader, num_cascades, args, device, desc, prev_cascades_list, init_model, trained_supervisor)
-		(val_loss, chamfer_dist, empty_percent) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list, init_model)
+		(val_loss, val_metric, empty_percent) = validate(model, loss_func, val_loader, num_cascades, args, prev_cascades_list, init_model)
 		learning_rate = optimizer.param_groups[0]['lr']
 
 		# Record epoch training results
@@ -498,21 +506,21 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 		recon_training_in_progress = args.cascade_training_mode == INIT_RECON and init_model != None
 		recorded_num_cascades = num_cascades + 1 if recon_training_in_progress else num_cascades
 		recorded_total_cascades = args.num_cascades + 1 if recon_training_in_progress else args.num_cascades
-		training_logger.add_result(epoch, recorded_num_cascades, train_loss, val_loss, chamfer_dist, empty_percent, learning_rate, time_ellapsed)
+		training_logger.add_result(epoch, recorded_num_cascades, train_loss, val_loss, val_metric, empty_percent, learning_rate, time_ellapsed)
 
 		weight_scheduling_in_progress = args.schedule_sub_weight and args.sub_weight < 1
 		cascade_scheduling_in_progress = not args.no_schedule_cascades and not initial_training_in_progress and num_cascades < args.num_cascades
 
 		# Update learning rate scheduler and early stopping
 		if not weight_scheduling_in_progress and not cascade_scheduling_in_progress:
-			scheduler.step(chamfer_dist)
-			early_stopping(chamfer_dist)
+			scheduler.step(val_metric)
+			early_stopping(val_metric)
 
 		# Print and save epoch training results
 		print(f"Learning Rate:      {learning_rate}")
 		print(f"Training Loss:      {train_loss}")
 		print(f"Validation Loss:    {val_loss}")
-		print(f"Chamfer Dist:       {chamfer_dist}")
+		print(f"{ValMetric.name(args.val_metric) + ':':<20}{val_metric}")
 		print(f"Empty Outputs:      {empty_percent:.2f}%")
 
 		# Subtract weight scheduler runs first
@@ -525,7 +533,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 			print(f"Cascades Scheduler: {(cascade_scheduler_epoch) % args.cascade_schedule_epochs}/{args.cascade_schedule_epochs}")
 		# Learning rate scheduling and early stopping runs after all other schedulers
 		else:
-			print(f"Best Chamfer Dist:  {scheduler.best}")
+			print(f"{'Best ' + ValMetric.name(args.val_metric) + ':':<20}{scheduler.best}")
 			print(f"LR Patience:        {scheduler.num_bad_epochs}/{scheduler.patience}")
 			print(f"Early Stop:         {early_stopping.counter}/{early_stopping.patience}")
 
@@ -579,7 +587,7 @@ def train(model, loss_func, optimizer, scheduler, scaler, train_loader, val_load
 
 			# Training is complete when the model stops improving on the last cascade
 			if last_cascade:
-				print(f'Stopping Training. Validation loss has not improved in {args.early_stop_patience} epochs')
+				print(f'Stopping Training. Validation metric has not improved in {args.early_stop_patience} epochs')
 				break
 
 		# Save checkpoint parameters
@@ -618,7 +626,7 @@ def init_training_params(training_logger, data_splits, args, devices, model_para
 	if not (train_dataset := PointDataset(train_split, device, args, augment_data=args.augment_data, loss_sampling_method=args.loss_sampling_method, input_sampling_method=args.input_sampling_method, dataset_name="Training Set")):
 		return
 
-	if not (val_dataset := PointDataset(val_split, device, args, augment_data=False, loss_sampling_method=args.loss_sampling_method, input_sampling_method=args.input_sampling_method, dataset_name="Validation Set")):
+	if not (val_dataset := PointDataset(val_split, device, args, augment_data=False, loss_sampling_method=args.loss_sampling_method, input_sampling_method=args.input_sampling_method, dataset_name="Validation Set", num_val_samples=args.num_val_acc_points)):
 		return
 
 	train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=not args.keep_last_batch)
@@ -645,4 +653,4 @@ def init_optimizer(model, learning_rate):
 
 
 def init_scheduler(optimizer, args):
-	return lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')
+	return lr_scheduler.ReduceLROnPlateau(optimizer, ValMetric.improvement_mode(args.val_metric), factor=args.lr_factor, patience=args.lr_patience, threshold=args.lr_threshold, threshold_mode='rel')

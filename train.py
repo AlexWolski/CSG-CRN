@@ -12,6 +12,7 @@ from losses.local_loss import DEFAULT_LOCAL_LOSS_DIST
 from losses.reconstruction_loss import ReconstructionLoss
 from test import run_test
 from wakepy import keep
+from utilities.accuracy_metrics import ValMetric
 from utilities.constants import INIT_RECON, SEPARATE_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
 from utilities.data_processing import create_out_dir, find_file_paths, get_test_set, read_dataset_settings, save_dataset_settings, BEST_MODEL_FILE, LATEST_MODEL_FILE, TEST_RESULTS_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
@@ -112,6 +113,7 @@ def options():
 
 	# Retrieve loss metric
 	args.loss_metric = parse_arg_choice(args.loss_metric)
+	args.val_metric = parse_arg_choice(getattr(args, 'val_metric', ValMetric.IOU))
 
 	# Retrieve sampling methods
 	args.loss_sampling_method = parse_arg_choice(args.loss_sampling_method)
@@ -232,6 +234,7 @@ def get_training_parser(suppress_default=False):
 	training_group.add_argument('--keep_last_batch', default=False, action='store_true', help='Train on remaining data samples at the end of each epoch')
 	training_group.add_argument('--max_epochs', type=int, default=2000, help='Maximum number of epochs to train')
 	training_group.add_argument('--loss_metric', type=str.upper, default=[ReconstructionLoss.L1_LOSS_FUNC], choices=ReconstructionLoss.loss_metrics, nargs=1, help='Reconstruction loss metric to use when training')
+	training_group.add_argument('--val_metric', type=str.upper, default=[ValMetric.IOU], choices=ValMetric.ALL_METRICS, nargs=1, help='Runtime validation metric for learning rate scheduling and early stopping.')
 	training_group.add_argument('--excess_loss_weight', type=float, default=1.0, help='Weight applied to the loss for samples in the excess region. Set to None or 1.0 for unweighted behavior. Does not apply to chamfer distance loss.')
 	training_group.add_argument('--spread_loss_weight', type=float, default=None, help='Weight applied to the spread loss pushing new primitives away from the initial reconstruction primitives. Set to None or 0.0 to disable.')
 	training_group.add_argument('--local_loss_weight', type=float, default=None, help='Weight applied to the local loss measuring the reconstruction loss local to each predicted primitive. Does not apply to chamfer distance loss or when residual_only_training is set. Set to None or 0.0 to disable.')
@@ -313,11 +316,11 @@ def init_output(args, saved_settings_dict=None):
 		args.output_dir = saved_settings_dict['output_dir']
 		data_splits = saved_settings_dict['data_splits']
 		training_results = saved_settings_dict['training_results']
-		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric, training_results)
+		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric, args.val_metric, training_results)
 	else:
 		(args.output_dir, args.checkpoint_dir, args.cascade_models_dir) = create_out_dir(args)
 		data_splits = load_data_splits(args, args.data_split, args.test_set_path)
-		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric)
+		training_logger = TrainingLogger(args.output_dir, 'training_results', args.loss_metric, args.val_metric)
 
 	return (data_splits, training_logger)
 

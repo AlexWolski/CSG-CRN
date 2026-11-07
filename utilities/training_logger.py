@@ -1,17 +1,18 @@
 import csv
 import os
 import matplotlib.pyplot as plt
-
-
-HEADERS = ['Epoch', 'Cascades', 'Training Loss', 'Validation Loss', 'Chamfer Distance', 'Empty %', 'Learning Rate', 'Time Ellapsed']
+from utilities.accuracy_metrics import ValMetric
 
 
 class TrainingLogger():
-	def __init__(self, output_folder, filename, loss_metric='', initial_results=None):
+	def __init__(self, output_folder, filename, loss_metric='', val_metric=ValMetric.IOU, initial_results=None):
 		self.csv_output_file = os.path.join(output_folder, filename + '.csv')
 		self.plot_output_file = os.path.join(output_folder, filename + '.png')
 		self.training_results = initial_results if initial_results else {}
 		self.loss_metric = loss_metric
+		self.val_metric_name = ValMetric.name(val_metric)
+		self.val_metric_scale = ValMetric.graph_scale(val_metric)
+		self.headers = ['Epoch', 'Cascades', 'Training Loss', 'Validation Loss', self.val_metric_name, 'Empty %', 'Learning Rate', 'Time Ellapsed']
 
 		# Initialize results structure
 		self._init_missing_results()
@@ -26,7 +27,7 @@ class TrainingLogger():
 	def _init_missing_results(self):
 		num_epochs = len(self.training_results['Epoch']) if 'Epoch' in self.training_results else 0
 
-		for key in HEADERS:
+		for key in self.headers:
 			if key not in self.training_results:
 				self.training_results[key] = []
 
@@ -40,7 +41,7 @@ class TrainingLogger():
 	def create_csv_file(self):
 		with open(self.csv_output_file, 'w+') as fd:
 			csv_writer = csv.writer(fd)
-			csv_writer.writerow(HEADERS)
+			csv_writer.writerow(self.headers)
 
 
 	# Return the list of training results
@@ -79,7 +80,7 @@ class TrainingLogger():
 				num_cascades = self.training_results['Cascades'][index]
 				train_loss = self.training_results['Training Loss'][index]
 				val_loss = self.training_results['Validation Loss'][index]
-				val_acc = self.training_results['Chamfer Distance'][index]
+				val_acc = self.training_results[self.val_metric_name][index]
 				empty_percent = self.training_results['Empty %'][index]
 				learning_rate = self.training_results['Learning Rate'][index]
 				time_ellapsed = self.training_results['Time Ellapsed'][index]
@@ -92,7 +93,7 @@ class TrainingLogger():
 		num_cascades = self.training_results['Cascades']
 		train_loss = self.training_results['Training Loss']
 		val_loss = self.training_results['Validation Loss']
-		val_acc = self.training_results['Chamfer Distance']
+		val_acc = self.training_results[self.val_metric_name]
 		learning_rate = self.training_results['Learning Rate']
 
 		fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, sharex=True, figsize=(5,10))
@@ -104,10 +105,10 @@ class TrainingLogger():
 		ax1.set_yscale('log')
 		ax1.legend()
 
-		ax2.plot(epoch, val_acc, color='red', label='Validation Chamfer Distance')
+		ax2.plot(epoch, val_acc, color='red', label=f'Validation {self.val_metric_name}')
 		ax2.set_xlabel('Epoch')
-		ax2.set_ylabel('Chamfer Distance')
-		ax2.set_yscale('log')
+		ax2.set_ylabel(self.val_metric_name)
+		ax2.set_yscale(self.val_metric_scale)
 		ax2.legend()
 
 		ax3.plot(epoch, learning_rate, color='black', label='Learning Rate')
@@ -131,7 +132,7 @@ class TrainingLogger():
 		self.training_results['Cascades'].append(num_cascades)
 		self.training_results['Training Loss'].append(train_loss)
 		self.training_results['Validation Loss'].append(val_loss)
-		self.training_results['Chamfer Distance'].append(val_acc)
+		self.training_results[self.val_metric_name].append(val_acc)
 		self.training_results['Empty %'].append(empty_percent)
 		self.training_results['Learning Rate'].append(learning_rate)
 		self.training_results['Time Ellapsed'].append(time_ellapsed)

@@ -2,6 +2,29 @@ import torch
 from chamferdist import ChamferDistance
 from utilities.sampler_utils import sample_points_csg_surface, sample_sdf_near_csg_surface
 
+class ValMetric:
+	CHAMFER = "CHAMFER"
+	IOU = "IOU"
+	ALL_METRICS = [CHAMFER, IOU]
+
+	def improvement_mode(val_metric):
+		if val_metric == ValMetric.CHAMFER:
+			return 'min'
+		else:
+			return 'max'
+
+	def name(val_metric):
+		if val_metric == ValMetric.CHAMFER:
+			return 'Chamfer Dist'
+		else:
+			return 'IoU'
+
+	def graph_scale(val_metric):
+		if val_metric == ValMetric.CHAMFER:
+			return 'log'
+		else:
+			return 'linear'
+
 
 def compute_chamfer_distance(target_surface_samples, recon_surface_samples, no_grad=False):
 	"""
@@ -238,7 +261,7 @@ def EMD(X,Y):
 
 	return cost
 
-	
+
 def EMDBatch(X_batch, Y_batch):
 	"""
 	Earth Mover distance between two batches of pointcloud
