@@ -529,6 +529,7 @@ class SdfModelViewer(_SdfViewer):
 		end = max(self.slider.handles)
 
 		self.csg_model = CSGModel(self.full_csg_model.batch_size, self.full_csg_model.device)
+		self.csg_model.training = self.full_csg_model.training
 
 		for command in self.full_csg_model.csg_commands[start:end]:
 			# Copy over model outputs to CSG object normally.

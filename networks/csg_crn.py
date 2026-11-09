@@ -77,6 +77,7 @@ class CSG_CRN(nn.Module):
 		if csg_model is None:
 			csg_model = CSGModel(batch_size, device=target_near_surface_samples.device)
 
+		csg_model.train(self.training)
 		first_prim = csg_model.num_commands == 0
 
 		# Add noise to the initial reconstruction primitives when training.

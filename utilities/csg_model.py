@@ -98,11 +98,21 @@ class CSGModel():
 		self.num_commands = 0
 		self.batch_size = batch_size
 		self.device = device
+		self.training = True
 
 		# Boolean Tensor of shape (B, N) where B is batch_size and N is the number of commands. True for commands that should be dropped.
 		self.primitive_dropout_mask = None
 		# Percentage of csg commands that are dropped from the model.
 		self.dropout_percent = 0
+
+
+	def train(self, mode=True):
+		self.training = mode
+		return self
+
+
+	def eval(self):
+		return self.train(False)
 
 
 	# Export all class instance members in a dictionary. Required to scatter a CSG Model.
@@ -111,7 +121,8 @@ class CSGModel():
 			'csg_commands': self.csg_commands,
 			'batch_size': self.batch_size,
 			'device': self.device,
-			'dropout_percent': self.dropout_percent
+			'dropout_percent': self.dropout_percent,
+			'training': self.training
 		}
 
 
@@ -134,6 +145,7 @@ class CSGModel():
 
 		# Recompute `primitive_dropout_mask`
 		csg_model.set_dropout(class_data['dropout_percent'])
+		csg_model.training = class_data['training']
 
 		return csg_model
 
@@ -149,6 +161,7 @@ class CSGModel():
 	def copy_batches(self, batch_indices, device=None):
 		device = device if device is not None else self.device
 		csg_model = CSGModel(len(batch_indices), device)
+		csg_model.training = self.training
 
 		# Copy all commands. Batches are stored within the commands.
 		for command in self.csg_commands:
@@ -178,6 +191,7 @@ class CSGModel():
 			)
 
 		cloned_model.dropout_percent = self.dropout_percent
+		cloned_model.training = self.training
 		cloned_model.primitive_dropout_mask = self.primitive_dropout_mask.clone() if self.primitive_dropout_mask is not None else None
 
 		return cloned_model
@@ -305,7 +319,7 @@ class CSGModel():
 
 
 	# Compute blended SDF for all primitive types given primitive weights and a transform
-	def sample_sdf(query_points, command):
+	def sample_sdf(query_points, command, training=True):
 		distances = 0
 
 		if command['roundness'] is None:
@@ -316,7 +330,13 @@ class CSGModel():
 		# Transform query points
 		transformed_query_points = world_to_local_points(query_points, command['translations'], command['rotations'])
 
-		# Compute weighted average distance
+		# In inference mode, only compute the SDF for the predicted primitive.
+		if not training:
+			shape = command['shape weights'].argmax().item()
+			weight = command['shape weights'][:,shape].unsqueeze(-1)
+			return weight * CSGModel.sdf_functions[shape](transformed_query_points, command['scales'], roundness)
+
+		# In training mode, compute the weighted average distance of all primitives to keep the gradient through all outputs.
 		for shape in range(command['shape weights'].size(dim=-1)):
 			weight = command['shape weights'][:,shape].unsqueeze(-1)
 			distances += weight * CSGModel.sdf_functions[shape](transformed_query_points, command['scales'], roundness)
@@ -325,10 +345,18 @@ class CSGModel():
 
 
 	# Combine a primitive with the CSG model using a boolean operation
-	def apply_operation(distances, new_distances, command):
+	def apply_operation(distances, new_distances, command, training=True):
+		# In inference mode, only compute the predicted operation.
+		if not training:
+			operation = command['operation weights'].argmax().item()
+			weight = command['operation weights'][:,operation].unsqueeze(-1)
+			operation_function = CSGModel.operation_functions[operation]
+			blending = command['blending'] if operation_function is add_sdf else None
+			return weight * operation_function(distances, new_distances, blending)
+
 		final_distance = 0
 
-		# Compute weighted average result
+		# In training mode, compute the weighted average operation to keep the gradient through all outputs.
 		for operation in range(command['operation weights'].size(dim=-1)):
 			weight = command['operation weights'][:,operation].unsqueeze(-1)
 			operation_function = CSGModel.operation_functions[operation]
@@ -341,7 +369,7 @@ class CSGModel():
 
 	# Sample signed distances from a set of query points given a list of CSG commands
 	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
-	def sample_csg_commands(query_points, csg_commands, initial_distances=None, out_primitive_samples=None, primitive_dropout_mask=None):
+	def sample_csg_commands(query_points, csg_commands, initial_distances=None, out_primitive_samples=None, primitive_dropout_mask=None, training=True):
 		# Return None if there are no csg commands
 		if not csg_commands:
 			return None
@@ -356,13 +384,13 @@ class CSGModel():
 
 		# Compute combined SDF
 		for command_index, command in enumerate(csg_commands):
-			new_distances = CSGModel.sample_sdf(query_points, command)
+			new_distances = CSGModel.sample_sdf(query_points, command, training)
 
 			# Populate out parameter
 			if out_primitive_samples is not None:
 				out_primitive_samples.append(new_distances)
 
-			combined_distances = CSGModel.apply_operation(distances, new_distances, command)
+			combined_distances = CSGModel.apply_operation(distances, new_distances, command, training)
 
 			if primitive_dropout_mask is None:
 				distances = combined_distances
@@ -377,7 +405,8 @@ class CSGModel():
 	# Sample signed distances from a set of query points
 	# Optional out_primitive_samples parameter is a list that gets populated with primitive SDF distances
 	def sample_csg(self, query_points, initial_distances=None, out_primitive_samples=None):
-		return CSGModel.sample_csg_commands(query_points, self.csg_commands, initial_distances=initial_distances, out_primitive_samples=out_primitive_samples, primitive_dropout_mask=self.primitive_dropout_mask)
+		training = self.training or self.batch_size > 1
+		return CSGModel.sample_csg_commands(query_points, self.csg_commands, initial_distances=initial_distances, out_primitive_samples=out_primitive_samples, primitive_dropout_mask=self.primitive_dropout_mask, training=training)
 
 
 	# Return a boolean tensor of shape B denoting which CSG models are empty, where B is the number of batches in this CSGModel object.
