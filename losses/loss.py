@@ -55,6 +55,7 @@ class Loss(nn.Module):
 
 				# Store the newly generated primitives in a separate CSG model.
 				recon_csg_model = CSGModel(csg_model.batch_size, csg_model.device)
+				recon_csg_model.training = csg_model.training
 				recon_csg_model.csg_commands = csg_model.csg_commands[num_init_prims:]
 				recon_csg_model.num_commands = self.prims_per_cascade
 
