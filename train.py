@@ -13,7 +13,7 @@ from losses.reconstruction_loss import ReconstructionLoss
 from test import run_test
 from wakepy import keep
 from utilities.accuracy_metrics import ValMetric
-from utilities.constants import INIT_RECON, SEPARATE_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
+from utilities.constants import INIT_RECON, SEPARATE_PARAMS, SHARED_PARAMS, CASCADE_MODEL_MODES, sampling_methods, TARGET_SAMPLING, UNIFIED_SAMPLING
 from utilities.data_processing import create_out_dir, find_file_paths, get_test_set, read_dataset_settings, save_dataset_settings, BEST_MODEL_FILE, LATEST_MODEL_FILE, TEST_RESULTS_FILE
 from utilities.data_augmentation import get_augment_parser, RotationAxis
 from utilities.device_utils import get_devices
@@ -141,6 +141,10 @@ def options():
 	if args.cascade_training_mode == SEPARATE_PARAMS:
 		args.no_schedule_cascades = True
 
+	# Disable batch normalization when sharing parameters between cascades. Batches should not be normalized across cascades.
+	if args.cascade_training_mode == SHARED_PARAMS:
+		args.no_batch_norm = True
+
 	# When using the INIT_RECON training mode, decrease num_cascades to account for the separately trained initial model.
 	if args.cascade_training_mode == INIT_RECON:
 		args.num_cascades = max(args.num_cascades - 1, 0)
@@ -211,7 +215,7 @@ def get_model_parser():
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending. Blending only applies to the add operation.')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
 	model_group.add_argument('--no_extended_pooling', default=False, action='store_true', help='Disable the Mean Pool and TopK-Mean Pool operations in the POintNet encoder. Only Max Pool will be applied.')
-	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization')
+	model_group.add_argument('--no_batch_norm', default=False, action='store_true', help='Disable batch normalization. Only applies when using SEPARATE training mode.')
 	model_group.add_argument('--loss_sampling_method', type=str.upper, default=[UNIFIED_SAMPLING], choices=sampling_methods, nargs=1, help="TARGET_SAMPLING samples loss points from only the target shape and UNIFIED_SAMPLING samples from both target and output reconstruction shapes.")
 	model_group.add_argument('--input_sampling_method', type=str.upper, default=[TARGET_SAMPLING], choices=sampling_methods, nargs=1, help="TARGET_SAMPLING generates input points from only the target shape and UNIFIED_SAMPLING generates from both target and initial reconstruction shapes.")
 	model_group.add_argument('--surface_uniform_ratio', type=float, default=0.0, help='Percentage of near-surface samples to select. 0 for only near-surface samples and 1 for only uniform samples')
