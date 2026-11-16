@@ -112,6 +112,7 @@ class PrimitiveRegressor(nn.Module):
 		min_blending=DEFAULT_MIN_BLENDING,
 		max_blending=DEFAULT_MAX_BLENDING,
 		predict_roundness=True,
+		predict_operation=True,
 		no_batch_norm=False):
 
 		super(PrimitiveRegressor, self).__init__()
@@ -125,7 +126,7 @@ class PrimitiveRegressor(nn.Module):
 
 		# Primitive attribute regressor networks.
 		self.shape = RegressorNetwork(regressor_layer_sizes + [num_shapes], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
-		self.operation = RegressorNetwork(regressor_layer_sizes + [num_operations], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm)
+		self.operation = RegressorNetwork(regressor_layer_sizes + [num_operations], activ_func=nn.functional.gumbel_softmax, activ_func_args=gumbel_softmax_args, no_batch_norm=no_batch_norm) if (predict_operation) else (None)
 		self.translation = RegressorNetwork(regressor_layer_sizes + [3], activ_func=nn.Tanh(), norm_func=self._normalizeTranslation(translation_scale), no_batch_norm=no_batch_norm)
 		self.rotation = RegressorNetwork(regressor_layer_sizes + [4], activ_func=None, norm_func=self._normalizeRotation(), no_batch_norm=no_batch_norm)
 		self.scale = RegressorNetwork(regressor_layer_sizes + [3], activ_func=torch.sigmoid, norm_func=self._normalizeScale(min_scale, max_scale), no_batch_norm=no_batch_norm)
@@ -171,7 +172,7 @@ class PrimitiveRegressor(nn.Module):
 
 		# Decode primitive attributes.
 		shape = self.shape.forward(X)
-		operation = self.operation.forward(X) if not first_prim else self.get_add_op_tensor(batch_size, X.device)
+		operation = self.operation.forward(X) if self.operation is not None and not first_prim else self.get_add_op_tensor(batch_size, X.device)
 		translation = self.translation.forward(X)
 		rotation = self.rotation.forward(X)
 		scale = self.scale.forward(X)

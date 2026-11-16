@@ -148,7 +148,8 @@ def load_model(num_prims, num_shapes, num_operations, device, args, model_params
 		args.no_batch_norm,
 		args.feature_vec_noise,
 		args.init_recon_noise,
-		getattr(args, 'residual_only_training', False)
+		getattr(args, 'residual_only_training', False),
+		getattr(args, 'max_sub_prims', None)
 	)
 
 	# Load model parameters if available

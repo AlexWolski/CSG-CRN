@@ -12,7 +12,7 @@ from utilities.sampler_utils import select_near_surface_samples, select_nearest_
 class CSG_CRN(nn.Module):
 	def __init__(
 			self, num_prims, num_shapes, num_operations, num_input_points, sample_dist, input_sampling_method, surface_uniform_ratio, device, encoder_layers, encoder_trans_conv_layers, encoder_trans_fc_layers, prim_decoder_layers, regressor_layers,
-			extended_input=False, predict_blending=True, predict_roundness=True, extended_pooling=True, no_batch_norm=False, feature_vec_noise=0.0, init_recon_noise=None, residual_only_training=False):
+			extended_input=False, predict_blending=True, predict_roundness=True, extended_pooling=True, no_batch_norm=False, feature_vec_noise=0.0, init_recon_noise=None, residual_only_training=False, max_sub_prims=None):
 		super(CSG_CRN, self).__init__()
 
 		self.num_prims = num_prims
@@ -33,6 +33,7 @@ class CSG_CRN(nn.Module):
 		self.feature_vec_noise = feature_vec_noise
 		self.init_recon_noise = init_recon_noise
 		self.residual_only_training = residual_only_training
+		self.max_sub_prims = max_sub_prims
 
 		# Number of near-surface input samples the network expects, matching the split used to load the dataset.
 		self.num_near_surface_input_points = self.num_input_points - math.ceil(self.num_input_points * self.surface_uniform_ratio)
@@ -63,6 +64,8 @@ class CSG_CRN(nn.Module):
 				regressor_layer_sizes=self.regressor_layers,
 				predict_blending=self.predict_blending,
 				predict_roundness=self.predict_roundness,
+				# We assume there are only add and subtract operations. Disable the operation output when the maximum number of subtract primitives is exceeded.
+				predict_operation=self.max_sub_prims is None or i >= self.num_prims - self.max_sub_prims,
 				no_batch_norm=self.no_batch_norm
 			)
 

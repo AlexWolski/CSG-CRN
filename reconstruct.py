@@ -57,6 +57,7 @@ def load_model(model_params, device, num_cascades=None):
 	# Fallback for new arguments
 	saved_args.excess_loss_weight = getattr(saved_args, 'excess_loss_weight', None)
 	saved_args.residual_only_training = getattr(saved_args, 'residual_only_training', False)
+	saved_args.max_sub_prims = getattr(saved_args, 'max_sub_prims', None)
 
 	predict_blending = not saved_args.no_blending
 	predict_roundness = not saved_args.no_roundness
@@ -81,7 +82,8 @@ def load_model(model_params, device, num_cascades=None):
 		predict_roundness,
 		not saved_args.no_extended_pooling,
 		saved_args.no_batch_norm,
-		residual_only_training=saved_args.residual_only_training
+		residual_only_training=saved_args.residual_only_training,
+		max_sub_prims=saved_args.max_sub_prims
 	)
 
 	model.load_state_dict(state_dict, strict=False)

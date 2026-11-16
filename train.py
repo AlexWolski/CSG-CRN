@@ -211,6 +211,7 @@ def get_model_parser():
 	model_group.add_argument('--val_sample_dist', type=float, default=0.01, help='Maximum distance tolerance of approximate surface samples when computing validation metrics.')
 	model_group.add_argument('--num_prims', type=int, default=3, help='Number of primitives to generate before backpropagating (Memory requirement scales with num_prims)')
 	model_group.add_argument('--num_cascades', type=int, default=1, help='Number of refinement passes before back-propagating (Total generated primitives = num_prims * num_cascades)')
+	model_group.add_argument('--max_sub_prims', type=int, default=None, help='Maximum number of primitives that can be subtracted each cascade. Set to None to remove the limit. Only applies when --disable_sub_operation is disabled.')
 	model_group.add_argument('--no_extended_input', default=False, action='store_true', help='Exclude the additional volume parameters from the model input.')
 	model_group.add_argument('--no_blending', default=False, action='store_true', help='Disable primitive blending. Blending only applies to the add operation.')
 	model_group.add_argument('--no_roundness', default=False, action='store_true', help='Disable primitive rounding')
