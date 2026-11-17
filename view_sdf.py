@@ -9,6 +9,7 @@ from pyglet.gl import *
 from utilities.csg_model import CSGModel, add_sdf, get_operation_name
 from utilities.csg_to_magica import prompt_and_export_to_magica
 from utilities.csg_to_mesh import csg_to_mesh, prompt_and_export_to_mesh
+from utilities.data_processing import SURFACE_FOLDER
 from utilities.file_loader import FileLoader
 from utilities.file_utils import MESH_FILE_TYPES
 from utilities.sampler_utils import sample_points_mesh_surface, distance_to_mesh_surface
@@ -435,7 +436,7 @@ class SdfModelViewer(_SdfViewer):
 		self.num_view_points = num_view_points
 		self.recon_resolution = recon_resolution
 		self.get_mesh_and_csg_model = get_mesh_and_csg_model
-		self.file_loader = FileLoader(input_file, MESH_FILE_TYPES)
+		self.file_loader = FileLoader(input_file, MESH_FILE_TYPES + [os.path.join(SURFACE_FOLDER, '**', '*.npy')])
 		self.sample_dist = sample_dist
 		self.load_file(self.file_loader.get_file())
 
@@ -602,7 +603,7 @@ class SdfModelViewer(_SdfViewer):
 
 
 	def update_mesh(self):
-		display_original = True
+		display_original = self.target_mesh is not None
 		display_recon = True
 		alpha = 255
 
@@ -618,7 +619,7 @@ class SdfModelViewer(_SdfViewer):
 
 		blueMaterial = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([0,0,255, alpha]), alphaMode="BLEND")
 		redMaterial = pyrender.MetallicRoughnessMaterial(baseColorFactor=np.array([255,0,0, alpha]), alphaMode="BLEND")
-		self.original_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh, material=blueMaterial)
+		self.original_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.target_mesh if self.target_mesh is not None else self.recon_mesh, material=blueMaterial)
 		self.recon_mesh_node.mesh = pyrender.Mesh.from_trimesh(self.recon_mesh, material=redMaterial)
 		self.original_mesh_node.mesh.is_visible = display_original
 		self.recon_mesh_node.mesh.is_visible = display_recon
@@ -634,7 +635,7 @@ class SdfModelViewer(_SdfViewer):
 		target_colors[:,2] = 1
 
 		# Compute distance from reconstruction surface points to target mesh
-		recon_to_target_distances = distance_to_mesh_surface(self.target_mesh, self.recon_surface_points)
+		recon_to_target_distances = distance_to_mesh_surface(self.target_mesh, self.recon_surface_points) if self.target_mesh is not None else torch.ones(self.recon_surface_points.size(0))
 
 		# Color overlapping points purple and reconstruction points outside of the target mesh red
 		recon_colors = torch.zeros(self.recon_surface_points.size())
@@ -673,10 +674,10 @@ class SdfModelViewer(_SdfViewer):
 
 	def load_file(self, samples_file):
 		self.file_name = os.path.basename(samples_file)
-		self.target_mesh, self.full_recon_mesh, self.full_csg_model = self.get_mesh_and_csg_model(samples_file)
+		self.target_mesh, target_surface_points, self.full_recon_mesh, self.full_csg_model = self.get_mesh_and_csg_model(samples_file)
 		self.csg_model = self.full_csg_model
 		self.recon_mesh = self.full_recon_mesh
-		self.target_surface_points = sample_points_mesh_surface(self.target_mesh, self.num_view_points)
+		self.target_surface_points = target_surface_points[0, :self.num_view_points].cpu()
 		self.recon_surface_points = sample_points_mesh_surface(self.recon_mesh, self.num_view_points)
 
 

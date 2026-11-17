@@ -4,6 +4,7 @@ import copy
 import math
 import signal
 import argparse
+import numpy as np
 import trimesh
 import traceback
 import torch
@@ -18,6 +19,7 @@ from view_sdf import SdfModelViewer
 from utilities.constants import SEPARATE_PARAMS, INIT_RECON
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name, add_sdf, subtract_sdf
 from utilities.data_augmentation import RotationAxis
+from utilities.data_processing import NEAR_SURFACE_FOLDER, SURFACE_FOLDER, UNIFORM_FOLDER
 from utilities.device_utils import get_device
 from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface
 from utilities.accuracy_metrics import compute_chamfer_distance
@@ -29,7 +31,7 @@ def options():
 	parser = argparse.ArgumentParser()
 
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file.')
-	parser.add_argument('--input_file', type=str, required=True, help='Model file to reconstruct.')
+	parser.add_argument('--input_file', type=str, required=True, help='Model file or SDF dataset directory to reconstruct.')
 	parser.add_argument('--num_cascades', type=int, help='Number of refinement passes before back-propagating. Total generated primitives = num_prims + (num_prims * num_cascades)')
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
@@ -116,6 +118,25 @@ def load_mesh_and_samples(input_file, saved_args, num_acc_points, device):
 	return (mesh, uniform_samples, near_surface_samples, surface_points)
 
 
+# Given an SDF dataset directory and target sample filename, load and return the uniform, near-surface, and surface SDF samples.
+# The first element of the tuple is always None since it represents a mesh file that does not exist.
+def load_dataset_samples(data_dir, input_file, saved_args, num_acc_points, device):
+	file_rel_path = os.path.relpath(input_file, os.path.join(data_dir, SURFACE_FOLDER))
+
+	num_uniform_samples = math.ceil(saved_args.num_input_points * saved_args.surface_uniform_ratio)
+	num_surface_samples = math.floor(saved_args.num_input_points * (1 - saved_args.surface_uniform_ratio))
+
+	uniform_samples = np.load(os.path.join(data_dir, UNIFORM_FOLDER, file_rel_path))[:num_uniform_samples]
+	near_surface_samples = np.load(os.path.join(data_dir, NEAR_SURFACE_FOLDER, file_rel_path))[:num_surface_samples]
+	surface_points = np.load(os.path.join(data_dir, SURFACE_FOLDER, file_rel_path))[:num_acc_points]
+
+	uniform_samples = torch.from_numpy(uniform_samples).unsqueeze(0).to(device)
+	near_surface_samples = torch.from_numpy(near_surface_samples).unsqueeze(0).to(device)
+	surface_points = torch.from_numpy(surface_points).unsqueeze(0).to(device)
+
+	return (None, uniform_samples, near_surface_samples, surface_points)
+
+
 # Randomly sample input points
 def combine_samples(uniform_samples, near_surface_samples, num_input_points):
 	input_samples = torch.cat((uniform_samples, near_surface_samples), dim=1)
@@ -165,8 +186,7 @@ def compute_recon_loss(near_surface_samples, uniform_samples, surface_points, cs
 	return recon_loss.forward(near_surface_samples, uniform_samples, surface_points, csg_model)
 
 
-def compute_chamfer_distance_mesh(target_mesh, recon_mesh, num_acc_points, device):
-	target_points = sample_points_mesh_surface(target_mesh, num_acc_points).unsqueeze(0).to(device)
+def compute_chamfer_distance_mesh(target_points, recon_mesh, num_acc_points, device):
 	recon_points = sample_points_mesh_surface(recon_mesh, num_acc_points).unsqueeze(0).to(device)
 	return compute_chamfer_distance(target_points, recon_points, no_grad=True)
 
@@ -189,7 +209,11 @@ def model_inference(model, saved_args, init_model_state_dict, prev_cascades_list
 
 
 def construct_csg_model(model, input_file, args, saved_args, device, init_model_state_dict=None, prev_cascades_list=None):
-	target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, saved_args, args.num_acc_points, device)
+	if str(input_file).endswith('.npy'):
+		target_mesh, uniform_samples, near_surface_samples, surface_points = load_dataset_samples(args.input_file, input_file, saved_args, args.num_acc_points, device)
+	else:
+		target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, saved_args, args.num_acc_points, device)
+
 	csg_model = model_inference(model, saved_args, init_model_state_dict, prev_cascades_list, near_surface_samples, uniform_samples)
 	recon_mesh = csg_to_mesh(csg_model, args.recon_resolution)[0]
 
@@ -203,10 +227,10 @@ def construct_csg_model(model, input_file, args, saved_args, device, init_model_
 
 	# Print reconstruction accuracy
 	print('Chamfer Distance:')
-	print(compute_chamfer_distance_mesh(target_mesh, recon_mesh, args.num_acc_points, device))
+	print(compute_chamfer_distance_mesh(surface_points, recon_mesh, args.num_acc_points, device))
 	print('')
 
-	return (target_mesh, recon_mesh, csg_model)
+	return (target_mesh, surface_points, recon_mesh, csg_model)
 
 
 def get_inference_device(device):
