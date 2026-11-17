@@ -39,7 +39,7 @@ def options():
 	parser.add_argument('--cluster_cell_size', type=float, default=0.02, help='Points closer than this fraction of the point cloud size belong to the same cluster')
 	parser.add_argument('--min_cluster_ratio', type=float, default=0.05, help='Only the cluster closest to the point the cameras look at is kept. Clusters smaller than this fraction of the largest cluster are ignored.')
 	parser.add_argument('--voxel_size', type=float, default=0.006, help='Spacing of the cleaned point cloud after the object is scaled to a unit sphere')
-	parser.add_argument('--device', type=int, default=0, help='Index of the CUDA device used by COLMAP for dense reconstruction')
+	parser.add_argument('--device', type=int, default=0, help='Index of the CUDA device used by COLMAP')
 	parser.add_argument('--colmap_path', type=str, default=os.path.join(PROGRAMS_DIR, 'colmap'), help='Path to the COLMAP executable')
 	parser.add_argument('--ffmpeg_path', type=str, default=os.path.join(PROGRAMS_DIR, 'ffmpeg'), help='Path to the FFmpeg executable')
 
@@ -103,9 +103,9 @@ def reconstruct_point_cloud(args, colmap_dir, cameras_dir, fused_path):
 
 	run_colmap(
 		args.colmap_path, log_path, 'feature_extractor', database_path=database_path, image_path=frames_dir, ImageReader__single_camera=1,
-		FeatureExtraction__use_gpu=0, SiftExtraction__peak_threshold=0.002, SiftExtraction__estimate_affine_shape=1, SiftExtraction__domain_size_pooling=1)
+		FeatureExtraction__use_gpu=0, FeatureExtraction__num_threads=8)
 	run_colmap(
-		args.colmap_path, log_path, 'sequential_matcher', database_path=database_path, FeatureMatching__use_gpu=0, FeatureMatching__guided_matching=1,
+		args.colmap_path, log_path, 'sequential_matcher', database_path=database_path, FeatureMatching__gpu_index=args.device,
 		SequentialMatching__overlap=20, SequentialMatching__quadratic_overlap=0)
 	run_colmap(args.colmap_path, log_path, 'mapper', database_path=database_path, image_path=frames_dir, output_path=sparse_dir)
 
