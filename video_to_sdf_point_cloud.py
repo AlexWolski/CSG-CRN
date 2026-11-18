@@ -7,6 +7,7 @@ import subprocess
 import cv2
 import numpy as np
 import point_cloud_utils as pcu
+from scipy.ndimage import label, map_coordinates
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import ConvexHull, cKDTree
@@ -34,6 +35,7 @@ def options():
 	parser.add_argument('--crop_radius', type=float, default=0.7, help='Radius of the sphere around the point the cameras look at that is kept, as a fraction of the distance to the cameras')
 	parser.add_argument('--floor_tolerance', type=float, default=0.01, help='Maximum distance between the floor plane and the points used to fit it, as a fraction of the point cloud size')
 	parser.add_argument('--floor_max_angle', type=float, default=30.0, help='Maximum angle in degrees between the floor normal and the up direction of the cameras')
+	parser.add_argument('--floor_normal_angle', type=float, default=70.0, help='Points close to the floor are removed when their normal is within this angle in degrees of the floor normal. The other points close to the floor belong to the object.')
 	parser.add_argument('--outlier_neighbors', type=int, default=16, help='Number of neighbors used to measure the local point spacing when removing outliers')
 	parser.add_argument('--outlier_std', type=float, default=2.0, help='Points whose spacing is this many standard deviations above the mean are removed')
 	parser.add_argument('--cluster_cell_size', type=float, default=0.02, help='Points closer than this fraction of the point cloud size belong to the same cluster')
@@ -229,9 +231,9 @@ def footprint_angle(points):
 	return best_angle
 
 
-def scale_points_to_unit_sphere(points):
-	points = points - (points.min(axis=0) + points.max(axis=0)) / 2
-	return points / np.linalg.norm(points, axis=1).max()
+def bounding_sphere(points):
+	centre = (points.min(axis=0) + points.max(axis=0)) / 2
+	return (centre, np.linalg.norm(points - centre, axis=1).max())
 
 
 def voxel_downsample(voxel_size, points, normals):
@@ -243,15 +245,61 @@ def voxel_downsample(voxel_size, points, normals):
 	return (means[:, :3], means[:, 3:])
 
 
-def point_areas(tree, points, num_neighbors=8):
-	(distances, _) = tree.query(points, k=num_neighbors + 1, workers=-1)
-	return math.pi * distances[:, -1] ** 2 / num_neighbors
+def point_areas(points, normals, probe_dist, num_neighbors=8):
+	(distances, _) = cKDTree(points).query(points, k=num_neighbors + 1, workers=-1)
+	areas = math.pi * distances[:, -1] ** 2 / num_neighbors
+	inner_winding = pcu.point_cloud_fast_winding_number(points, normals, areas, points - probe_dist * normals)
+	outer_winding = pcu.point_cloud_fast_winding_number(points, normals, areas, points + probe_dist * normals)
+	return areas / np.maximum(inner_winding - outer_winding, 1)
 
 
-def point_cloud_sdf(points, normals, areas, tree, query_points):
-	(distances, _) = tree.query(query_points, workers=-1)
-	winding_numbers = pcu.point_cloud_fast_winding_number(points, normals, areas, query_points)
-	distances[(winding_numbers > 0.5) & (query_points[:, 1] > points[:, 1].min())] *= -1
+def solid_grid(points, normals, floor_height, voxel_size):
+	mirror = np.array([1.0, -1.0, 1.0])
+	points = np.concatenate((points, points * mirror + 2 * floor_height * UP_AXIS))
+	normals = np.concatenate((normals, normals * mirror))
+	enclosed = np.ones(points.shape[0], dtype=bool)
+
+	while enclosed.mean() > 0.001:
+		areas = point_areas(points, normals, 5 * voxel_size)
+		enclosed = pcu.point_cloud_fast_winding_number(points, normals, areas, points + 5 * voxel_size * normals) > 0.5
+		(points, normals, areas) = (points[~enclosed], normals[~enclosed], areas[~enclosed])
+
+	origin = np.array([points[:, 0].min(), floor_height, points[:, 2].min()]) - 4 * voxel_size
+	shape = np.ceil((points.max(axis=0) + 4 * voxel_size - origin) / voxel_size).astype(int)
+	grid = origin + voxel_size * np.stack(np.meshgrid(*[np.arange(size) for size in shape], indexing='ij'), axis=-1)
+	winding = pcu.point_cloud_fast_winding_number(points, normals, areas, grid.reshape(-1, 3)).reshape(shape)
+	solid = np.minimum(winding - 0.5, (grid[..., 1] - floor_height) / voxel_size)
+
+	(outside, _) = label(solid < 0)
+	solid[(solid < 0) & (outside != outside[0, 0, 0])] = 0.5
+	(inside, _) = label(solid > 0)
+	solid[(solid > 0) & (inside != np.argmax(np.bincount(inside.ravel())[1:]) + 1)] = -0.5
+
+	return (origin, solid)
+
+
+def level_set_points(origin, voxel_size, solid):
+	gradient = np.stack(np.gradient(solid), axis=-1)
+	points = []
+	normals = []
+
+	for axis in range(3):
+		step = np.eye(3, dtype=int)[axis]
+		before = np.argwhere(np.diff(solid > 0, axis=axis))
+		after = before + step
+		(low, high) = (solid[tuple(before.T)], solid[tuple(after.T)])
+		fraction = (low / (low - high))[:, None]
+		points.append(origin + voxel_size * (before + fraction * step))
+		normals.append(-(1 - fraction) * gradient[tuple(before.T)] - fraction * gradient[tuple(after.T)])
+
+	normals = np.concatenate(normals)
+	return (np.concatenate(points), normals / np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12))
+
+
+def solid_sdf(surface_tree, origin, voxel_size, solid, query_points):
+	(distances, _) = surface_tree.query(query_points, workers=-1)
+	inside = map_coordinates(solid, ((query_points - origin) / voxel_size).T, order=1, mode='nearest') > 0
+	distances[inside] *= -1
 	return distances
 
 
@@ -287,7 +335,9 @@ def main():
 	print(f'Cropped around the object: {points.shape[0]} points left')
 
 	(floor_origin, floor_normal, floor_thickness) = fit_floor_plane(points, args.floor_tolerance * robust_size(points), args.floor_max_angle)
-	keep = (points - floor_origin) @ floor_normal > floor_thickness
+	floor_height = floor_origin @ floor_normal
+	heights = points @ floor_normal - floor_height
+	keep = (heights > floor_thickness) | ((heights > 0) & (normals @ floor_normal < math.cos(math.radians(args.floor_normal_angle))))
 	rotation = rotation_between(floor_normal, UP_AXIS)
 	(points, normals) = (points[keep] @ rotation.T, normals[keep] @ rotation.T)
 	first_camera = first_camera @ rotation.T
@@ -303,7 +353,8 @@ def main():
 	(points, normals) = (points @ rotation.T, normals @ rotation.T)
 	rotation = yaw_rotation((footprint_angle(points) + math.pi / 4) % (math.pi / 2) - math.pi / 4)
 	(points, normals) = (points @ rotation.T, normals @ rotation.T)
-	points = scale_points_to_unit_sphere(points)
+	(centre, scale) = bounding_sphere(points)
+	(points, floor_height) = ((points - centre) / scale, (floor_height - centre[1]) / scale)
 
 	(points, normals) = voxel_downsample(args.voxel_size, points, normals)
 	normal_lengths = np.linalg.norm(normals, axis=1)
@@ -311,15 +362,21 @@ def main():
 	(points, normals) = (points[keep], normals[keep] / normal_lengths[keep, None])
 	print(f'Resampled to {points.shape[0]} evenly spaced points')
 
-	tree = cKDTree(points)
-	areas = point_areas(tree, points)
+	(origin, solid) = solid_grid(points, normals, floor_height, args.voxel_size)
+	(surface_points, surface_normals) = level_set_points(origin, args.voxel_size, solid)
+	(centre, scale) = bounding_sphere(surface_points)
+	(surface_points, origin, voxel_size) = ((surface_points - centre) / scale, (origin - centre) / scale, args.voxel_size / scale)
+	surface_tree = cKDTree(surface_points)
+	surface_weights = 1 / np.abs(surface_normals).sum(axis=1)
+	surface_weights = surface_weights / surface_weights.sum()
+	print(f'Closed into a solid with {surface_points.shape[0]} surface points')
 
-	near_surface_points = points[np.random.randint(points.shape[0], size=args.num_sdf_samples)]
+	near_surface_points = surface_points[np.random.choice(surface_points.shape[0], args.num_sdf_samples, p=surface_weights)]
 	near_surface_points = near_surface_points + np.random.randn(args.num_sdf_samples, 3) * args.sample_dist
-	near_surface_distances = point_cloud_sdf(points, normals, areas, tree, near_surface_points)
+	near_surface_distances = solid_sdf(surface_tree, origin, voxel_size, solid, near_surface_points)
 	uniform_points = sample_uniform_points_sphere(args.num_sdf_samples).numpy().astype(np.float64)
-	uniform_distances = point_cloud_sdf(points, normals, areas, tree, uniform_points)
-	surface_points = points[np.random.randint(points.shape[0], size=args.num_surface_samples)]
+	uniform_distances = solid_sdf(surface_tree, origin, voxel_size, solid, uniform_points)
+	surface_points = surface_points[np.random.choice(surface_points.shape[0], args.num_surface_samples, p=surface_weights)]
 
 	dataset_dir = os.path.join(args.output_dir, name)
 	init_dataset(dataset_dir, True, args)
