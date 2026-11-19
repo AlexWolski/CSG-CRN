@@ -14,9 +14,10 @@ from datetime import timedelta
 from torch.utils.data import Subset
 from networks.csg_crn import CSG_CRN
 from mesh_to_sdf.utils import scale_to_unit_sphere
+from losses.loss import Loss
 from losses.reconstruction_loss import ReconstructionLoss
 from view_sdf import SdfModelViewer
-from utilities.constants import SEPARATE_PARAMS, INIT_RECON
+from utilities.constants import SEPARATE_PARAMS, INIT_RECON, NEAR_SURFACE_SAMPLE_FACTOR
 from utilities.csg_model import CSGModel, get_primitive_name, get_operation_name, add_sdf, subtract_sdf
 from utilities.data_augmentation import RotationAxis
 from utilities.data_processing import NEAR_SURFACE_FOLDER, SURFACE_FOLDER, UNIFORM_FOLDER
@@ -24,6 +25,8 @@ from utilities.device_utils import get_device
 from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface
 from utilities.accuracy_metrics import compute_chamfer_distance
 from utilities.csg_to_mesh import csg_to_mesh
+from utilities.train_step import TrainStep
+from utilities.train_utils import train_one_epoch, init_optimizer
 
 
 # Parse commandline arguments
@@ -33,6 +36,7 @@ def options():
 	parser.add_argument('--model_params', type=str, required=True, help='Load model parameters from file.')
 	parser.add_argument('--input_file', type=str, required=True, help='Model file or SDF dataset directory to reconstruct.')
 	parser.add_argument('--num_cascades', type=int, help='Number of refinement passes before back-propagating. Total generated primitives = num_prims + (num_prims * num_cascades)')
+	parser.add_argument('--test_time_optimize', type=int, default=0, help='Number of steps to fine-tune the model on the input before reconstructing it. Only supports SDF dataset directory inputs.')
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--num_view_points', type=int, default=10000, help='Number of points to visualize the output.')
@@ -208,9 +212,25 @@ def model_inference(model, saved_args, init_model_state_dict, prev_cascades_list
 		return model.forward_cascade(near_surface_samples, uniform_samples, saved_args.num_cascades, csg_model)
 
 
+def test_time_optimize(model, input_file, args, saved_args, device, near_surface_samples, uniform_samples, surface_points):
+	file_rel_path = os.path.relpath(input_file, os.path.join(args.input_file, SURFACE_FOLDER))
+	loss_samples = torch.from_numpy(np.load(os.path.join(args.input_file, UNIFORM_FOLDER, file_rel_path))).unsqueeze(0).to(device)
+	loss_func = Loss(saved_args.loss_metric, loss_samples.size(1) // NEAR_SURFACE_SAMPLE_FACTOR, saved_args.num_prims, saved_args.spread_loss_weight, saved_args.clamp_dist, saved_args.excess_loss_weight, saved_args.loss_sampling_method, saved_args.surface_uniform_ratio, saved_args.residual_only_training, saved_args.local_loss_weight, saved_args.local_loss_dist)
+	data_sample = (uniform_samples, uniform_samples, near_surface_samples, loss_samples, surface_points[:, :saved_args.num_val_acc_points], None, None)
+
+	model = copy.deepcopy(model)
+	TrainStep.initialize(model, loss_func, saved_args.enable_amp, saved_args.residual_only_training)
+	train_one_epoch(model, init_optimizer(model, 1e-4), torch.amp.GradScaler(enabled=saved_args.enable_amp), [data_sample] * args.test_time_optimize, saved_args.num_cascades, saved_args, device, 'Test Time Optimization')
+
+	return model.eval()
+
+
 def construct_csg_model(model, input_file, args, saved_args, device, init_model_state_dict=None, prev_cascades_list=None):
 	if str(input_file).endswith('.npy'):
 		target_mesh, uniform_samples, near_surface_samples, surface_points = load_dataset_samples(args.input_file, input_file, saved_args, args.num_acc_points, device)
+
+		if args.test_time_optimize:
+			model = test_time_optimize(model, input_file, args, saved_args, device, near_surface_samples, uniform_samples, surface_points)
 	else:
 		target_mesh, uniform_samples, near_surface_samples, surface_points = load_mesh_and_samples(input_file, saved_args, args.num_acc_points, device)
 
