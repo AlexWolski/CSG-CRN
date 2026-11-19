@@ -90,7 +90,7 @@ def command_to_json(command):
 	command_dict['r'] = export_quaternion(command['rotations'])
 	command_dict['s'] = export_scale(command['scales'])
 
-	if command['blending'] is not None:
+	if command['blending'] is not None and command_dict['mode'] == 'add':
 		command_dict['blend'] = export_blending(command['blending'])
 
 	if command['roundness'] is not None:
