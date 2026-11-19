@@ -26,7 +26,7 @@ from utilities.sampler_utils import sample_from_mesh, sample_points_mesh_surface
 from utilities.accuracy_metrics import compute_chamfer_distance
 from utilities.csg_to_mesh import csg_to_mesh
 from utilities.train_step import TrainStep
-from utilities.train_utils import train_one_epoch, init_optimizer
+from utilities.train_utils import train_one_epoch, init_optimizer, save_model
 
 
 # Parse commandline arguments
@@ -37,6 +37,7 @@ def options():
 	parser.add_argument('--input_file', type=str, required=True, help='Model file or SDF dataset directory to reconstruct.')
 	parser.add_argument('--num_cascades', type=int, help='Number of refinement passes before back-propagating. Total generated primitives = num_prims + (num_prims * num_cascades)')
 	parser.add_argument('--test_time_optimize', type=int, default=0, help='Number of steps to fine-tune the model on the input before reconstructing it. Only supports SDF dataset directory inputs.')
+	parser.add_argument('--export_model_params', type=str, help='Save the test time optimized model parameters to file.')
 	parser.add_argument('--num_acc_points', type=int, default=30000, help='Number of points to use when computing accuracy.')
 	parser.add_argument('--recon_resolution', type=int, default=256, help='Voxel resolution to use for the marching cubes algorithm when computing accuracy.')
 	parser.add_argument('--num_view_points', type=int, default=10000, help='Number of points to visualize the output.')
@@ -221,6 +222,9 @@ def test_time_optimize(model, input_file, args, saved_args, device, near_surface
 	model = copy.deepcopy(model)
 	TrainStep.initialize(model, loss_func, saved_args.enable_amp, saved_args.residual_only_training)
 	train_one_epoch(model, init_optimizer(model, 1e-4), torch.amp.GradScaler(enabled=saved_args.enable_amp), [data_sample] * args.test_time_optimize, saved_args.num_cascades, saved_args, device, 'Test Time Optimization')
+
+	if args.export_model_params:
+		save_model(model, saved_args, None, None, args.export_model_params)
 
 	return model.eval()
 
